@@ -1,0 +1,29 @@
+# JagaOS — reverse proxy config
+# Caddy auto-provisions TLS via Let's Encrypt on first run.
+# Swap :80 for your real domain/Lightsail static IP's DNS name once known;
+# Caddy also serves plain HTTP+auto-redirect if you only have a bare IP.
+
+{$JAGA_DOMAIN:localhost} {
+	encode gzip
+
+	# backend (same origin as the site, so no CORS setup is needed)
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle /assets/* {
+		root * /var/www/jaga/web
+		file_server
+	}
+
+	# everything else: root files (icon.svg, manifest.webmanifest, index.html)
+	# with SPA fallback. Must stay last so /api/* and /assets/* win.
+	handle {
+		root * /var/www/jaga/web
+		try_files {path} /index.html
+		file_server
+	}
+
+	# never let a static crawler or the internet at large index the demo
+	header X-Robots-Tag "noindex"
+}

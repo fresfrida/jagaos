@@ -1,0 +1,17 @@
+[Unit]
+Description=JagaOS Clock (APScheduler — obligation ladder)
+After=network.target jaga-api.service
+
+[Service]
+Type=simple
+User=jaga
+WorkingDirectory=/opt/jaga/backend
+EnvironmentFile=/opt/jaga/backend/.env
+ExecStart=/opt/jaga/backend/.venv/bin/python -m app.scheduler
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

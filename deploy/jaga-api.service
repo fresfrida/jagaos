@@ -1,0 +1,17 @@
+[Unit]
+Description=JagaOS API (FastAPI/uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=jaga
+WorkingDirectory=/opt/jaga/backend
+EnvironmentFile=/opt/jaga/backend/.env
+ExecStart=/opt/jaga/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

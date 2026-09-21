@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.DS_Store
+*.db
+.vercel/
+vercel.json
+# private / third-party material, never commit (admin/ screenshots contain the team API key)
+admin/
+Kiro/
+DB/
+assets/
