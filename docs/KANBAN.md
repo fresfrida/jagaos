@@ -3,7 +3,7 @@
 Updated 2026-09-21.
 
 ## Backlog
-- [ ] **Confirm what `MDs/` is.** A top-level directory appeared (2026-09-22) containing what look like backup copies of the root planning docs — not created by this session's work. Excluded from git via `.gitignore` until its origin/purpose is confirmed; don't delete it blind, ask first.
+- [ ] **Root planning docs moved to `MDs/`** (user's own reorganization, 2026-09-22 — not a session mistake, confirmed). Every doc/code comment across this repo that references e.g. "`GAPS.md`", "`ARCHITECTURE.md`" by its old root-relative name is now technically pointing at a moved file (they're still readable, just at `MDs/GAPS.md` etc. instead). Not rewritten yet — a lot of references, low urgency since they're still findable, but worth a pass before the write-up/submission cites specific paths.
 - [ ] Semantic (not substring) doc_type matching in `app/graph/derive_expectations.py::_matches_doc_type` — the current fix is real but will miss a differently-worded doc_type (e.g. "Reg. of Members" vs `share_register`)
 - [ ] Build the review-queue UI in `/ops` (backend resolve path is now verified live — `tests/test_pipeline_review_diagnostic.py` — but there's no frontend for it yet, still Swagger/curl-only)
 - [ ] Expand `evals/demo_corpus/` (currently 8 documents) if a bigger synthetic set would strengthen the write-up's Impact & Outcomes numbers — team decision, not a technical blocker
