@@ -22,6 +22,19 @@ export const BUCKETS = [
 ] as const
 export type Bucket = (typeof BUCKETS)[number]
 
+// 2026-09-22 (DECISIONS #45): doc_type's fixed vocabulary for the invoice/
+// important/memory lanes — mirrors app/graph/classify.py's SYSTEM prompt
+// exactly (single source of truth for the list itself; this is the
+// frontend's copy of it, not a second definition of what the values mean).
+// The statutory lane's doc_type is deliberately NOT this — it stays free
+// text (matched against expectation slugs by
+// derive_expectations.py::_matches_doc_type) — callers key off a
+// document's `lane` to decide which UI applies, this constant only.
+export const DOC_TYPES = [
+  'invoice', 'receipt', 'PO', 'quotation', 'delivery_order', 'contract', 'photo', 'other',
+] as const
+export type DocType = (typeof DOC_TYPES)[number]
+
 export interface ClassifyResult {
   lane: string
   doc_type: string
@@ -104,6 +117,10 @@ export interface ReviewItem {
   document_media_type: string
   document_description: string | null
   document_bucket: string | null
+  // Read-only here (not part of DocumentEditRequest) - decides whether
+  // doc_type below renders as the fixed dropdown or the statutory lane's
+  // free-text input; not itself editable from this card.
+  document_lane: string | null
   document_doc_type: string | null
   document_vendor_name: string | null
   thread_id: string

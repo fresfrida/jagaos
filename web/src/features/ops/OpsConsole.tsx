@@ -11,6 +11,7 @@ import { navigate } from '../../router/navigate'
 import { routeHref } from '../../router/routes'
 import {
   BUCKETS,
+  DOC_TYPES,
   opsApi,
   type Bucket,
   type DocumentRow,
@@ -20,6 +21,13 @@ import {
   type TraceReport,
   type UploadResult,
 } from './opsApi'
+
+// 2026-09-22 (DECISIONS #45): shared <datalist> id both DocumentCard's and
+// ReviewQueueCard's vendor_name <input> point at via list=. One instance
+// rendered once at the OpsConsole root (below) rather than duplicated per
+// card - a <datalist> has no visual footprint, so it doesn't matter that
+// it isn't physically next to the input using it.
+const VENDOR_NAMES_DATALIST_ID = 'ops-vendor-names'
 
 /** One field from a review_item.proposed_json blob — matches
  * app/models.py's Provenance[T], or a bare bool for injection_suspected. */
@@ -205,6 +213,46 @@ function DocumentViewerModal({
         </div>
       </div>
     </div>
+  )
+}
+
+const FIELD_CLASS =
+  'mt-1 block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted'
+
+/** doc_type as a dropdown, hard-locked to DOC_TYPES — EXCEPT the statutory
+ * lane, which stays free text (2026-09-22, DECISIONS #45: category fields
+ * are dropdowns, name fields are free text; statutory's doc_type is a
+ * name — "ACRA Certificate of Incorporation" — matched against
+ * expectation slugs by derive_expectations.py::_matches_doc_type, not a
+ * closed vocabulary, so forcing it into DOC_TYPES would break gap
+ * matching). Shared by ReviewQueueCard and DocumentCard so the lane-based
+ * branch exists in exactly one place. A current value outside DOC_TYPES
+ * (a pre-rework document, classified before this vocabulary existed) gets
+ * its own "(legacy)" option instead of silently vanishing from the
+ * dropdown or being coerced to something else on save. */
+function DocTypeField({
+  lane,
+  value,
+  disabled,
+  onChange,
+}: {
+  lane: string | null
+  value: string
+  disabled: boolean
+  onChange: (value: string) => void
+}) {
+  if (lane === 'statutory') {
+    return <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={FIELD_CLASS} />
+  }
+  const isLegacyValue = value !== '' && !(DOC_TYPES as readonly string[]).includes(value)
+  return (
+    <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={FIELD_CLASS}>
+      <option value="">—</option>
+      {isLegacyValue && <option value={value}>{value} (legacy)</option>}
+      {DOC_TYPES.map((dt) => (
+        <option key={dt} value={dt}>{dt}</option>
+      ))}
+    </select>
   )
 }
 

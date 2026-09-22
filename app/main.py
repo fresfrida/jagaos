@@ -356,6 +356,7 @@ def list_review_items(
             "SELECT r.*, d.filename AS document_filename, d.media_type AS document_media_type, "
             "d.description AS document_description, d.bucket AS document_bucket, "
             "d.doc_type AS document_doc_type, d.vendor_name AS document_vendor_name, "
+            "d.lane AS document_lane, "
             # thread_id == run_id, generated in app/graph/ingest.py as
             # sha256[:12] — not its own column, derived the same way here
             # rather than adding one for a value that never changes.
@@ -366,7 +367,10 @@ def list_review_items(
         ).fetchall()
         # 2026-09-22: so the review card can show (and edit) the same
         # description/bucket/vendor_name a human can edit from the
-        # Documents tab, without a second round trip per card.
+        # Documents tab, without a second round trip per card. lane is
+        # read-only here (not part of DocumentEditRequest) - it's what
+        # decides whether doc_type renders as the fixed dropdown or the
+        # statutory lane's free-text input, not itself editable.
         return [dict(r) for r in rows]
 
 
