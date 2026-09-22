@@ -881,6 +881,10 @@ export function OpsConsole() {
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
   const canResolve = role !== null && roleAtLeast(role, 'admin')
+  // 2026-09-22 (DECISIONS #47): same routine-vs-flagged distinction
+  // ReviewQueueCard already makes (isRoutine, DECISIONS #40) — a clean
+  // upload's badge shouldn't read as "something's wrong" here either.
+  const isRoutineUpload = lastUpload?.status === 'needs_review' && lastUpload.review?.reason === 'clean extraction'
   // search/bucket filters apply on top of whichever base list is active;
   // "show archived" always applies first, same ordering as before bucket
   // replaced tags — so bucket chip counts match what's actually shown
@@ -979,7 +983,7 @@ export function OpsConsole() {
               <div className="mt-4 rounded-card border border-line bg-canvas p-4 text-[13px]">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-ink">Last upload result:</span>
-                  <StatusPill status={lastUpload.status} />
+                  {!isRoutineUpload && <StatusPill status={lastUpload.status} />}
                 </div>
                 {lastUpload.classify && (
                   <p className="mt-1 text-muted">

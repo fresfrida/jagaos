@@ -338,7 +338,17 @@ an invalid value), not assumed. Typecheck/build clean, suite still 31/31.
 Screenshots: `docs/screenshots/ops-doctype-dropdown-invoice-lane.png`,
 `ops-doctype-freetext-statutory-lane.png`, `ops-vendor-autocomplete.png`.
 
+**Upload-result banner no longer badges a routine upload (2026-09-22,
+DECISIONS #47).** Same `reason === 'clean extraction'` distinction
+`ReviewQueueCard` already makes (DECISIONS #40) — `POST /api/documents`
+gained `review.reason`, the banner skips `StatusPill` when the upload was
+clean, every other outcome (flagged, quarantined, duplicate) keeps it.
+Verified live, both states. Screenshots:
+`docs/screenshots/ops-banner-routine-no-badge.png`,
+`ops-banner-flagged-with-badge.png`.
+
 **Known gaps, in the order they'll bite:**
+- **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - `evals/cases/golden/` is empty — needs ~15 labelled real documents (see `evals/cases/golden/README.md`)
 - `app/rules/expectations.py`'s expected-document-set is a small starter list, **not** the team's real "19 documents, 14 held" checklist — that external data needs to be loaded in before the gap-analysis demo means anything
 - No scheduler (`APScheduler`), no Telegram bot — "the clock" (the actual agent, per `MOAT.md`'s one-liner) doesn't exist yet. Explicitly deprioritized 2026-09-22 (DECISIONS #28), not a gap to close right now.

@@ -284,7 +284,7 @@ async def upload_document(
     # to return; a branch for one would be dead code.
     with get_conn(DB_PATH) as conn:
         review_item = conn.execute(
-            "SELECT id, question FROM review_item WHERE document_id = ? "
+            "SELECT id, reason, question FROM review_item WHERE document_id = ? "
             "AND status = 'open' ORDER BY id DESC LIMIT 1",
             (document_id,),
         ).fetchone()
@@ -293,7 +293,12 @@ async def upload_document(
         "status": "needs_review",
         "thread_id": thread_id,
         "review_item_id": review_item["id"] if review_item else None,
-        "review": {"question": review_item["question"]} if review_item else None,
+        # reason (added 2026-09-22, DECISIONS #47) lets the upload banner
+        # apply the same routine-vs-flagged distinction ReviewQueueCard
+        # already makes ('clean extraction' — verify.py — vs a real
+        # reason) instead of showing an amber NEEDS_REVIEW pill for every
+        # upload, clean ones included.
+        "review": {"reason": review_item["reason"], "question": review_item["question"]} if review_item else None,
     }
 
 

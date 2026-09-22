@@ -71,7 +71,11 @@ export interface UploadResult {
   verify?: VerifyResult
   events?: unknown[]
   obligations_created?: number
-  review?: { question: string | null } | null
+  // reason (2026-09-22, DECISIONS #47): 'clean extraction' (verify.py's
+  // literal string for a no-issues upload) vs a real reason — lets the
+  // upload banner drop the amber badge for the routine case, same
+  // distinction ReviewQueueCard already makes for review-queue cards.
+  review?: { reason: string | null; question: string | null } | null
   review_item_id?: number | null
 }
 
