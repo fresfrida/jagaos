@@ -43,6 +43,58 @@ def _low_confidence_fields(fields: dict, floor: float = CONFIDENCE_FLOOR) -> lis
     return low
 
 
+def _amount_strings(value: float) -> set[str]:
+    """A few reasonable ways a numeric value might appear as literal text
+    in a document — "110.00" (money format), "110.0", and "110" (a
+    whole-number print with no decimals). Not exhaustive (no thousands
+    separators, no currency symbols) — this only needs to catch the common
+    cases; see _check_amounts_in_text's docstring for why an exhaustive
+    match isn't the point."""
+    d = Decimal(str(value))
+    forms = {f"{d:.2f}", str(d)}
+    if d == d.to_integral_value():
+        forms.add(str(int(d)))
+    return forms
+
+
+def _check_amounts_in_text(fields: dict, text: str) -> list[str]:
+    """Deterministic cross-check, independent of what the model claims:
+    subtotal/gst/total's extracted VALUES, not just their confidence, need
+    to actually appear somewhere in the source text. Confirmed live
+    2026-09-22 (Lightsail document id 14, "Ittibaa Glazing Enterprise Pte
+    Ltd"): the model extracted subtotal=440/gst=39.6/total=479.6 at 92-93%
+    confidence, filed with "no issues found" — the real printed values were
+    SUBTOTAL 110.00/GST 0.00/TOTAL 110.00. 440 x 1.09 = 479.6, so the
+    fabricated numbers were internally self-consistent — exactly why
+    _check_invoice_arithmetic and the confidence floor both missed it.
+    Grayscale/autocontrast OCR preprocessing didn't reliably recover the
+    real numbers on this image either (a rounded-box summary layout
+    Tesseract struggles with) — this needs a check independent of both the
+    model's confidence and its own arithmetic. Deliberately conservative:
+    only flags when ALL THREE values are absent from the text, not just
+    one — a single absent value is unremarkable (OCR noise, a differently
+    -formatted number) and would false-positive constantly; three-for-three
+    absent is a much rarer, stronger signal of fabrication. Scoped to
+    subtotal/gst/total only, never dates or names — those have too many
+    legitimate reformatting variations (OCR digit/letter confusion, date
+    format differences) to text-match reliably the same way plain numbers
+    can."""
+    values = []
+    for field_name in ("subtotal", "gst", "total"):
+        field = fields.get(field_name)
+        if isinstance(field, dict) and field.get("value") is not None:
+            values.append(field["value"])
+    if len(values) < 3:
+        return []  # missing field(s) — _check_invoice_arithmetic's own "missing" reason already covers this
+    any_found = any(candidate in text for value in values for candidate in _amount_strings(value))
+    if any_found:
+        return []
+    return [
+        "extracted amounts weren't found anywhere in the document's text "
+        "— please double-check these against the image before confirming"
+    ]
+
+
 def verify(state: PipelineState) -> PipelineState:
     document_id = state["document_id"]
     classify = state.get("classify_result", {})
@@ -89,6 +141,7 @@ def verify(state: PipelineState) -> PipelineState:
 
     if classify.get("lane") == "invoice" and extract and not extract.get("skipped") and not extract.get("error"):
         reasons.extend(_check_invoice_arithmetic(extract))
+        reasons.extend(_check_amounts_in_text(extract, text))
 
     low_conf = _low_confidence_fields(extract) if extract else []
     if low_conf:

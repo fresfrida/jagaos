@@ -253,6 +253,75 @@ def test_verify_flagged_extraction_keeps_the_please_confirm_question():
         assert review_item["question"].startswith("Please confirm: ")
 
 
+def test_verify_flags_amounts_not_found_anywhere_in_source_text():
+    # Confirmed live 2026-09-22 on the deployed Lightsail backend: a real
+    # invoice (document id 14, "Ittibaa Glazing Enterprise Pte Ltd")
+    # extracted subtotal=440/gst=39.6/total=479.6 at 92-93% confidence,
+    # filed with "no issues found" — the real printed values were SUBTOTAL
+    # 110.00/GST 0.00/TOTAL 110.00. 440 x 1.09 = 479.6, so the fabricated
+    # numbers were internally self-consistent and passed the GST-arithmetic
+    # check too — this reproduces that exact shape (self-consistent, but
+    # absent from the source text) with synthetic values, not the real
+    # document.
+    from app.graph.verify import verify
+
+    document_id = _seed_company_and_document("fabricatedamountssha")
+    state = {
+        "run_id": "fabricated1", "company_id": 1, "document_id": document_id,
+        "text": "Invoice\nSUBTOTAL 110.00\nGST 9% 0.00\nTOTAL 110.00",
+        "text_source": "ocr",
+        "classify_result": {"lane": "invoice", "doc_type": "tax_invoice",
+                             "confidence": 0.9, "injection_suspected": False},
+        "extract_result": {
+            "vendor": {"value": "Ittibaa Glazing Enterprise Pte Ltd", "confidence": 0.93},
+            "subtotal": {"value": 440.0, "confidence": 0.93},
+            "gst": {"value": 39.6, "confidence": 0.92},
+            "total": {"value": 479.6, "confidence": 0.93},
+        },
+    }
+    result = verify(state)["verify_result"]
+
+    assert result["ok"] is False
+    assert result["needs_review"] is True
+    assert any("weren't found anywhere in the document's text" in r for r in result["reasons"]), result["reasons"]
+    # The fabricated numbers ARE internally self-consistent (440 x 1.09 =
+    # 479.6) — confirms this reproduction is caught by the new text-match
+    # check specifically, not by the pre-existing arithmetic check.
+    assert not any("is not ~9% of subtotal" in r for r in result["reasons"]), (
+        f"this reproduction's numbers should pass the arithmetic check on their own - "
+        f"got {result['reasons']}"
+    )
+
+
+def test_verify_does_not_flag_amounts_that_do_appear_in_source_text():
+    # Non-regression: a genuinely correct extraction, where the amounts
+    # really are printed in the source text, must not trip the new check —
+    # same shape as the real Lay Meng Engineering invoice
+    # (363.30/32.70/396.00, all present in its OCR text) this check is
+    # explicitly required not to false-positive on.
+    from app.graph.verify import verify
+
+    document_id = _seed_company_and_document("correctamountssha")
+    state = {
+        "run_id": "correct1", "company_id": 1, "document_id": document_id,
+        "text": "Invoice\nSub Total: 363.30\nAdd GST: 32.70\nTotal Amount: 396.00",
+        "text_source": "ocr",
+        "classify_result": {"lane": "invoice", "doc_type": "tax_invoice",
+                             "confidence": 0.9, "injection_suspected": False},
+        "extract_result": {
+            "vendor": {"value": "Lay Meng Engineering Technology Pte Ltd", "confidence": 0.95},
+            "subtotal": {"value": 363.3, "confidence": 0.95},
+            "gst": {"value": 32.7, "confidence": 0.95},
+            "total": {"value": 396.0, "confidence": 0.95},
+        },
+    }
+    result = verify(state)["verify_result"]
+
+    assert result["ok"] is True, result["reasons"]
+    assert result["needs_review"] is True  # DECISIONS #40 — still unconditional regardless
+    assert result["reasons"] == []
+
+
 def test_classify_empty_text_falls_back_to_memory_lane_bucket_and_photo_doc_type():
     # No extractable text (app/graph/ingest.py — e.g. a photo with no OCR
     # layer) must still get a sensible bucket/doc_type. classify() short-

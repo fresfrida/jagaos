@@ -347,8 +347,33 @@ Verified live, both states. Screenshots:
 `docs/screenshots/ops-banner-routine-no-badge.png`,
 `ops-banner-flagged-with-badge.png`.
 
+**Hallucination guard: extracted invoice amounts must appear in the source
+text (2026-09-22, DECISIONS #48).** Confirmed live on Lightsail (document
+id 14): the model can fabricate internally self-consistent
+subtotal/gst/total — passes `_check_invoice_arithmetic` and the confidence
+floor both — while being entirely wrong (extracted 440/39.6/479.6 against
+real printed values of 110.00/0.00/110.00; `440 × 1.09 = 479.6`, so the
+arithmetic looked fine). New `verify.py::_check_amounts_in_text()` flags
+when *none* of the three extracted values appear anywhere in the source
+text, in any of a few plausible string formats — a new reason on the
+existing `needs_review` path, nothing auto-rejected or downgraded.
+Deliberately conservative (all three must be absent, not just one) and
+scoped to subtotal/gst/total only — dates/names have too many legitimate
+reformatting variations to text-match reliably the same way. **Known,
+stated limitation**: this only catches "absent from the text entirely,"
+not "present but still wrong" (e.g. a value that's genuinely printed
+somewhere in the document but happens to be incorrect, or a fabricated
+number that coincidentally matches a substring elsewhere) — a harder
+problem, not solved here. New tests reproduce document id 14's shape and
+confirm no false positive on a correct extraction (the Lay Meng
+Engineering invoice's numbers, all present in its text). Full suite
+33/33, including the existing live-gateway invoice test re-passing against
+a real extraction (no false positive on genuine model output). No UI
+change.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
+- **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
 - `evals/cases/golden/` is empty — needs ~15 labelled real documents (see `evals/cases/golden/README.md`)
 - `app/rules/expectations.py`'s expected-document-set is a small starter list, **not** the team's real "19 documents, 14 held" checklist — that external data needs to be loaded in before the gap-analysis demo means anything
 - No scheduler (`APScheduler`), no Telegram bot — "the clock" (the actual agent, per `MOAT.md`'s one-liner) doesn't exist yet. Explicitly deprioritized 2026-09-22 (DECISIONS #28), not a gap to close right now.
