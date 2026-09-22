@@ -219,6 +219,16 @@ function DocumentViewerModal({
 const FIELD_CLASS =
   'block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted'
 
+// 2026-09-22 (DECISIONS #49): the card's identifying header, made directly
+// editable — filename now appears in exactly one place per card (the
+// title), not also as a separate "Filename" field further down the form.
+// Looks like plain text until hovered/focused (transparent border, no
+// visible box) so it doesn't read as "yet another form field" the way a
+// boxed input in a title position would; -mx-1 offsets the reserved
+// padding so the text doesn't shift sideways when the border appears.
+const FILENAME_TITLE_CLASS =
+  '-mx-1 block w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-ink outline-none hover:border-line focus:border-ink focus:bg-white disabled:hover:border-transparent'
+
 /** doc_type as a dropdown, hard-locked to DOC_TYPES — EXCEPT the statutory
  * lane, which stays free text (2026-09-22, DECISIONS #45: category fields
  * are dropdowns, name fields are free text; statutory's doc_type is a
@@ -365,94 +375,102 @@ function ReviewQueueCard({
   return (
     <Card className="p-5" interactive={false}>
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-ink">{item.document_filename}</p>
+        <div className="min-w-0 flex-1">
+          <input
+            value={filename}
+            disabled={!canResolve}
+            onChange={(e) => setFilename(e.target.value)}
+            aria-label="Filename"
+            className={FILENAME_TITLE_CLASS}
+          />
           <p className={`mt-1 text-[13px] ${isRoutine ? 'text-muted' : 'text-amber-800'}`}>{item.question}</p>
         </div>
       </div>
 
       <DocumentPreview documentId={item.document_id} mediaType={item.document_media_type} filename={item.document_filename} />
 
+      {/* Document-level metadata (organizational: what kind of thing this
+         is, who it's from) vs. extracted line-item fields (what the model
+         actually read off the page) are conceptually different — grouped
+         and headed separately (2026-09-22, DECISIONS #49) rather than one
+         undifferentiated stack of same-weight labels. */}
       {!expired && (
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="text-[12px] text-muted sm:col-span-2">
-            Description
-            <input
-              value={description}
-              disabled={!canResolve}
-              onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
-            />
-          </label>
-          <label className="text-[12px] text-muted">
-            Bucket
-            <select
-              value={bucket}
-              disabled={!canResolve}
-              onChange={(e) => setBucket(e.target.value)}
-              className="mt-1 block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
-            >
-              <option value="">—</option>
-              {BUCKETS.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-[12px] text-muted">
-            Doc type
-            <DocTypeField
-              lane={item.document_lane}
-              value={docType}
-              disabled={!canResolve}
-              onChange={setDocType}
-              className={`mt-1 ${FIELD_CLASS}`}
-            />
-          </label>
-          <label className="text-[12px] text-muted">
-            Vendor name
-            <input
-              value={vendorName}
-              disabled={!canResolve}
-              placeholder="—"
-              list={VENDOR_NAMES_DATALIST_ID}
-              onChange={(e) => setVendorName(e.target.value)}
-              className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
-            />
-          </label>
-          <label className="text-[12px] text-muted">
-            Filename
-            <input
-              value={filename}
-              disabled={!canResolve}
-              onChange={(e) => setFilename(e.target.value)}
-              className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
-            />
-          </label>
+        <div className="mt-4">
+          <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">Document</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <label className="text-[12px] text-muted sm:col-span-3">
+              Description
+              <input
+                value={description}
+                disabled={!canResolve}
+                onChange={(e) => setDescription(e.target.value)}
+                className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+              />
+            </label>
+            <label className="text-[12px] text-muted">
+              Bucket
+              <select
+                value={bucket}
+                disabled={!canResolve}
+                onChange={(e) => setBucket(e.target.value)}
+                className="mt-1 block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+              >
+                <option value="">—</option>
+                {BUCKETS.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-[12px] text-muted">
+              Doc type
+              <DocTypeField
+                lane={item.document_lane}
+                value={docType}
+                disabled={!canResolve}
+                onChange={setDocType}
+                className={`mt-1 ${FIELD_CLASS}`}
+              />
+            </label>
+            <label className="text-[12px] text-muted">
+              Vendor name
+              <input
+                value={vendorName}
+                disabled={!canResolve}
+                placeholder="—"
+                list={VENDOR_NAMES_DATALIST_ID}
+                onChange={(e) => setVendorName(e.target.value)}
+                className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+              />
+            </label>
+          </div>
         </div>
       )}
 
       {!expired && fieldNames.length > 0 && (
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {fieldNames.map((name) => {
-            const field = proposed[name]
-            const confidence = isProvenance(field) ? field.confidence : null
-            return (
-              <label key={name} className="text-[12px] text-muted">
-                {name}
-                {confidence !== null && (
-                  <span className={confidence < 0.6 ? 'ml-1 text-red-600' : 'ml-1 text-muted'}>
-                    ({formatConfidence(confidence)})
-                  </span>
-                )}
-                <input
-                  value={edits[name]}
-                  disabled={!canResolve}
-                  onChange={(e) => setEdits((prev) => ({ ...prev, [name]: e.target.value }))}
-                  className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
-                />
-              </label>
-            )
-          })}
+        <div className="mt-4 border-t border-line pt-4">
+          <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">Extracted fields</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {fieldNames.map((name) => {
+              const field = proposed[name]
+              const confidence = isProvenance(field) ? field.confidence : null
+              return (
+                <label key={name} className="text-[12px] text-muted">
+                  {name}
+                  {confidence !== null && (
+                    <span className={confidence < 0.6 ? 'ml-1 text-red-600' : 'ml-1 text-muted'}>
+                      ({formatConfidence(confidence)})
+                    </span>
+                  )}
+                  <input
+                    value={edits[name]}
+                    disabled={!canResolve}
+                    onChange={(e) => setEdits((prev) => ({ ...prev, [name]: e.target.value }))}
+                    className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+                  />
+                </label>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -547,7 +565,11 @@ function DocumentCard({
         <div className="flex min-w-0 flex-1 gap-3">
           <DocumentThumbnail documentId={doc.id} mediaType={doc.media_type} />
           <div className="min-w-0 flex-1">
-            <p className="break-words text-sm font-medium text-ink">{doc.filename}</p>
+            {editing ? (
+              <input value={filename} onChange={(e) => setFilename(e.target.value)} aria-label="Filename" className={FILENAME_TITLE_CLASS} />
+            ) : (
+              <p className="break-words text-sm font-medium text-ink">{doc.filename}</p>
+            )}
             <p className="mt-0.5 break-words text-[12px] text-muted">{doc.lane ?? '—'} / {doc.doc_type ?? '—'}</p>
             {doc.vendor_name && <p className="mt-0.5 break-words text-[12px] text-muted">{doc.vendor_name}</p>}
           </div>
@@ -559,12 +581,12 @@ function DocumentCard({
       </div>
 
       {editing ? (
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description"
-            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink sm:col-span-2"
+            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink sm:col-span-3"
           />
           <select
             value={bucket}
@@ -584,14 +606,8 @@ function DocumentCard({
             list={VENDOR_NAMES_DATALIST_ID}
             className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
           />
-          <input
-            value={filename}
-            onChange={(e) => setFilename(e.target.value)}
-            placeholder="Filename"
-            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
-          />
-          {error && <p className="text-[12px] text-red-700 sm:col-span-2">{error}</p>}
-          <div className="flex gap-2 sm:col-span-2">
+          {error && <p className="text-[12px] text-red-700 sm:col-span-3">{error}</p>}
+          <div className="flex gap-2 sm:col-span-3">
             <Button size="sm" onClick={() => void save()} disabled={busy}>Save</Button>
             <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
           </div>

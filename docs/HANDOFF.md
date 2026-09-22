@@ -371,6 +371,28 @@ Engineering invoice's numbers, all present in its text). Full suite
 a real extraction (no false positive on genuine model output). No UI
 change.
 
+**Review card and Documents card decluttered (2026-09-22, DECISIONS #49).**
+Filename used to render twice per card — the static header, and a
+duplicate "Filename" input further down the metadata form. The header is
+now directly editable in place (borderless until hover/focus, so it reads
+as a title, not another form field) and the separate input is gone.
+Fields are grouped under a "Document" heading (description/bucket/doc
+type/vendor name) and, in `ReviewQueueCard` only, an "Extracted fields"
+heading below a divider (the model's own extracted values, each with
+confidence) — `DocumentCard` never showed extracted fields, so it only
+gets the header change. Both cards' filename-editing *mechanism*
+deliberately stayed different: `ReviewQueueCard` has no view/edit toggle
+(everything's always live), so its title is always an input;
+`DocumentCard` already has an `editing` toggle, so its title only becomes
+an input inside that same toggle, like every other field there. No
+information or editing capability removed. Verified live: focus shows a
+clear border, a renamed filename actually saves via the relocated field,
+zero duplicate "Filename" fields anywhere when no card is mid-edit.
+Typecheck/build clean; no backend change, so the backend suite wasn't
+re-run. Screenshots: `docs/screenshots/ops-review-card-decluttered.png`,
+`ops-review-card-filename-title-focused.png`,
+`ops-document-card-edit-decluttered.png`.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
