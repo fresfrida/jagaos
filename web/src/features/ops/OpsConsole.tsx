@@ -1,4 +1,4 @@
-import { Loader2, ShieldAlert, Upload } from 'lucide-react'
+import { Check, Loader2, ShieldAlert, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -9,9 +9,122 @@ import {
   type DocumentRow,
   type Expectation,
   type Obligation,
+  type ReviewItem,
   type TraceReport,
   type UploadResult,
 } from './opsApi'
+
+/** One field from a review_item.proposed_json blob — matches
+ * app/models.py's Provenance[T], or a bare bool for injection_suspected. */
+type ProposedField = { value: unknown; confidence: number } | boolean | null
+
+function parseProposed(json: string): Record<string, ProposedField> {
+  try {
+    return JSON.parse(json) as Record<string, ProposedField>
+  } catch {
+    return {}
+  }
+}
+
+function isProvenance(field: ProposedField | undefined): field is { value: unknown; confidence: number } {
+  return typeof field === 'object' && field !== null && 'confidence' in field
+}
+
+function ReviewQueueCard({
+  item,
+  onResolved,
+}: {
+  item: ReviewItem
+  onResolved: () => void
+}) {
+  const proposed = parseProposed(item.proposed_json)
+  const fieldNames = Object.keys(proposed).filter((k) => k !== 'injection_suspected' && isProvenance(proposed[k]))
+
+  const [edits, setEdits] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    for (const name of fieldNames) {
+      const field = proposed[name]
+      initial[name] = isProvenance(field) && field.value !== null && field.value !== undefined ? String(field.value) : ''
+    }
+    return initial
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const originalValue = (name: string): string => {
+    const field = proposed[name]
+    return isProvenance(field) && field.value !== null && field.value !== undefined ? String(field.value) : ''
+  }
+
+  const resolve = async (action: 'confirm' | 'reject') => {
+    setBusy(true)
+    setError(null)
+    try {
+      const correctedFields: Record<string, unknown> = {}
+      if (action === 'confirm') {
+        for (const name of fieldNames) {
+          if (edits[name] !== originalValue(name)) {
+            const field = proposed[name]
+            const isNumeric = isProvenance(field) && typeof field.value === 'number'
+            correctedFields[name] = isNumeric ? Number(edits[name]) : edits[name]
+          }
+        }
+      }
+      await opsApi.resolveReview(item.id, item.thread_id, { action, corrected_fields: correctedFields })
+      onResolved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card className="p-5" interactive={false}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-ink">{item.document_filename}</p>
+          <p className="mt-1 text-[13px] text-amber-800">{item.question}</p>
+        </div>
+      </div>
+
+      {fieldNames.length > 0 && (
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {fieldNames.map((name) => {
+            const field = proposed[name]
+            const confidence = isProvenance(field) ? field.confidence : null
+            return (
+              <label key={name} className="text-[12px] text-muted">
+                {name}
+                {confidence !== null && (
+                  <span className={confidence < 0.6 ? 'ml-1 text-red-600' : 'ml-1 text-muted'}>
+                    ({confidence.toFixed(2)})
+                  </span>
+                )}
+                <input
+                  value={edits[name]}
+                  onChange={(e) => setEdits((prev) => ({ ...prev, [name]: e.target.value }))}
+                  className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+                />
+              </label>
+            )
+          })}
+        </div>
+      )}
+
+      {error && <p className="mt-3 text-[13px] text-red-700">{error}</p>}
+
+      <div className="mt-4 flex gap-2">
+        <Button size="sm" onClick={() => void resolve('confirm')} disabled={busy} icon={<Check size={14} />}>
+          Accept{Object.keys(edits).some((n) => edits[n] !== originalValue(n)) ? ' with corrections' : ' as-is'}
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => void resolve('reject')} disabled={busy} icon={<X size={14} />}>
+          Reject
+        </Button>
+        {busy && <Loader2 size={16} className="animate-spin self-center text-muted" />}
+      </div>
+    </Card>
+  )
+}
 
 const COMPANY_STORAGE_KEY = 'jagaos_ops_company_id'
 
@@ -51,6 +164,7 @@ export function OpsConsole() {
   const [documents, setDocuments] = useState<DocumentRow[]>([])
   const [expectations, setExpectations] = useState<Expectation[]>([])
   const [obligations, setObligations] = useState<Obligation[]>([])
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([])
   const [lastUpload, setLastUpload] = useState<UploadResult | null>(null)
   const [trace, setTrace] = useState<{ documentId: number; report: TraceReport } | null>(null)
 
@@ -62,14 +176,16 @@ export function OpsConsole() {
   }, [])
 
   const refresh = useCallback(async (companyId: number) => {
-    const [docs, exps, obls] = await Promise.all([
+    const [docs, exps, obls, reviews] = await Promise.all([
       opsApi.listDocuments(companyId),
       opsApi.listExpectations(companyId),
       opsApi.listObligations(companyId),
+      opsApi.listReviewItems(companyId),
     ])
     setDocuments(docs)
     setExpectations(exps)
     setObligations(obls)
+    setReviewItems(reviews)
   }, [])
 
   useEffect(() => {
@@ -230,6 +346,7 @@ export function OpsConsole() {
                   setDocuments([])
                   setExpectations([])
                   setObligations([])
+                  setReviewItems([])
                 }}
               >
                 Switch company
@@ -277,6 +394,25 @@ export function OpsConsole() {
               </div>
             )}
           </Card>
+
+          {reviewItems.length > 0 && (
+            <section>
+              <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-amber-800">
+                Needs your review ({reviewItems.length})
+              </h2>
+              <div className="space-y-3">
+                {reviewItems.map((item) => (
+                  <ReviewQueueCard
+                    key={item.id}
+                    item={item}
+                    onResolved={() => {
+                      if (company) void refresh(company.id)
+                    }}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           <section>
             <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">

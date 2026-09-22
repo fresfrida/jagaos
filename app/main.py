@@ -11,6 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from langgraph.errors import InvalidUpdateError
 from langgraph.types import Command
 
 load_dotenv()
@@ -141,10 +142,24 @@ def resolve_review(review_item_id: int, thread_id: str, body: ReviewResolution) 
         if item is None:
             raise HTTPException(404, "review item not found or already resolved")
 
-    result = PIPELINE.invoke(
-        Command(resume=body.model_dump()),
-        config={"configurable": {"thread_id": thread_id}},
-    )
+    try:
+        result = PIPELINE.invoke(
+            Command(resume=body.model_dump()),
+            config={"configurable": {"thread_id": thread_id}},
+        )
+    except InvalidUpdateError:
+        # The checkpointer is in-memory (MemorySaver, docs/HANDOFF.md's known
+        # limitation) — confirmed live 2026-09-22: after any server restart,
+        # a review item created before it has no pending checkpoint left to
+        # resume, and LangGraph raises this rather than silently doing
+        # nothing. Fail clearly instead of a raw 500; the fix on the user's
+        # side is the same either way — re-upload the document.
+        raise HTTPException(
+            410,
+            "This review session has expired (the backend restarted since this "
+            "document was uploaded — the in-memory checkpoint is gone). "
+            "Re-upload the document to get a fresh, resolvable review item.",
+        ) from None
     with get_conn(DB_PATH) as conn:
         doc_status = conn.execute(
             "SELECT status FROM document WHERE id = (SELECT document_id FROM review_item WHERE id = ?)",
