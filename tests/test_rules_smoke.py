@@ -253,6 +253,51 @@ def test_verify_flagged_extraction_keeps_the_please_confirm_question():
         assert review_item["question"].startswith("Please confirm: ")
 
 
+def test_classify_empty_text_falls_back_to_memory_lane_bucket_and_photo_doc_type():
+    # No extractable text (app/graph/ingest.py — e.g. a photo with no OCR
+    # layer) must still get a sensible bucket/doc_type. classify() short-
+    # circuits before the LLM call for this case (app/graph/classify.py),
+    # so this needs no gateway key/network access.
+    from app.graph.classify import classify
+
+    document_id = _seed_company_and_document("emptytextsha")
+    result = classify({"document_id": document_id, "text": ""})["classify_result"]
+
+    assert result["lane"] == "memory"
+    assert result["doc_type"] == "photo"
+    assert result["bucket"] == "Memory Lane"
+    assert result["vendor_name"] is None
+
+    with get_conn() as conn:
+        doc = conn.execute(
+            "SELECT lane, doc_type, bucket, status FROM document WHERE id = ?",
+            (document_id,),
+        ).fetchone()
+    assert doc["lane"] == "memory"
+    assert doc["doc_type"] == "photo"
+    assert doc["bucket"] == "Memory Lane"
+    assert doc["status"] == "proposed"
+
+
+def test_is_this_company_matches_substring_either_direction_and_rejects_unrelated():
+    # DECISIONS #42's amendment: Receivables-vs-Expenses detection reuses
+    # app/graph/derive_expectations.py::_slug, the same normalization
+    # _matches_doc_type already uses for doc_type matching — direct unit
+    # test since "substring either direction" is easy to get backwards.
+    from app.graph.extract import _is_this_company
+
+    assert _is_this_company("Acme Pte Ltd", "Acme Pte Ltd") is True
+    # Invoice header spells out more than the registered name.
+    assert _is_this_company("Acme Engineering Technology Pte Ltd", "Acme Engineering") is True
+    # Reverse direction: the company's own name is the longer string.
+    assert _is_this_company("Acme", "Acme Engineering Technology Pte Ltd") is True
+    # Genuinely different companies must not match.
+    assert _is_this_company("Beta Supplies Pte Ltd", "Acme Engineering Pte Ltd") is False
+    # Neither side identifiable -> no match, not a crash.
+    assert _is_this_company("", "Acme Pte Ltd") is False
+    assert _is_this_company("Acme Pte Ltd", "") is False
+
+
 def test_obligation_transition_rejects_open_to_satisfied_directly_is_allowed_but_backwards_is_not():
     db_path = _fresh_db()
     with get_conn(db_path) as conn:

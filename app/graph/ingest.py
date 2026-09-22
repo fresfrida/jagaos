@@ -85,10 +85,10 @@ def ingest(
         document_id = cur.lastrowid
 
     # First time extracted_text exists for this document — index it so
-    # search works even before classify.py adds description/tags (which
-    # re-index again themselves). filename/doc_type/description/tag_names
-    # are all still blank at this point; that's fine, the row just gets
-    # more complete as the pipeline proceeds.
+    # search works even before classify.py adds description/bucket/
+    # vendor_name (which re-index again themselves). doc_type/description/
+    # bucket/vendor_name are all still blank at this point; that's fine,
+    # the row just gets more complete as the pipeline proceeds.
     reindex_document_search(document_id, db_path)
 
     return {

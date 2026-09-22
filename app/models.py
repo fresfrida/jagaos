@@ -36,6 +36,11 @@ class Provenance(BaseModel, Generic[T]):
     char_end: int | None = None
 
 
+BucketName = Literal[
+    "Receivables", "Expenses", "Statutory", "Operations", "Memory Lane", "Miscellaneous",
+]
+
+
 class ClassifyResult(BaseModel):
     lane: Literal["statutory", "invoice", "important", "memory"]
     doc_type: str
@@ -44,10 +49,16 @@ class ClassifyResult(BaseModel):
     # 2026-09-22: runs for every document regardless of lane (unlike
     # extract.py's InvoiceFields/StatutoryFields, which only run for
     # invoice/statutory — app/graph/extract.py's TOOLS_BY_LANE), so
-    # description/tags come from here, not extract.py, or an
-    # important/memory document (a lease, a photo) would never get one.
+    # description/bucket/vendor_name come from here, or an important/
+    # memory document (a lease, a photo) would never get one.
     description: str
-    suggested_tags: list[str] = Field(default_factory=list)
+    # 2026-09-22 (DECISIONS #42): supersedes suggested_tags/the tag table
+    # — a fixed taxonomy needs no join tables. For lane=invoice this is
+    # only a provisional guess (classify runs before extraction, so it
+    # doesn't know the vendor yet); app/graph/extract.py deterministically
+    # corrects Receivables vs Expenses once the real vendor is known.
+    bucket: BucketName
+    vendor_name: str | None = None
 
 
 class InvoiceFields(BaseModel):
@@ -113,13 +124,22 @@ class VerifyResult(BaseModel):
 
 
 class DocumentEditRequest(BaseModel):
-    """PATCH /api/documents/{id} body (2026-09-22). Both fields optional —
-    only the ones sent are changed. `tags`, when sent, REPLACES the
-    document's whole tag set (not additive) — the frontend sends the
-    complete edited set, matching how a tag-chip editor naturally works."""
+    """PATCH /api/documents/{id} body. 2026-09-22: `tags` replaced by
+    `bucket`/`vendor_name`/`doc_type` (DECISIONS #42, tag table
+    superseded); `filename` added the same day — display name only,
+    `stored_path`/`sha256` (the actual file on disk) are never touched by
+    this. Every field is optional — only the ones sent are changed.
+    doc_type is plain str here, not BucketName's kind of closed vocabulary
+    — the statutory lane's doc_type is free text naming the actual filing
+    (app/graph/derive_expectations.py::_matches_doc_type matches it against
+    fixed slugs by substring, not by an enum), so a human correcting it
+    must be able to type anything, same as the model can."""
 
     description: str | None = None
-    tags: list[str] | None = None
+    bucket: BucketName | None = None
+    vendor_name: str | None = None
+    doc_type: str | None = None
+    filename: str | None = None
 
 
 class ReviewResolution(BaseModel):

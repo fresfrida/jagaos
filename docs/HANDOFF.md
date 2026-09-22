@@ -17,11 +17,11 @@ This repo currently holds:
 - **`web/`** — the marketing landing page (mock data, logged-out) plus the real logged-in app (`/login`, `/ops`, session-backed). See "Where the main logic lives" below.
 - **`app/`** — backend, per `ARCHITECTURE.md` §9 plus a 4-role auth layer (`app/auth.py`, 2026-09-22, DECISIONS #29-31). See "Backend status" below.
 - **`evals/`** — eval runner + adversarial cases, `evals/report.md` committed (10/10 passing, no gateway key needed).
-- **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, and auth/tenant-isolation (`tests/test_auth.py`). 25/25 passing.
+- **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, and auth/tenant-isolation (`tests/test_auth.py`). 31/31 passing.
 - **`deploy/`** — Lightsail provisioning (Caddy, systemd, `bootstrap.sh`). Untouched.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
-- **GitHub**: `github.com/fresfrida/jagaos` (private). Commit/push still need an explicit ask each time.
+- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way.
 
 ## Backend status (2026-09-21)
 
@@ -209,6 +209,120 @@ opens a real tab with a genuine `blob:` URL. Screenshots:
 `docs/screenshots/ops-review-expired-archive.png`, `ops-documents-mobile.png`,
 `ops-documents-mobile-show-archived.png`.
 
+**No document auto-files anymore, even a clean one (2026-09-22, DECISIONS
+#40).** Explicit product decision, not a bug fix: `verify.py`'s "auto-file
+when clean" path is gone — `needs_review` is unconditional except the hard
+regex-corroborated injection quarantine. A clean document gets a distinct,
+honest review question ("No issues found. Please confirm the extracted
+fields below are correct before filing.") instead of an empty "Please
+confirm: ". The review card styles a routine confirm differently from an
+actual flag (muted vs. amber-800 question text) so every single upload
+doesn't read as something went wrong — the form is pre-populated either
+way, so confirming a clean document is one tap. `app/main.py`'s now-dead
+"processed" (auto-filed) response branch was removed, not left stubbed;
+`opsApi.ts`'s `UploadResult.status` type dropped `'processed'` to match.
+**`evals/demo_corpus/RESULTS.md` is now stale**: 6 of its 8 documents show
+`status: processed`, which the pipeline can no longer produce — not
+regenerated here (real gateway cost, separate concern), tracked in
+`docs/KANBAN.md`. `pipeline.py` and `human_review.py` needed no changes —
+both already keyed purely off `verify_result.needs_review`, confirmed by
+re-reading fresh rather than assumed. New tests + a live-gateway assertion
+flip in `tests/test_gateway_live.py`; full suite 27/27 at the time.
+
+**Real full-text search and tags (2026-09-22, DECISIONS #41).** Schema:
+`document.description`, `tag`/`document_tag` tables, and a standalone FTS5
+virtual table `document_search` (`app/db.py`) — filename/doc_type/
+description/extracted_text/denormalized tag names, `company_id` UNINDEXED
+for tenant-scoped queries, `rowid = document.id`. Kept in sync via
+`reindex_document_search()` (delete + re-insert) from `ingest.py` (once
+extracted_text is first set), `classify.py` (once description/tags are
+set), and the new edit endpoint. `app/graph/classify.py` — not
+`extract.py`, which only runs for invoice/statutory lanes — now asks the
+LLM for a one-sentence description and 2-4 lowercase tags for every
+document, written directly (organizational metadata, not a compliance
+decision). Three endpoints: `GET /api/search` (FTS5, tenant-scoped, safe
+query building), `GET /api/tags` (with document counts), `PATCH
+/api/documents/{id}` (user+, tags REPLACE the set). **Deliberately did NOT
+touch `web/src/features/search/`, `features/tags/`, or `features/memories/`**
+— confirmed by reading `Page.tsx`'s routing, not assumed: those serve the
+logged-out marketing preview ("This preview searches sample data" is their
+own copy), which has no session to call an authenticated endpoint with.
+The real search/tags UI is new surface inside `/ops` instead
+(`opsApi.search`/`listTags`/`editDocument`), reusing the review card and a
+new `DocumentCard` component (Documents tab: search box, tag-filter chips,
+inline description/tag editing). New tests in `tests/test_auth.py`
+(tenant isolation, PATCH persistence, tag normalization). Full suite
+28/28. Verified live end to end with one real gateway upload — the real
+LLM produced description "Invoice from Zylotech Consulting Pte Ltd for
+cloud infrastructure consulting, SGD 436.00" and tags "cloud
+infrastructure, consulting, invoice, zylotech", both editable in the
+review card, saved on Accept, then findable via real search and a
+tag-filter chip. Screenshots: `docs/screenshots/ops-review-real-classify-fields.png`,
+`ops-documents-real-doc-edited.png`, `ops-review-flagged-styling.png`,
+`ops-search-results.png`, `ops-documents-tag-filter-and-edit.png`.
+
+**Metadata rework, preview UX, and a Dates tab (2026-09-22, DECISIONS
+#42-44) — supersedes #41's *tag* portion only, #40's always-review rule is
+unchanged.** `document.bucket` (fixed 6-value taxonomy: Receivables /
+Expenses / Statutory / Operations / "Memory Lane" / Miscellaneous) and
+`document.vendor_name` replace the `tag`/`document_tag` tables —
+`classify.py` sets bucket per lane (invoice lane defaults to Expenses,
+*provisionally*: classify runs before extraction, so it doesn't yet know
+the vendor); `extract.py` deterministically flips it to Receivables once
+the extracted vendor slug-matches the company's own name
+(`_is_this_company`, reusing `derive_expectations.py::_slug`'s exact
+normalization). `doc_type` is now a tightened, fixed vocabulary for the
+invoice/important/memory lanes (invoice/receipt/PO/quotation/
+delivery_order/contract/photo/other) — the statutory lane's free-text
+`doc_type` is untouched. Also fixed in the same prompt pass: the model no
+longer comments on OCR quality/data completeness inside description/
+bucket/doc_type/vendor_name (confirmed live pre-fix: a real description
+read "Studio invoice with incomplete or corrupted text data" — the model
+describing its own extraction, not the document); every rendered
+confidence changed from `(0.30)` to `(confidence: 30%)`; `PATCH
+/api/documents/{id}` gained `filename` (display-only) and `doc_type`
+(missing from the first pass at this endpoint, caught before shipping).
+`GET /api/tags` removed — bucket is a fixed frontend constant
+(`opsApi.BUCKETS`), no API call needed. **Found and fixed a real gap**:
+`document.occurred_on` existed as a column but, confirmed by grep across
+`app/`, was previously populated *only* from EXIF photo metadata —
+`extract.py` now also writes it from the extracted `issued_on` date for
+the invoice and statutory lanes. Frontend: Documents tab gets a
+bucket-chip filter (replacing tag chips), a small thumbnail per row (real
+image, or a generic PDF icon — no first-page rendering), and an in-page
+`DocumentViewerModal` that replaces the old "View" action's
+`window.open()` (a dead end on mobile — that popup-blocker workaround,
+DECISIONS #38, is now dead code and was removed, confirmed via grep for
+its only call site first). A new **Dates** tab groups documents by
+**"Upload date"** or **"Document date"** (exact labels), with an explicit
+**"No document date"** section rather than silently hiding undated
+documents. Schema migration needed a real drop+recreate+backfill for
+`document_search`'s FTS5 columns (`tag_names` → `bucket`/`vendor_name`) —
+`CREATE VIRTUAL TABLE IF NOT EXISTS` is a no-op against an existing table
+in the old shape; the 40 pre-existing documents were manually
+re-indexed afterward (their `bucket`/`vendor_name` stay null — additive
+migrations don't retroactively reclassify old rows; the UI treats null as
+"no bucket," verified live, not a crash). New/updated tests across
+`tests/test_rules_smoke.py` (empty-text → `bucket="Memory Lane"`, no
+gateway call; `_is_this_company` unit tests), `tests/test_gateway_live.py`
+(bucket/occurred_on assertions on the existing invoice test; a new
+self-issued-invoice test confirming the Receivables flip against the real
+gateway), `tests/test_auth.py` (tag-based tenant-isolation test rewritten
+for bucket/vendor_name/filename, plus a PATCH cross-tenant 404 check).
+Full suite 31/31, typecheck + build clean. Verified live end to end
+(Playwright): a real gateway upload of a self-issued invoice showed a
+natural description with no OCR-quality commentary, `bucket` correctly
+read **Receivables**, every field showed `(confidence: 100%)`, and the
+bucket-chip counts updated to match; thumbnails render real images/generic
+PDF icons; the view modal opens in-page with zero new tabs; the Dates tab
+correctly grouped one EXIF-dated photo under its own day and labeled the
+other eight **"No document date (8)"** rather than hiding them. Screenshots:
+`docs/screenshots/ops-review-confidence-and-bucket-fields.png`,
+`ops-documents-thumbnails-and-buckets.png`,
+`ops-document-card-edit-fields.png`, `ops-view-modal.png`,
+`ops-dates-upload-date.png`, `ops-dates-document-date.png`,
+`ops-live-upload-receivables-detected.png`.
+
 **Known gaps, in the order they'll bite:**
 - `evals/cases/golden/` is empty — needs ~15 labelled real documents (see `evals/cases/golden/README.md`)
 - `app/rules/expectations.py`'s expected-document-set is a small starter list, **not** the team's real "19 documents, 14 held" checklist — that external data needs to be loaded in before the gap-analysis demo means anything
@@ -247,7 +361,7 @@ Schema: `app_user`, `membership` (`company_id`, `user_id`, `role`),
 `session` (hashed tokens, 7-day TTL). `document.uploaded_by_user_id`
 attributes uploads. Endpoints: `POST /api/auth/dev-login`, `GET
 /api/auth/me`, `POST /api/auth/logout`, `GET`/`POST
-/api/companies/{id}/members`. Tests: `tests/test_auth.py` (12/12, no gateway
+/api/companies/{id}/members`. Tests: `tests/test_auth.py` (13/13, no gateway
 key needed — pure DB/HTTP against `TestClient`).
 
 Frontend: `web/src/features/auth/` (`AuthContext`/`useAuth`, `authApi.ts`
@@ -272,8 +386,8 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 
 ## Data flow
 
-- **Implemented (web/):** routing: real URL paths (`/`, `/calendar`, `/tags`, `/how-it-works`, `/stack`, `/get-started`), no `#` routes. `Link` intercepts clicks and calls `navigate` (History API); `useRoute` listens to `popstate` and parses the path; `pages/Page.tsx` maps a route to a page; `useRouteEffects` sets the title, scrolls to top and focuses `<main>`. Direct hits need an SPA fallback to `index.html` (Vite dev/preview: built in; Caddy: catch-all `handle`; Vercel: `web/vercel.json`). Search: `MemorySearch` → `useMemorySearch` → `searchService` (mock, 450 ms latency) → `filterMemories` over `MEMORIES`. Tag list and calendar detail panel read the same mock data through the same helper.
-- **Documented, not built:** upload/Telegram → FastAPI → extraction (Bedrock) → validation (Jev) → SQLite + disk → FTS5 search. See `ARCHITECTURE.md` §3.
+- **Implemented (web/):** routing: real URL paths (`/`, `/calendar`, `/tags`, `/how-it-works`, `/stack`, `/get-started`), no `#` routes. `Link` intercepts clicks and calls `navigate` (History API); `useRoute` listens to `popstate` and parses the path; `pages/Page.tsx` maps a route to a page; `useRouteEffects` sets the title, scrolls to top and focuses `<main>`. Direct hits need an SPA fallback to `index.html` (Vite dev/preview: built in; Caddy: catch-all `handle`; Vercel: `web/vercel.json`). Logged-out preview search (deliberately still mock, 2026-09-22 — see DECISIONS #41): `MemorySearch` → `useMemorySearch` → `searchService` (mock, 450 ms latency) → `filterMemories` over `MEMORIES`. Tag list and calendar detail panel read the same mock data through the same helper — this mock model is untouched by the real bucket rework below. **Real search/metadata (2026-09-22, DECISIONS #41-42):** `/ops`'s Documents tab → `opsApi.search`/`editDocument` → `GET/PATCH /api/documents`, `/api/search` → SQLite FTS5 (`document_search`, `app/db.py`, indexed on filename/doc_type/description/extracted_text/bucket/vendor_name) — a separate, authenticated path from the mock preview above, not a replacement of it. `GET /api/tags` no longer exists (DECISIONS #42) — bucket is a fixed frontend constant, not a fetched list.
+- **Documented, not built:** upload/Telegram → FastAPI → extraction (Bedrock) → validation (Jev) → SQLite + disk. FTS5 search itself is now built (previous bullet); Telegram ingestion and "Jev" validation are not. See `ARCHITECTURE.md` §3.
 
 ## Where the main logic lives (web/src)
 
@@ -284,7 +398,7 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Shared matching rules (tag / query / event relations) | `features/memories/memoryMatching.ts` |
 | Mock memories + tags | `features/memories/mockData.ts` |
 | Event → documents/decisions rule | `features/calendar/eventRelations.ts` |
-| Search boundary (swap mock for real API here) | `features/search/searchService.ts` |
+| Logged-out preview search — deliberately still mock, real search lives in `/ops` instead (2026-09-22, DECISIONS #41 — this file has no session to call a real endpoint with) | `features/search/searchService.ts` |
 | Routes, path parsing, page titles, header tabs | `router/routes.ts` (`ROUTES`, `TAB_ROUTES`, `parsePath`) |
 | Client-side navigation | `router/Link.tsx`, `router/navigate.ts`, `router/useRoute.ts`, `router/useRouteEffects.ts` |
 | Route → page mapping; shared frame shell | `pages/Page.tsx`, `pages/FramePage.tsx` |
@@ -293,7 +407,7 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Session state, login/logout, role helpers | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
 | Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
 | Client-side photo downscale before upload (2026-09-22) | `lib/imageNormalize.ts` |
-| The real logged-in app: upload, review queue, gap analysis, obligations, trace — 4 tabs, not one long scroll (2026-09-22, DECISIONS #36) | `features/ops/OpsConsole.tsx`, `features/ops/opsApi.ts` |
+| The real logged-in app: upload, review queue, gap analysis, obligations, trace, archive, real search, an in-page document preview, date grouping — 5 tabs, not one long scroll (2026-09-22, DECISIONS #36, #37, #41-44) | `features/ops/OpsConsole.tsx`, `features/ops/opsApi.ts` |
 | Login form | `pages/LoginPage.tsx` |
 
 ## Commands (run in `web/`)
@@ -324,7 +438,7 @@ see the callout below on why that matters for `/ops` specifically.
 - **Git-based auto-deploy** (`vercel git connect` to `github.com/fresfrida/jagaos`) — in progress 2026-09-22, blocked on the `fresfrida` Vercel account needing a GitHub login connection added first (account-level, one-time, via the Vercel dashboard — not something the CLI or an agent can do). Once connected, every push to `main` deploys automatically; Root Directory needs setting to `web` (the repo is no longer web-only — it now holds the Python backend at root too).
 - **`/ops` now works from the phone via the Vercel URL** (fixed 2026-09-22, DECISIONS #32) — `VITE_API_BASE_URL` was repointed from `http://127.0.0.1:8000` to `https://13-251-52-222.nip.io` (the live Lightsail backend) and Vercel redeployed. CORS already allowed `jagaos.vercel.app`, so no backend code change was needed, just the env var + redeploy.
 - **The Lightsail box's database started empty** — deploying backend *code* there doesn't carry over the local `jaga.db`. `owner@try-demo.test` / "Try Demo Pte Ltd" was re-seeded directly against the live URL: `scripts/seed_dev_db.py`'s target is now configurable (`JAGA_API_BASE_URL` env var, was hardcoded to `127.0.0.1:8000`), run as `JAGA_API_BASE_URL=https://13-251-52-222.nip.io python scripts/seed_dev_db.py` from a machine with the demo PDFs (`evals/demo_corpus/files/`) — no need to copy anything onto the box itself. The local dev DB (`./data/jaga.db`) and the Lightsail DB are now two separate, unsynced databases; seeding one does not seed the other.
-- Repo: `github.com/fresfrida/jagaos` (private), pushed 2026-09-22. Commit and push still need an explicit request each time (standing rule, not automated). `web/.vercel/` exists locally for CLI deploys: keep it out of git (gitignored). Local author is the neutral `JagaOS`.
+- Repo: `github.com/fresfrida/jagaos` (private), pushed 2026-09-22. **`Collaboration: solo` (project CLAUDE.md, added 2026-09-22)**: commit and push freely after each completed task, no explicit ask needed — run `./scripts/prepush-check.sh` first. Redeploying (Lightsail) is separate and still needs an explicit ask. `web/.vercel/` exists locally for CLI deploys: keep it out of git (gitignored). Local author is the neutral `JagaOS`.
 - `bootstrap.sh` puts the static site in `/var/www/jaga/web`; copy `web/dist/*` there.
 - `deploy/Caddyfile` was edited 2026-09-21 so root static files are served (catch-all `handle`). **Not yet validated** with `caddy validate`; do that on the box.
 - UAT and deployment rules (Vercel policy, Lightsail checklist, pre-push check): `docs/UAT-DEPLOYMENT.md`. Run `./scripts/prepush-check.sh` before any push (see `docs/KANBAN.md` Blocked — the script currently has two false-positive checks worth fixing).

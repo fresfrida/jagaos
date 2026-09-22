@@ -267,3 +267,82 @@ def test_only_one_owner_per_company():
         headers=_auth_headers(owner["token"]),
     )
     assert admin_resp.status_code == 200, admin_resp.text
+
+
+def test_search_and_edit_are_tenant_isolated_and_edit_updates_bucket_vendor_filename():
+    # Search/bucket/vendor_name (2026-09-22, DECISIONS #42 - supersedes the
+    # tag table this test used to exercise) - inserted directly rather than
+    # via a real upload for the same reason test_tenant_isolation_... above
+    # does: no live gateway call needed to test tenant scoping.
+    from app.db import get_conn, reindex_document_search
+
+    a = _signup("searcha@example.com", "Search Co A")
+    b = _signup("searchb@example.com", "Search Co B")
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status, doc_type, description, bucket) VALUES "
+            "(?, 'searchsha-a', 'a-invoice.pdf', 'application/pdf', 1, '/tmp/a', "
+            "'web', 'filed', 'invoice', 'Invoice from Zylotech Pte Ltd', 'Expenses')",
+            (a["company"]["id"],),
+        )
+        a_doc_id = cur.lastrowid
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status, doc_type, description, bucket) VALUES "
+            "(?, 'searchsha-b', 'b-invoice.pdf', 'application/pdf', 1, '/tmp/b', "
+            "'web', 'filed', 'invoice', 'Invoice from Zylotech Pte Ltd', 'Expenses')",
+            (b["company"]["id"],),
+        )
+        b_doc_id = cur.lastrowid
+    reindex_document_search(a_doc_id)
+    reindex_document_search(b_doc_id)
+
+    # Same search term matches both companies' own documents, but never
+    # leaks the other company's document across the session boundary.
+    a_results = client.get("/api/search?q=Zylotech", headers=_auth_headers(a["token"])).json()
+    assert [d["id"] for d in a_results] == [a_doc_id], a_results
+    b_results = client.get("/api/search?q=Zylotech", headers=_auth_headers(b["token"])).json()
+    assert [d["id"] for d in b_results] == [b_doc_id], b_results
+
+    # Empty query must not return the whole company's documents.
+    empty = client.get("/api/search?q=", headers=_auth_headers(a["token"])).json()
+    assert empty == []
+
+    # Editing description/bucket/vendor_name/filename (user+ role) actually
+    # persists and re-indexes - search by a brand new vendor_name word must
+    # then find it.
+    edit = client.patch(
+        f"/api/documents/{a_doc_id}",
+        json={
+            "description": "Renamed invoice",
+            "bucket": "Operations",
+            "vendor_name": "Urgent Consulting Partners",
+            "filename": "renamed-invoice.pdf",
+        },
+        headers=_auth_headers(a["token"]),
+    )
+    assert edit.status_code == 200, edit.text
+
+    by_new_vendor = client.get("/api/search?q=Consulting", headers=_auth_headers(a["token"])).json()
+    assert [d["id"] for d in by_new_vendor] == [a_doc_id]
+    assert by_new_vendor[0]["description"] == "Renamed invoice"
+    assert by_new_vendor[0]["bucket"] == "Operations"
+    assert by_new_vendor[0]["vendor_name"] == "Urgent Consulting Partners"
+    assert by_new_vendor[0]["filename"] == "renamed-invoice.pdf"
+
+    # Company B must never be able to edit (or even discover, via a leaked
+    # 200/403 vs 404) company A's document - same no-leak pattern as the
+    # archive endpoint's tenant-isolation test above.
+    cross_tenant_edit = client.patch(
+        f"/api/documents/{a_doc_id}",
+        json={"description": "hijacked"},
+        headers=_auth_headers(b["token"]),
+    )
+    assert cross_tenant_edit.status_code == 404, cross_tenant_edit.text
+    with get_conn() as conn:
+        still_a_description = conn.execute(
+            "SELECT description FROM document WHERE id = ?", (a_doc_id,)
+        ).fetchone()["description"]
+    assert still_a_description == "Renamed invoice"

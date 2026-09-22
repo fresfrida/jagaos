@@ -26,7 +26,6 @@ from app.db import (  # noqa: E402
     build_fts5_query,
     get_conn,
     init_db,
-    link_tags,
     reindex_document_search,
 )
 from app.graph.ingest import ingest  # noqa: E402
@@ -355,6 +354,8 @@ def list_review_items(
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT r.*, d.filename AS document_filename, d.media_type AS document_media_type, "
+            "d.description AS document_description, d.bucket AS document_bucket, "
+            "d.doc_type AS document_doc_type, d.vendor_name AS document_vendor_name, "
             # thread_id == run_id, generated in app/graph/ingest.py as
             # sha256[:12] — not its own column, derived the same way here
             # rather than adding one for a value that never changes.
@@ -363,6 +364,9 @@ def list_review_items(
             "WHERE r.company_id = ? AND r.status = 'open' ORDER BY r.id DESC",
             (membership.company_id,),
         ).fetchall()
+        # 2026-09-22: so the review card can show (and edit) the same
+        # description/bucket/vendor_name a human can edit from the
+        # Documents tab, without a second round trip per card.
         return [dict(r) for r in rows]
 
 
@@ -391,38 +395,18 @@ def list_obligations(
         return [dict(r) for r in rows]
 
 
-def _attach_tags(conn, docs: list[dict]) -> list[dict]:
-    """Attaches a `tags: list[str]` to each dict in `docs` (each must have
-    an `id`) with one extra query, not one per document. Shared by
-    list_documents and search_documents below."""
-    ids = [d["id"] for d in docs]
-    if not ids:
-        return docs
-    placeholders = ",".join("?" * len(ids))
-    tag_rows = conn.execute(
-        f"SELECT dt.document_id, t.name FROM document_tag dt "
-        f"JOIN tag t ON t.id = dt.tag_id WHERE dt.document_id IN ({placeholders})",
-        ids,
-    ).fetchall()
-    tags_by_doc: dict[int, list[str]] = {}
-    for row in tag_rows:
-        tags_by_doc.setdefault(row["document_id"], []).append(row["name"])
-    for d in docs:
-        d["tags"] = tags_by_doc.get(d["id"], [])
-    return docs
-
-
 @app.get("/api/documents")
 def list_documents(
     membership: Annotated[CurrentMembership, Depends(get_current_membership)],
 ) -> list[dict]:
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
-            "SELECT id, filename, lane, doc_type, status, received_at, description "
+            "SELECT id, filename, media_type, lane, doc_type, status, received_at, "
+            "description, bucket, vendor_name, occurred_on "
             "FROM document WHERE company_id = ? ORDER BY received_at DESC",
             (membership.company_id,),
         ).fetchall()
-        return _attach_tags(conn, [dict(r) for r in rows])
+        return [dict(r) for r in rows]
 
 
 @app.get("/api/search")
@@ -432,11 +416,14 @@ def search_documents(
 ) -> list[dict]:
     """Real full-text search (ARCHITECTURE.md's original "SQLite FTS5"
     plan, first implementation 2026-09-22) over document_search
-    (app/db.py) — filename, doc_type, description, extracted_text, and
-    tag names. Tenant-scoped via document_search's own UNINDEXED
-    company_id column, filtered in the same MATCH query — a company's
-    session can never see another company's match. Empty/missing q
-    returns an empty list, never the whole company's documents."""
+    (app/db.py) — filename, doc_type, description, extracted_text, bucket,
+    and vendor_name (so a search for a vendor's name or a bucket's name
+    works as free text too). Structured bucket/doc_type filtering itself
+    is client-side over the already-fetched list (see OpsConsole.tsx) —
+    this endpoint's job is free text. Tenant-scoped via document_search's
+    own UNINDEXED company_id column, filtered in the same MATCH query — a
+    company's session can never see another company's match. Empty/missing
+    q returns an empty list, never the whole company's documents."""
     query = build_fts5_query(q)
     if not query:
         return []
@@ -450,31 +437,16 @@ def search_documents(
         if not ordered_ids:
             return []
         placeholders = ",".join("?" * len(ordered_ids))
+        # Same shape as list_documents's rows so the frontend can render
+        # both with one type/component, no special-casing search results.
         docs = conn.execute(
-            f"SELECT id, filename, doc_type, description, status FROM document "
-            f"WHERE id IN ({placeholders})",
+            f"SELECT id, filename, media_type, lane, doc_type, status, received_at, "
+            f"description, bucket, vendor_name, occurred_on FROM document WHERE id IN ({placeholders})",
             ordered_ids,
         ).fetchall()
         docs_by_id = {d["id"]: dict(d) for d in docs}
-        _attach_tags(conn, list(docs_by_id.values()))
     # FTS5's rank order (relevance), not the IN-clause's arbitrary order.
     return [docs_by_id[doc_id] for doc_id in ordered_ids if doc_id in docs_by_id]
-
-
-@app.get("/api/tags")
-def list_tags(
-    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
-) -> list[dict]:
-    """For the Tags sidebar — each tag with how many (non-archived or not,
-    deliberately not filtered here) documents currently carry it."""
-    with get_conn(DB_PATH) as conn:
-        rows = conn.execute(
-            "SELECT t.id, t.name, COUNT(dt.document_id) AS document_count "
-            "FROM tag t LEFT JOIN document_tag dt ON dt.tag_id = t.id "
-            "WHERE t.company_id = ? GROUP BY t.id ORDER BY t.name",
-            (membership.company_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
 
 
 @app.patch("/api/documents/{document_id}")
@@ -482,10 +454,13 @@ def edit_document(
     document_id: int, body: DocumentEditRequest,
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
 ) -> dict:
-    """Edit description and/or the tag set. user+ (same bar as uploading —
-    tagging/describing is routine organizational work, not an admin-level
-    action like archiving or resolving a review). `tags`, when present,
-    REPLACES the document's whole tag set."""
+    """Edit description/bucket/vendor_name/doc_type/filename — only the
+    fields sent are changed. user+ (same bar as uploading — this is routine
+    organizational work, not an admin-level action like archiving or
+    resolving a review). `filename` (added 2026-09-22) is display-only:
+    `stored_path`/`sha256`, the actual file on disk, are never touched —
+    a phone upload named `17900624351088935047221818361392.jpg` can be
+    renamed to something a human recognizes without re-uploading."""
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
             "SELECT company_id FROM document WHERE id = ?", (document_id,)
@@ -493,17 +468,29 @@ def edit_document(
     if doc is None or doc["company_id"] != membership.company_id:
         raise HTTPException(404, "document not found")
 
-    with get_conn(DB_PATH) as conn:
-        if body.description is not None:
-            conn.execute(
-                "UPDATE document SET description = ? WHERE id = ?",
-                (body.description, document_id),
-            )
-        if body.tags is not None:
-            conn.execute("DELETE FROM document_tag WHERE document_id = ?", (document_id,))
-            link_tags(membership.company_id, document_id, body.tags, conn)
+    updates: dict[str, object] = {}
+    if body.description is not None:
+        updates["description"] = body.description
+    if body.bucket is not None:
+        updates["bucket"] = body.bucket
+    if body.vendor_name is not None:
+        updates["vendor_name"] = body.vendor_name
+    if body.doc_type is not None:
+        updates["doc_type"] = body.doc_type
+    if body.filename is not None:
+        updates["filename"] = body.filename
 
-    reindex_document_search(document_id, DB_PATH)
+    if updates:
+        # Column names come from a fixed set of 5 hardcoded keys above,
+        # never from request data — safe to interpolate into the SET
+        # clause; only the bound values (?) come from the request body.
+        set_clause = ", ".join(f"{col} = ?" for col in updates)
+        with get_conn(DB_PATH) as conn:
+            conn.execute(
+                f"UPDATE document SET {set_clause} WHERE id = ?",
+                (*updates.values(), document_id),
+            )
+        reindex_document_search(document_id, DB_PATH)
     return {"status": "updated"}
 
 

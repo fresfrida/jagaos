@@ -13,11 +13,23 @@
 import { API_BASE_URL, apiRequest } from '../../lib/apiClient'
 import { authHeaders } from '../auth/authApi'
 
+// 2026-09-22 (DECISIONS #42): fixed taxonomy, supersedes the tag table —
+// "only upgrade to a real tags table if users later need to invent their
+// own." Shared here so the bucket-filter chips and the bucket dropdown
+// editor in OpsConsole.tsx both read from one list, not two copies.
+export const BUCKETS = [
+  'Receivables', 'Expenses', 'Statutory', 'Operations', 'Memory Lane', 'Miscellaneous',
+] as const
+export type Bucket = (typeof BUCKETS)[number]
+
 export interface ClassifyResult {
   lane: string
   doc_type: string
   confidence: number
   injection_suspected: boolean
+  description: string
+  bucket: Bucket
+  vendor_name: string | null
 }
 
 export interface ProvenanceValue {
@@ -53,10 +65,18 @@ export interface UploadResult {
 export interface DocumentRow {
   id: number
   filename: string
+  media_type: string
   lane: string | null
   doc_type: string | null
   status: string
   received_at: string
+  description: string | null
+  bucket: string | null
+  vendor_name: string | null
+  // Document's own date (invoice/statutory issued_on, or EXIF for photos)
+  // vs received_at's upload timestamp — null whenever the source document
+  // has no discoverable date of its own (2026-09-22, DECISIONS #43).
+  occurred_on: string | null
 }
 
 export interface Expectation {
@@ -82,6 +102,10 @@ export interface ReviewItem {
   document_id: number
   document_filename: string
   document_media_type: string
+  document_description: string | null
+  document_bucket: string | null
+  document_doc_type: string | null
+  document_vendor_name: string | null
   thread_id: string
   reason: string
   question: string
@@ -146,6 +170,23 @@ export const opsApi = {
 
   archiveDocument: (documentId: number) =>
     request<{ status: string }>(`/api/documents/${documentId}/archive`, { method: 'POST' }),
+
+  // Real search (2026-09-22) — NOT the same thing as features/search/'s
+  // mockSearchService: that one serves the logged-out marketing preview
+  // with sample data and has no session to send. This is the actual,
+  // tenant-scoped search over real documents, so it lives here with
+  // everything else that needs the session.
+  search: (q: string) => request<DocumentRow[]>(`/api/search?${new URLSearchParams({ q })}`),
+
+  editDocument: (
+    documentId: number,
+    body: { description?: string; bucket?: Bucket; vendor_name?: string; doc_type?: string; filename?: string },
+  ) =>
+    request<{ status: string }>(`/api/documents/${documentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
 
   // Not routed through request()/apiRequest() — those assume a JSON body
   // (res.json()). <img>/<embed> can't send the Authorization header a

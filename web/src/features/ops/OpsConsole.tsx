@@ -1,5 +1,5 @@
-import { Archive, Check, Loader2, ShieldAlert, Upload, X } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { Archive, Check, FileText, Loader2, ShieldAlert, Upload, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -10,7 +10,9 @@ import { useAuth } from '../auth/AuthContext'
 import { navigate } from '../../router/navigate'
 import { routeHref } from '../../router/routes'
 import {
+  BUCKETS,
   opsApi,
+  type Bucket,
   type DocumentRow,
   type Expectation,
   type Obligation,
@@ -35,24 +37,27 @@ function isProvenance(field: ProposedField | undefined): field is { value: unkno
   return typeof field === 'object' && field !== null && 'confidence' in field
 }
 
-/** The source photo/PDF next to the fields a reviewer is confirming —
- * without it, confirming extracted fields isn't a safety check, it's a
- * rubber stamp (2026-09-22). <img>/<embed> can't carry the session's
- * bearer token, so this fetches the bytes itself and points at a local
- * blob: URL — a "reasonably-sized preview," not a document viewer. */
-function DocumentPreview({
-  documentId,
-  mediaType,
-  filename,
-}: {
-  documentId: number
-  mediaType: string
-  filename: string
-}) {
+/** "confidence: 30%", not "(0.30)" — a raw decimal next to a field reads
+ * like a mysterious score; the labeled percentage reads as what it is
+ * (2026-09-22). The one place this renders, so every field agrees. */
+function formatConfidence(confidence: number): string {
+  return `confidence: ${(confidence * 100).toFixed(0)}%`
+}
+
+/** Fetches a document's bytes once and exposes them as a local blob: URL,
+ * with cleanup on unmount/change. <img>/<embed>/thumbnails can't carry
+ * the session's bearer token, so every source view (the review card's
+ * inline preview, the Documents-list thumbnail, the viewer modal) fetches
+ * the bytes itself rather than pointing straight at the API URL — this is
+ * that fetch-and-object-URL dance, pulled out once a third caller needed
+ * it (2026-09-22). `enabled=false` skips the fetch entirely (the
+ * thumbnail never fetches a PDF just to show a generic icon). */
+function useDocumentBlobUrl(documentId: number, enabled = true): { blobUrl: string | null; failed: boolean } {
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
     let url: string | null = null
     setBlobUrl(null)
@@ -71,7 +76,25 @@ function DocumentPreview({
       cancelled = true
       if (url) URL.revokeObjectURL(url)
     }
-  }, [documentId])
+  }, [documentId, enabled])
+
+  return { blobUrl, failed }
+}
+
+/** The source photo/PDF next to the fields a reviewer is confirming —
+ * without it, confirming extracted fields isn't a safety check, it's a
+ * rubber stamp (2026-09-22). A "reasonably-sized preview," not a document
+ * viewer — the Documents tab's "View" action opens the full DocumentViewerModal instead. */
+function DocumentPreview({
+  documentId,
+  mediaType,
+  filename,
+}: {
+  documentId: number
+  mediaType: string
+  filename: string
+}) {
+  const { blobUrl, failed } = useDocumentBlobUrl(documentId)
 
   if (failed) return <p className="mt-3 text-[12px] text-muted">Couldn't load the source file.</p>
   if (!blobUrl) return <p className="mt-3 text-[12px] text-muted">Loading source…</p>
@@ -96,6 +119,93 @@ function DocumentPreview({
   }
 
   return null
+}
+
+/** Small preview next to each row in the Documents list (2026-09-22, doc
+ * 2's preview UX pass) — a photo is often more recognizable at a glance
+ * than its filename. Images fetch the real file (small, via the shared
+ * blob-URL hook); PDFs get a generic icon rather than a rendered first
+ * page, which is more machinery than this needs. */
+function DocumentThumbnail({ documentId, mediaType }: { documentId: number; mediaType: string }) {
+  const isImage = mediaType.startsWith('image/')
+  const { blobUrl } = useDocumentBlobUrl(documentId, isImage)
+
+  if (isImage) {
+    return (
+      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-control border border-line bg-canvas">
+        {blobUrl && <img src={blobUrl} alt="" className="h-full w-full object-cover" />}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-control border border-line bg-canvas text-muted" aria-hidden="true">
+      <FileText size={20} />
+    </div>
+  )
+}
+
+/** In-page replacement for the old "View" action's window.open() (2026-
+ * 09-22, doc 2's preview UX pass): that landed on a bare blob: URL with
+ * no chrome and no way back — a dead end, especially on mobile, confirmed
+ * live. This renders the same source bytes inline instead: closable with
+ * Escape, the X, or a click on the backdrop, never a new tab. */
+function DocumentViewerModal({
+  documentId,
+  filename,
+  mediaType,
+  onClose,
+}: {
+  documentId: number
+  filename: string
+  mediaType: string
+  onClose: () => void
+}) {
+  const { blobUrl, failed } = useDocumentBlobUrl(documentId)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Preview: ${filename}`}
+    >
+      <div
+        className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-card bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <p className="truncate text-sm font-medium text-ink">{filename}</p>
+          <button
+            onClick={onClose}
+            className="shrink-0 rounded-control p-1 text-muted hover:bg-canvas hover:text-ink"
+            aria-label="Close preview"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto p-4">
+          {failed && <p className="text-[13px] text-red-700">Couldn't load the source file.</p>}
+          {!failed && !blobUrl && <p className="text-[13px] text-muted">Loading source…</p>}
+          {blobUrl && mediaType === 'application/pdf' && (
+            <embed src={blobUrl} type="application/pdf" className="h-[70vh] w-full rounded-control border border-line" />
+          )}
+          {blobUrl && mediaType.startsWith('image/') && (
+            <img src={blobUrl} alt={`Source: ${filename}`} className="mx-auto max-h-[70vh] w-auto object-contain" />
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function ReviewQueueCard({
@@ -125,6 +235,17 @@ function ReviewQueueCard({
     }
     return initial
   })
+  // 2026-09-22: the LLM's suggested description/bucket/doc_type/vendor_name
+  // (app/graph/classify.py), editable here at the same time as the
+  // extracted fields — one Accept saves all of it, rather than a second
+  // separate save step. bucket/doc_type/vendor_name replace the old tags
+  // input (DECISIONS #42 — supersedes the tag table, not the "every
+  // document needs review" rule above, which is unchanged).
+  const [description, setDescription] = useState(item.document_description ?? '')
+  const [bucket, setBucket] = useState(item.document_bucket ?? '')
+  const [docType, setDocType] = useState(item.document_doc_type ?? '')
+  const [vendorName, setVendorName] = useState(item.document_vendor_name ?? '')
+  const [filename, setFilename] = useState(item.document_filename)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expired, setExpired] = useState(false)
@@ -146,6 +267,15 @@ function ReviewQueueCard({
             const isNumeric = isProvenance(field) && typeof field.value === 'number'
             correctedFields[name] = isNumeric ? Number(edits[name]) : edits[name]
           }
+        }
+        const documentEdits: { description?: string; bucket?: Bucket; doc_type?: string; vendor_name?: string; filename?: string } = {}
+        if (description !== (item.document_description ?? '')) documentEdits.description = description
+        if (bucket && bucket !== (item.document_bucket ?? '')) documentEdits.bucket = bucket as Bucket
+        if (docType !== (item.document_doc_type ?? '')) documentEdits.doc_type = docType
+        if (vendorName !== (item.document_vendor_name ?? '')) documentEdits.vendor_name = vendorName
+        if (filename !== item.document_filename) documentEdits.filename = filename
+        if (Object.keys(documentEdits).length > 0) {
+          await opsApi.editDocument(item.document_id, documentEdits)
         }
       }
       await opsApi.resolveReview(item.id, item.thread_id, { action, corrected_fields: correctedFields })
@@ -190,6 +320,62 @@ function ReviewQueueCard({
 
       <DocumentPreview documentId={item.document_id} mediaType={item.document_media_type} filename={item.document_filename} />
 
+      {!expired && (
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="text-[12px] text-muted sm:col-span-2">
+            Description
+            <input
+              value={description}
+              disabled={!canResolve}
+              onChange={(e) => setDescription(e.target.value)}
+              className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+            />
+          </label>
+          <label className="text-[12px] text-muted">
+            Bucket
+            <select
+              value={bucket}
+              disabled={!canResolve}
+              onChange={(e) => setBucket(e.target.value)}
+              className="mt-1 block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+            >
+              <option value="">—</option>
+              {BUCKETS.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[12px] text-muted">
+            Doc type
+            <input
+              value={docType}
+              disabled={!canResolve}
+              onChange={(e) => setDocType(e.target.value)}
+              className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+            />
+          </label>
+          <label className="text-[12px] text-muted">
+            Vendor name
+            <input
+              value={vendorName}
+              disabled={!canResolve}
+              placeholder="—"
+              onChange={(e) => setVendorName(e.target.value)}
+              className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+            />
+          </label>
+          <label className="text-[12px] text-muted">
+            Filename
+            <input
+              value={filename}
+              disabled={!canResolve}
+              onChange={(e) => setFilename(e.target.value)}
+              className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+            />
+          </label>
+        </div>
+      )}
+
       {!expired && fieldNames.length > 0 && (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {fieldNames.map((name) => {
@@ -200,7 +386,7 @@ function ReviewQueueCard({
                 {name}
                 {confidence !== null && (
                   <span className={confidence < 0.6 ? 'ml-1 text-red-600' : 'ml-1 text-muted'}>
-                    ({confidence.toFixed(2)})
+                    ({formatConfidence(confidence)})
                   </span>
                 )}
                 <input
@@ -249,6 +435,146 @@ function ReviewQueueCard({
   )
 }
 
+/** One row in the Documents tab (2026-09-22: cards, not a table — see
+ * DECISIONS #38). Owns its own edit-mode state, matching ReviewQueueCard's
+ * fields (description/bucket/doc_type/vendor_name/filename — DECISIONS
+ * #42 superseded the old tags input) and the same disabled-vs-editing
+ * pattern. */
+function DocumentCard({
+  doc,
+  canEdit,
+  canArchive,
+  onView,
+  onTrace,
+  onArchive,
+  onSaved,
+}: {
+  doc: DocumentRow
+  canEdit: boolean
+  canArchive: boolean
+  onView: () => void
+  onTrace: () => void
+  onArchive: () => void
+  onSaved: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [description, setDescription] = useState(doc.description ?? '')
+  const [bucket, setBucket] = useState(doc.bucket ?? '')
+  const [docType, setDocType] = useState(doc.doc_type ?? '')
+  const [vendorName, setVendorName] = useState(doc.vendor_name ?? '')
+  const [filename, setFilename] = useState(doc.filename)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await opsApi.editDocument(doc.id, {
+        description,
+        bucket: (bucket || undefined) as Bucket | undefined,
+        doc_type: docType,
+        vendor_name: vendorName,
+        filename,
+      })
+      setEditing(false)
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card className="p-4" interactive={false}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 gap-3">
+          <DocumentThumbnail documentId={doc.id} mediaType={doc.media_type} />
+          <div className="min-w-0 flex-1">
+            <p className="break-words text-sm font-medium text-ink">{doc.filename}</p>
+            <p className="mt-0.5 break-words text-[12px] text-muted">{doc.lane ?? '—'} / {doc.doc_type ?? '—'}</p>
+            {doc.vendor_name && <p className="mt-0.5 break-words text-[12px] text-muted">{doc.vendor_name}</p>}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <StatusPill status={doc.status} />
+          {doc.bucket && <Badge tone="neutral">{doc.bucket}</Badge>}
+        </div>
+      </div>
+
+      {editing ? (
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Description"
+            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink sm:col-span-2"
+          />
+          <select
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
+            className="block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+          >
+            <option value="">No bucket</option>
+            {BUCKETS.map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+          <input
+            value={docType}
+            onChange={(e) => setDocType(e.target.value)}
+            placeholder="Doc type"
+            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+          />
+          <input
+            value={vendorName}
+            onChange={(e) => setVendorName(e.target.value)}
+            placeholder="Vendor name"
+            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+          />
+          <input
+            value={filename}
+            onChange={(e) => setFilename(e.target.value)}
+            placeholder="Filename"
+            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+          />
+          {error && <p className="text-[12px] text-red-700 sm:col-span-2">{error}</p>}
+          <div className="flex gap-2 sm:col-span-2">
+            <Button size="sm" onClick={() => void save()} disabled={busy}>Save</Button>
+            <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
+          </div>
+        </div>
+      ) : (
+        doc.description && (
+          <div className="mt-2">
+            <p className="text-[13px] text-muted">{doc.description}</p>
+          </div>
+        )
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+        <button onClick={onView} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink">
+          View
+        </button>
+        <button onClick={onTrace} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink">
+          Trace
+        </button>
+        {canEdit && !editing && (
+          <button onClick={() => setEditing(true)} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink">
+            Edit
+          </button>
+        )}
+        {canArchive && doc.status !== 'archived' && (
+          <button onClick={onArchive} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-red-700">
+            Archive
+          </button>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 const STATUS_TONE: Record<string, string> = {
   filed: 'text-sage-ink bg-sage/15',
   processed: 'text-sage-ink bg-sage/15',
@@ -268,14 +594,115 @@ function StatusPill({ status }: { status: string }) {
   )
 }
 
+type DateBasis = 'upload' | 'document'
+
+// Amendment 2 (2026-09-22, DECISIONS #43): these exact two labels, not
+// "Received"/"Occurred" or any other wording — the toggle control itself
+// (tabs here) was left "your call".
+const DATE_BASIS_OPTIONS: { id: DateBasis; label: string }[] = [
+  { id: 'upload', label: 'Upload date' },
+  { id: 'document', label: 'Document date' },
+]
+
+function DateGroupRow({ doc }: { doc: DocumentRow }) {
+  return (
+    <div className="flex items-center gap-2 rounded-control border border-line bg-white px-3 py-2 text-[13px]">
+      <span className="min-w-0 flex-1 truncate text-ink">{doc.filename}</span>
+      {doc.bucket && <Badge tone="neutral">{doc.bucket}</Badge>}
+      <StatusPill status={doc.status} />
+    </div>
+  )
+}
+
+/** Groups documents by date (2026-09-22, doc 3's calendar wiring). Not
+ * the logged-out marketing preview's CalendarPreview/WeekGrid at
+ * /calendar — that models generic meetings with mock data and no
+ * session; this is inside /ops, over real session-scoped documents, and
+ * reuses whatever list it's handed rather than a new endpoint. Two date
+ * bases: received_at (upload timestamp, always set) and occurred_on (the
+ * document's own date — invoice/statutory issued_on, or EXIF for photos;
+ * not every document has one — Amendment 2 requires saying so plainly
+ * rather than silently dropping those documents from the view). A flat
+ * grouped/sorted list, deliberately no week/day grid or drag-and-drop —
+ * "your call" on how minimal to keep this, and this is all it needs. */
+function DatesView({ documents }: { documents: DocumentRow[] }) {
+  const [basis, setBasis] = useState<DateBasis>('upload')
+
+  const { sortedDays, noDate } = useMemo(() => {
+    const byDay = new Map<string, DocumentRow[]>()
+    const withoutDate: DocumentRow[] = []
+    for (const doc of documents) {
+      const raw = basis === 'upload' ? doc.received_at : doc.occurred_on
+      if (!raw) {
+        withoutDate.push(doc)
+        continue
+      }
+      const day = raw.slice(0, 10) // "YYYY-MM-DD..." -> "YYYY-MM-DD", both sources agree on this prefix
+      const existing = byDay.get(day)
+      if (existing) existing.push(doc)
+      else byDay.set(day, [doc])
+    }
+    return {
+      sortedDays: [...byDay.entries()].sort(([a], [b]) => (a < b ? 1 : -1)),
+      noDate: withoutDate,
+    }
+  }, [documents, basis])
+
+  return (
+    <div>
+      <div className="mb-4 flex w-fit gap-0.5 rounded-control border border-line p-0.5">
+        {DATE_BASIS_OPTIONS.map((opt) => {
+          const active = basis === opt.id
+          return (
+            <button
+              key={opt.id}
+              onClick={() => setBasis(opt.id)}
+              className={`rounded-md px-3 py-1.5 text-[13px] transition-colors ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {documents.length === 0 ? (
+        <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">No documents uploaded yet.</p>
+      ) : (
+        <div className="space-y-6">
+          {sortedDays.map(([day, docs]) => (
+            <section key={day}>
+              <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">{day} ({docs.length})</h3>
+              <div className="space-y-1">
+                {docs.map((doc) => <DateGroupRow key={doc.id} doc={doc} />)}
+              </div>
+            </section>
+          ))}
+
+          {basis === 'document' && noDate.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">
+                No document date ({noDate.length})
+              </h3>
+              <div className="space-y-1">
+                {noDate.map((doc) => <DateGroupRow key={doc.id} doc={doc} />)}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Was five stacked <section>s on one long scroll — no navigation between
  * them (2026-09-22 user feedback). Real conditional rendering per tab, not
  * CSS-hidden panels: an inactive tab's rows cost nothing while inactive. */
-type OpsTab = 'review' | 'documents' | 'gaps' | 'obligations'
+type OpsTab = 'review' | 'documents' | 'dates' | 'gaps' | 'obligations'
 
 const OPS_TABS: { id: OpsTab; label: string }[] = [
   { id: 'review', label: 'Upload & Review' },
   { id: 'documents', label: 'Documents' },
+  { id: 'dates', label: 'Dates' },
   { id: 'gaps', label: 'Gap Analysis' },
   { id: 'obligations', label: 'Obligations' },
 ]
@@ -301,6 +728,20 @@ export function OpsConsole() {
   const [trace, setTrace] = useState<{ documentId: number; report: TraceReport } | null>(null)
   const [activeTab, setActiveTab] = useState<OpsTab>('review')
   const [showArchived, setShowArchived] = useState(false)
+  // Real search (2026-09-22) — searchResults===null means "not searching,
+  // show the normal list"; an array (even empty) means "showing search
+  // results instead". Kept separate from `documents` rather than
+  // replacing it, so clearing the search just restores the full list
+  // with no refetch.
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<DocumentRow[] | null>(null)
+  // 2026-09-22 (DECISIONS #42): fixed bucket taxonomy replaces the old
+  // tag-chip filter (activeTagFilter) — same "narrow the current view"
+  // role, now over a closed 6-value set instead of a fetched tag list.
+  const [activeBucketFilter, setActiveBucketFilter] = useState<Bucket | null>(null)
+  // In-page preview (2026-09-22, doc 2's preview UX pass) — replaces
+  // openDocumentSource's window.open() new tab. null means no modal open.
+  const [viewingDocument, setViewingDocument] = useState<DocumentRow | null>(null)
 
   useEffect(() => {
     opsApi
@@ -351,31 +792,23 @@ export function OpsConsole() {
     setTrace({ documentId, report })
   }
 
-  const openDocumentSource = async (documentId: number) => {
-    // window.open() called after an await is silently popup-blocked on
-    // most mobile browsers — only a *synchronous* result of the click is
-    // allowed through. Confirmed 2026-09-22: this is almost certainly why
-    // "View" looked entirely missing on a phone even though the mechanism
-    // itself was already correct. Open a blank tab synchronously first,
-    // then navigate it once the blob is ready — the standard workaround.
-    const win = window.open('', '_blank')
-    try {
-      const blob = await opsApi.fetchDocumentFile(documentId)
-      // Deliberately not revoked — the tab needs the blob: URL to stay
-      // valid for its own lifetime, and there's no reliable "tab closed"
-      // event to revoke on. Bounded by how many source documents one
-      // reviewer opens in a session; not worth a document-viewer product.
-      if (win) win.location.href = URL.createObjectURL(blob)
-    } catch (e) {
-      win?.close()
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
   const archiveDocument = async (documentId: number) => {
     try {
       await opsApi.archiveDocument(documentId)
       await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const runSearch = async (q: string) => {
+    const trimmed = q.trim()
+    if (!trimmed) {
+      setSearchResults(null)
+      return
+    }
+    try {
+      setSearchResults(await opsApi.search(trimmed))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -397,8 +830,19 @@ export function OpsConsole() {
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
   const canResolve = role !== null && roleAtLeast(role, 'admin')
+  // search/bucket filters apply on top of whichever base list is active;
+  // "show archived" always applies first, same ordering as before bucket
+  // replaced tags — so bucket chip counts match what's actually shown
+  // when a filter is clicked, whether or not a search is also active.
+  const baseDocuments = searchResults ?? documents
   const archivedCount = documents.filter((d) => d.status === 'archived').length
-  const visibleDocuments = showArchived ? documents : documents.filter((d) => d.status !== 'archived')
+  const archivedFiltered = showArchived ? baseDocuments : baseDocuments.filter((d) => d.status !== 'archived')
+  const bucketCounts = Object.fromEntries(
+    BUCKETS.map((b) => [b, archivedFiltered.filter((d) => d.bucket === b).length]),
+  ) as Record<Bucket, number>
+  const visibleDocuments = activeBucketFilter
+    ? archivedFiltered.filter((d) => d.bucket === activeBucketFilter)
+    : archivedFiltered
 
   return (
     <div className="space-y-6">
@@ -546,42 +990,81 @@ export function OpsConsole() {
                 </label>
               )}
             </div>
+
+            {/* Real search (2026-09-22, DECISIONS #40) — tenant-scoped
+               GET /api/search over filename/doc_type/description/
+               extracted_text/bucket/vendor_name. Not the same thing as
+               features/search/'s mock preview on the logged-out landing
+               page (no session there to call this with); this is the
+               separate, authenticated search over real documents. */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void runSearch(searchQuery)
+              }}
+              className="mb-2 flex gap-2"
+            >
+              <input
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  if (!e.target.value.trim()) setSearchResults(null)
+                }}
+                placeholder="Search documents…"
+                className="h-9 flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+              />
+              {searchResults !== null && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setSearchResults(null)
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </form>
+
+            {/* Fixed 6-bucket taxonomy (2026-09-22, DECISIONS #42) replaces
+               the old fetched tag-chip row — not user-typed, so this is
+               just BUCKETS, no API call. Counts reflect the currently
+               active search + archived state, so they match what clicking
+               a chip will actually show. */}
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {BUCKETS.map((b) => {
+                const active = activeBucketFilter === b
+                return (
+                  <button
+                    key={b}
+                    onClick={() => setActiveBucketFilter(active ? null : b)}
+                    className={`rounded-md px-2 py-0.5 font-mono text-[11px] transition-colors ${active ? 'bg-ink text-white' : 'bg-canvas text-muted hover:text-ink'}`}
+                  >
+                    {b} ({bucketCounts[b]})
+                  </button>
+                )
+              })}
+            </div>
+
             {visibleDocuments.length === 0 ? (
-              <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">No documents uploaded yet.</p>
+              <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">
+                {searchResults !== null ? 'No documents match that search.' : 'No documents uploaded yet.'}
+              </p>
             ) : (
               <div className="space-y-2">
                 {visibleDocuments.map((doc) => (
-                  <Card key={doc.id} className="p-4" interactive={false}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-medium text-ink">{doc.filename}</p>
-                        <p className="mt-0.5 break-words text-[12px] text-muted">{doc.lane ?? '—'} / {doc.doc_type ?? '—'}</p>
-                      </div>
-                      <StatusPill status={doc.status} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-                      <button
-                        onClick={() => void openDocumentSource(doc.id)}
-                        className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink"
-                      >
-                        View
-                      </button>
-                      <button
-                        onClick={() => void viewTrace(doc.id)}
-                        className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink"
-                      >
-                        Trace
-                      </button>
-                      {canResolve && doc.status !== 'archived' && (
-                        <button
-                          onClick={() => void archiveDocument(doc.id)}
-                          className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-red-700"
-                        >
-                          Archive
-                        </button>
-                      )}
-                    </div>
-                  </Card>
+                  <DocumentCard
+                    key={doc.id}
+                    doc={doc}
+                    canEdit={canUpload}
+                    canArchive={canResolve}
+                    onView={() => setViewingDocument(doc)}
+                    onTrace={() => void viewTrace(doc.id)}
+                    onArchive={() => void archiveDocument(doc.id)}
+                    onSaved={() => void refresh()}
+                  />
                 ))}
               </div>
             )}
@@ -620,6 +1103,12 @@ export function OpsConsole() {
               </Card>
             </section>
           )}
+        </div>
+      )}
+
+      {activeTab === 'dates' && (
+        <div role="tabpanel" id="ops-panel-dates" aria-labelledby="ops-tab-dates">
+          <DatesView documents={documents.filter((d) => d.status !== 'archived')} />
         </div>
       )}
 
@@ -678,6 +1167,15 @@ export function OpsConsole() {
             </Card>
           </section>
         </div>
+      )}
+
+      {viewingDocument && (
+        <DocumentViewerModal
+          documentId={viewingDocument.id}
+          filename={viewingDocument.filename}
+          mediaType={viewingDocument.media_type}
+          onClose={() => setViewingDocument(null)}
+        />
       )}
     </div>
   )

@@ -25,11 +25,12 @@ os.environ["JAGA_DB_PATH"] = _TEST_DB
 _TABLES = [
     "notification", "security_event", "trace", "review_item", "obligation",
     "expectation", "event", "extraction",
-    # document_tag/tag added 2026-09-22 — document_tag must clear before
-    # both document and tag (FKs to each); tag must clear before company.
-    # document_search (FTS5) has no real FK but is reset here too, so a
-    # prior test's rows for a reused rowid never leak into the next test.
-    "document_tag", "document_search", "tag",
+    # document_tag/tag (2026-09-22) superseded the same day by bucket/
+    # vendor_name columns on document itself (DECISIONS #42) — no join
+    # tables left to reset. document_search (FTS5) has no real FK but is
+    # reset here too, so a prior test's rows for a reused rowid never leak
+    # into the next test.
+    "document_search",
     "document", "session", "membership",
     "app_user", "company",
 ]
