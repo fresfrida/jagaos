@@ -41,6 +41,13 @@ class ClassifyResult(BaseModel):
     doc_type: str
     confidence: float = Field(ge=0, le=1)
     injection_suspected: bool = False
+    # 2026-09-22: runs for every document regardless of lane (unlike
+    # extract.py's InvoiceFields/StatutoryFields, which only run for
+    # invoice/statutory — app/graph/extract.py's TOOLS_BY_LANE), so
+    # description/tags come from here, not extract.py, or an
+    # important/memory document (a lease, a photo) would never get one.
+    description: str
+    suggested_tags: list[str] = Field(default_factory=list)
 
 
 class InvoiceFields(BaseModel):
@@ -103,6 +110,16 @@ class VerifyResult(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     needs_review: bool = False
     review_question: str | None = None
+
+
+class DocumentEditRequest(BaseModel):
+    """PATCH /api/documents/{id} body (2026-09-22). Both fields optional —
+    only the ones sent are changed. `tags`, when sent, REPLACES the
+    document's whole tag set (not additive) — the frontend sends the
+    complete edited set, matching how a tag-chip editor naturally works."""
+
+    description: str | None = None
+    tags: list[str] | None = None
 
 
 class ReviewResolution(BaseModel):

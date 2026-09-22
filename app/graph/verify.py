@@ -51,9 +51,12 @@ def verify(state: PipelineState) -> PipelineState:
 
     reasons: list[str] = []
     injection_hits = scan(text)
+    model_flagged = bool(classify.get("injection_suspected") or extract.get("injection_suspected"))
 
-    if injection_hits or classify.get("injection_suspected") or extract.get("injection_suspected"):
-        detail = f"regex={injection_hits}, model_flag={classify.get('injection_suspected') or extract.get('injection_suspected')}"
+    if injection_hits:
+        # Regex-corroborated — deterministic and independent of the model,
+        # so this stays a hard, unconditional quarantine (unchanged).
+        detail = f"regex={injection_hits}, model_flag={model_flagged}"
         quarantine(document_id, detail, DB_PATH)
         result = VerifyResult(ok=False, reasons=[f"injection suspected: {detail}"], needs_review=False)
         with get_conn(DB_PATH) as conn:
@@ -63,6 +66,19 @@ def verify(state: PipelineState) -> PipelineState:
                 (state["run_id"], state["company_id"], document_id),
             )
         return {"verify_result": result.model_dump()}
+
+    if model_flagged:
+        # Model-only self-flag, no regex corroboration. Confirmed live
+        # 2026-09-22: an ordinary invoice's warranty/exchange-policy
+        # boilerplate ("must be unused", "will not apply if...") tripped
+        # this and was hard-quarantined with no way back — contradicting
+        # this file's own docstring above, which already claimed the model's
+        # self-report alone is never trusted. Route to the same reviewable
+        # path as the GST/low-confidence checks below instead of a dead end.
+        reasons.append(
+            "the model flagged this document as possibly containing "
+            "injected instructions — please confirm it's safe before it proceeds"
+        )
 
     if extract.get("error"):
         # extract.py caught a schema-validation failure instead of crashing
@@ -78,29 +94,36 @@ def verify(state: PipelineState) -> PipelineState:
     if low_conf:
         reasons.append(f"low-confidence fields: {', '.join(low_conf)}")
 
-    needs_review = bool(reasons)
-    question = None
-    if needs_review:
+    # 2026-09-22 (DECISIONS #40): no document is ever filed without an
+    # explicit human confirmation, even a clean one — the only fully-
+    # automatic path left is the hard injection_hits quarantine above.
+    # needs_review is therefore unconditional here; `ok` stays tied to
+    # `reasons` alone (not to needs_review) so a clean document is still
+    # distinguishable from a flagged one downstream — the review form is
+    # pre-populated either way, so confirming a clean document is one tap,
+    # not a re-entry burden.
+    needs_review = True
+    ok = not bool(reasons)
+    if reasons:
         question = "Please confirm: " + "; ".join(reasons)
+    else:
+        question = "No issues found. Please confirm the extracted fields below are correct before filing."
 
-    result = VerifyResult(ok=not needs_review, reasons=reasons, needs_review=needs_review,
+    result = VerifyResult(ok=ok, reasons=reasons, needs_review=needs_review,
                            review_question=question)
 
     with get_conn(DB_PATH) as conn:
-        new_status = "needs_review" if needs_review else "filed"
-        conn.execute("UPDATE document SET status = ? WHERE id = ?", (new_status, document_id))
-        if needs_review:
-            conn.execute(
-                "INSERT INTO review_item (company_id, document_id, reason, question, proposed_json, status) "
-                "VALUES (?, ?, ?, ?, ?, 'open')",
-                (state["company_id"], document_id, "; ".join(reasons), question,
-                 json.dumps(extract)),
-            )
+        conn.execute("UPDATE document SET status = 'needs_review' WHERE id = ?", (document_id,))
+        conn.execute(
+            "INSERT INTO review_item (company_id, document_id, reason, question, proposed_json, status) "
+            "VALUES (?, ?, ?, ?, ?, 'open')",
+            (state["company_id"], document_id, "; ".join(reasons) if reasons else "clean extraction",
+             question, json.dumps(extract)),
+        )
         conn.execute(
             "INSERT INTO trace (run_id, company_id, document_id, node, decision) "
-            "VALUES (?, ?, ?, 'verify', ?)",
-            (state["run_id"], state["company_id"], document_id,
-             "needs_review" if needs_review else "ok"),
+            "VALUES (?, ?, ?, 'verify', 'needs_review')",
+            (state["run_id"], state["company_id"], document_id),
         )
 
     return {"verify_result": result.model_dump()}

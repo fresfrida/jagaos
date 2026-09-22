@@ -20,3 +20,5 @@ assets/
 # regenerated duplicate copies of evals/demo_corpus/files/*, written by
 # evals/demo_corpus/run.py — not meant to be checked in
 evals/demo_corpus/store/
+# personal Claude Code permission overrides, not for the team
+.claude/settings.local.json

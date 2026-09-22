@@ -143,6 +143,94 @@ def test_tenant_isolation_company_a_cannot_see_company_b_documents():
     assert trace.status_code == 403, trace.text
 
 
+def test_document_file_endpoint_serves_own_company_and_404s_for_other_company(tmp_path):
+    # A real file on disk — FileResponse (unlike get_trace, which never
+    # touches file bytes) needs an actual path to stream.
+    from app.db import get_conn
+
+    a = _signup("filea@example.com", "File Co A")
+    b = _signup("fileb@example.com", "File Co B")
+
+    real_file = tmp_path / "a-doc.pdf"
+    real_file.write_bytes(_fake_pdf_bytes("hello"))
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status) VALUES (?, 'filesha-a', 'a-doc.pdf', "
+            "'application/pdf', 1, ?, 'web', 'filed')",
+            (a["company"]["id"], str(real_file)),
+        )
+        a_doc_id = cur.lastrowid
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status) VALUES (?, 'filesha-b', 'b-doc.pdf', "
+            "'application/pdf', 1, '/tmp/does-not-matter.pdf', 'web', 'filed')",
+            (b["company"]["id"],),
+        )
+        b_doc_id = cur.lastrowid
+
+    own = client.get(f"/api/documents/{a_doc_id}/file", headers=_auth_headers(a["token"]))
+    assert own.status_code == 200, own.text
+    assert own.headers["content-type"].startswith("application/pdf")
+
+    # 404, not 403 — existence must not leak across tenants for this
+    # endpoint (deliberate divergence from get_trace's 403 above, called
+    # out in app/main.py's get_document_file docstring and DECISIONS.md).
+    other = client.get(f"/api/documents/{b_doc_id}/file", headers=_auth_headers(a["token"]))
+    assert other.status_code == 404, other.text
+
+
+def test_archive_endpoint_archives_own_company_document_and_404s_for_other_company():
+    from app.db import get_conn
+
+    a = _signup("archivea@example.com", "Archive Co A")
+    b = _signup("archiveb@example.com", "Archive Co B")
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status) VALUES (?, 'archivesha-a', 'a-doc.pdf', "
+            "'application/pdf', 1, '/tmp/a-doc.pdf', 'web', 'needs_review')",
+            (a["company"]["id"],),
+        )
+        a_doc_id = cur.lastrowid
+        # An open review_item on it — archiving must dismiss this too
+        # (otherwise it's still a dead end in the Needs-Review count).
+        cur = conn.execute(
+            "INSERT INTO review_item (company_id, document_id, reason, question, "
+            "proposed_json, status) VALUES (?, ?, 'test', 'q?', '{}', 'open')",
+            (a["company"]["id"], a_doc_id),
+        )
+        review_item_id = cur.lastrowid
+
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status) VALUES (?, 'archivesha-b', 'b-doc.pdf', "
+            "'application/pdf', 1, '/tmp/b-doc.pdf', 'web', 'filed')",
+            (b["company"]["id"],),
+        )
+        b_doc_id = cur.lastrowid
+
+    own = client.post(f"/api/documents/{a_doc_id}/archive", headers=_auth_headers(a["token"]))
+    assert own.status_code == 200, own.text
+    assert own.json()["status"] == "archived"
+
+    with get_conn() as conn:
+        doc_status = conn.execute(
+            "SELECT status FROM document WHERE id = ?", (a_doc_id,)
+        ).fetchone()["status"]
+        review_status = conn.execute(
+            "SELECT status FROM review_item WHERE id = ?", (review_item_id,)
+        ).fetchone()["status"]
+    assert doc_status == "archived"
+    assert review_status == "dismissed", "an open review_item on an archived document must not stay open"
+
+    # 404, not 403 — same no-leak pattern as the file endpoint above.
+    other = client.post(f"/api/documents/{b_doc_id}/archive", headers=_auth_headers(a["token"]))
+    assert other.status_code == 404, other.text
+
+
 def test_add_member_requires_admin_or_owner():
     owner = _signup("owner5@example.com", "Role Co 5")
     client.post(

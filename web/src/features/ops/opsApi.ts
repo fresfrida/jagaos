@@ -10,7 +10,7 @@
  * lives in features/auth/authApi.ts; this file imports authHeaders()
  * rather than re-implementing it. */
 
-import { apiRequest } from '../../lib/apiClient'
+import { API_BASE_URL, apiRequest } from '../../lib/apiClient'
 import { authHeaders } from '../auth/authApi'
 
 export interface ClassifyResult {
@@ -37,7 +37,10 @@ export interface VerifyResult {
 
 export interface UploadResult {
   document_id: number
-  status: 'processed' | 'needs_review' | 'quarantined' | 'duplicate'
+  // 'processed' (auto-filed, no human touch) is no longer possible as of
+  // 2026-09-22 (DECISIONS #40) — every non-quarantined upload now needs
+  // review, even a clean one.
+  status: 'needs_review' | 'quarantined' | 'duplicate'
   classify?: ClassifyResult
   extract?: Record<string, ProvenanceValue | boolean> | null
   verify?: VerifyResult
@@ -78,6 +81,7 @@ export interface ReviewItem {
   id: number
   document_id: number
   document_filename: string
+  document_media_type: string
   thread_id: string
   reason: string
   question: string
@@ -139,4 +143,17 @@ export const opsApi = {
     ),
 
   getTrace: (documentId: number) => request<TraceReport>(`/api/trace/${documentId}`),
+
+  archiveDocument: (documentId: number) =>
+    request<{ status: string }>(`/api/documents/${documentId}/archive`, { method: 'POST' }),
+
+  // Not routed through request()/apiRequest() — those assume a JSON body
+  // (res.json()). <img>/<embed> can't send the Authorization header a
+  // direct <img src> to this endpoint would need, so the review card
+  // fetches the bytes itself and points at a local blob: URL instead.
+  fetchDocumentFile: (documentId: number): Promise<Blob> =>
+    fetch(`${API_BASE_URL}/api/documents/${documentId}/file`, { headers: authHeaders() }).then((res) => {
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+      return res.blob()
+    }),
 }

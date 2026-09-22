@@ -6,7 +6,7 @@ import mimetypes
 import shutil
 from pathlib import Path
 
-from app.db import DB_PATH, get_conn
+from app.db import DB_PATH, get_conn, reindex_document_search
 from app.extract import exif, ocr, pdf
 from app.graph.state import PipelineState
 
@@ -83,6 +83,13 @@ def ingest(
             ),
         )
         document_id = cur.lastrowid
+
+    # First time extracted_text exists for this document — index it so
+    # search works even before classify.py adds description/tags (which
+    # re-index again themselves). filename/doc_type/description/tag_names
+    # are all still blank at this point; that's fine, the row just gets
+    # more complete as the pipeline proceeds.
+    reindex_document_search(document_id, db_path)
 
     return {
         "run_id": sha[:12],

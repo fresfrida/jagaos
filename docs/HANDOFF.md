@@ -17,7 +17,7 @@ This repo currently holds:
 - **`web/`** — the marketing landing page (mock data, logged-out) plus the real logged-in app (`/login`, `/ops`, session-backed). See "Where the main logic lives" below.
 - **`app/`** — backend, per `ARCHITECTURE.md` §9 plus a 4-role auth layer (`app/auth.py`, 2026-09-22, DECISIONS #29-31). See "Backend status" below.
 - **`evals/`** — eval runner + adversarial cases, `evals/report.md` committed (10/10 passing, no gateway key needed).
-- **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, and auth/tenant-isolation (`tests/test_auth.py`). 20/20 passing.
+- **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, and auth/tenant-isolation (`tests/test_auth.py`). 25/25 passing.
 - **`deploy/`** — Lightsail provisioning (Caddy, systemd, `bootstrap.sh`). Untouched.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
@@ -101,11 +101,119 @@ isolated eval case — with the obligation table untouched, 2 statutory
 obligations derived with citations, total LLM cost $0.125 across 8
 documents (≈1.6¢/document, placeholder pricing).
 
+**False-positive hard quarantine found live on Lightsail, fixed 2026-09-22**
+(DECISIONS #33): a genuine invoice (Lay Meng Engineering Technology Pte Ltd,
+document id 9, uploaded through `/ops` on the live Lightsail backend) was
+hard-quarantined with `security_event` showing `regex=[]`, `model_flag=True`
+— the model's own self-reported `injection_suspected` flag fired alone, with
+no regex corroboration, on ordinary warranty/exchange-policy boilerplate
+("must be unused", "will not apply if..."). This directly contradicted
+`verify.py`'s own module docstring, which already claimed the model's
+self-report is never trusted alone — the docstring was right, the code (a
+single `or` across the regex hit and both models' self-flags) had drifted
+from it. Fixed: a regex hit is still an unconditional hard quarantine
+(deterministic, independent signal, unchanged); a model-only flag now routes
+through the same `needs_review` path as the GST/low-confidence checks below
+it in the same file, with a review question asking a human to confirm the
+document is safe. `app/rules/transitions.py`'s `"quarantined": set()` (no
+legal next state) is deliberately left as-is — a genuine regex-corroborated
+quarantine staying a dead end is a separate, defensible choice, not this
+bug. New tests in `tests/test_rules_smoke.py`; full suite 23/23.
+**Document id 9 itself, stuck on the live Lightsail DB from before this fix,
+is not touched by it** — a manual DB fix, handled separately by the user,
+not scripted here. Also noticed in passing, backlogged, not fixed: `app/
+guards/injection.py::quarantine()` writes document status via raw SQL
+rather than through `transitions.py`'s authority-separated
+`transition_document()`.
+
+**Review queue now shows the source document; uploads are normalized
+client-side (2026-09-22, DECISIONS #34).** Found live the same day as the
+quarantine bug above, investigating a different real invoice photo whose
+extracted vendor/GST/year were all wrong (bad OCR on a skewed, high-res
+phone photo — `app/extract/ocr.py` does zero preprocessing, unchanged by
+this fix): the reviewer had no way to notice, because the review card never
+showed the source. Confirming fields you can't check against the source
+isn't a safety check. Fixed on both ends: `GET
+/api/documents/{id}/file` (session-gated, tenant-checked, streams the
+original bytes inline) plus a blob-URL fetch in the frontend (`<img>` can't
+carry the session's bearer token, so `opsApi.fetchDocumentFile` fetches
+authenticated and points the preview at a local `blob:` URL) show the
+source photo/PDF next to the fields in each review card, and a "source →"
+link on the documents table opens any document the same way. Separately,
+`web/src/lib/imageNormalize.ts` downscales an uploaded image to ≤2000px on
+its longest side and re-encodes as JPEG *before* `opsApi.uploadDocument` —
+verified live end to end: a 3024×4032 EXIF-rotated test photo (209,931
+bytes) reached the server as an upright 2000×1500 JPEG (24,087 bytes,
+≈11.5% of the original). **Orientation correction is deliberately not
+hand-rolled** — `createImageBitmap()` already applies EXIF-orientation
+correction by default in every shipping browser; a first version that read
+the EXIF tag manually and re-applied it on top of that double-rotated the
+image, caught via a live Chrome test before shipping (DECISIONS #34 has the
+full story and why not to re-add it). New test:
+`tests/test_auth.py::test_document_file_endpoint_serves_own_company_and_404s_for_other_company`;
+full suite 24/24. No automated test for the client-side normalization
+itself — explicitly out of scope (depends on real EXIF/canvas behavior),
+verified live instead: `docs/screenshots/ops-review-card-source-preview.png`,
+`ops-after-normalized-upload.png`. Deskewing/cropping a skewed photo (the
+actual OCR-quality fix) is a separate, bigger, still-open task —
+`docs/KANBAN.md` backlog.
+
+**OCR page-segmentation mode fixed (2026-09-22, DECISIONS #35).**
+`app/extract/ocr.py` now calls `pytesseract.image_to_string(image,
+config="--psm 6")` instead of Tesseract's default PSM 3 ("fully
+automatic"), which the user had already confirmed live drops a
+right-aligned numeric table column on a real invoice (labels like "Sub
+Total" came through, their values didn't). One-line change, already
+diagnosed and tested before this session touched it. **`evals/demo_corpus/`
+turned out not to be a real test bed for this**: all 8 files are PDFs with
+genuine `pdfplumber`-extractable text layers (`has_extractable_text()` is
+`True` for all of them), so `ingest.py` never routes them through OCR at
+all — checked, not assumed. Verified instead with two synthetic images
+(invoice-style labels + right-aligned numbers; plain prose) — `pytesseract`
+output is identical under default PSM and `--psm 6` on both, no regression.
+No new automated test (not requested; OCR needs real image input the
+gateway-free suite doesn't have).
+
+**Document archive + expired-review escape hatch, Documents tab mobile
+fixes, confidence-copy fix (2026-09-22, DECISIONS #37-39).** Three related
+fixes from live user testing on the deployed app. (1) New `POST
+/api/documents/{id}/archive` (admin+) — soft-delete only, the row/file/full
+audit trail all stay intact, matching this product's own "don't lose
+evidence" pitch; `app/rules/transitions.py` now lets every document status
+reach `"archived"` (no restore path). This doubles as the fix for (2):
+`resolve_review`'s 410 (an expired review session — the `MemorySaver`
+checkpoint below is gone) was previously a dead end showing the user a raw
+internals string with Accept/Reject both just failing again; `ReviewQueueCard`
+now catches that 410 specifically and offers Archive plus a re-upload hint
+instead. (3) The Documents tab was a plain `<table>`, illegible on a phone
+(filename/doc_type cut off, no status badge) with what looked like no way
+to view the actual file — that last part turned out to already exist
+(a `window.open()`-based button, added at DECISIONS #34) but was almost
+certainly silently popup-blocked on mobile (it opened the window *after*
+an `await`, which most mobile browsers block unless synchronous with the
+click) — fixed at the root (open a blank tab synchronously, navigate it
+once the blob resolves) rather than re-added blind. Table replaced with
+cards (matching `ReviewQueueCard`'s existing pattern) plus a status badge,
+View/Trace/Archive per row, and a client-side "Show archived (N)" toggle
+(no new query param). (4) The upload-result banner's confidence label now
+reads "classified as {lane}/{doc_type} (N% confident)" — the old "confidence
+0.95" next to "PROCESSED" read like a blanket trust score on the extracted
+fields; it's actually just document-type classification confidence.
+New test: `tests/test_auth.py` (archive, own-company + tenant-isolation
+404). Full suite 25/25, typecheck + build clean. Verified live (Playwright,
+390px viewport, the real expired-checkpoint condition — a `review_item`
+with a `thread_id` never run through the pipeline, not mocked): no raw
+internals text reaches the page, Archive clears the Needs Review queue,
+long filenames wrap instead of clipping, the archived toggle works, View
+opens a real tab with a genuine `blob:` URL. Screenshots:
+`docs/screenshots/ops-review-expired-archive.png`, `ops-documents-mobile.png`,
+`ops-documents-mobile-show-archived.png`.
+
 **Known gaps, in the order they'll bite:**
 - `evals/cases/golden/` is empty — needs ~15 labelled real documents (see `evals/cases/golden/README.md`)
 - `app/rules/expectations.py`'s expected-document-set is a small starter list, **not** the team's real "19 documents, 14 held" checklist — that external data needs to be loaded in before the gap-analysis demo means anything
 - No scheduler (`APScheduler`), no Telegram bot — "the clock" (the actual agent, per `MOAT.md`'s one-liner) doesn't exist yet. Explicitly deprioritized 2026-09-22 (DECISIONS #28), not a gap to close right now.
-- `LangGraph` checkpointer is `MemorySaver` — a pending human review is lost on server restart; fine for a demo, not for the deployed box without a swap to a durable checkpointer
+- `LangGraph` checkpointer is `MemorySaver` — a pending human review is still lost on server restart (fine for a demo, not for the deployed box without a swap to a durable checkpointer); as of 2026-09-22 this is no longer a dead end when it happens — the review card offers Archive instead of failing forever — but the underlying loss is unchanged
 - `app/rules/statutory.py`'s Form C-S/C due date (30 Nov) is a working approximation, flagged in its own docstring — confirm before citing a specific date in `docs/WRITEUP.md`
 - `app/llm.py`'s per-token pricing is Anthropic list pricing, not confirmed as the gateway's actual billed rate
 - **`document.sha256` is UNIQUE globally, not per-company** — found live 2026-09-22 seeding a second test company; a byte-identical file can never be uploaded to two different companies. `docs/KANBAN.md` backlog; needs a table rebuild in SQLite, not a one-line fix.
@@ -139,7 +247,7 @@ Schema: `app_user`, `membership` (`company_id`, `user_id`, `role`),
 `session` (hashed tokens, 7-day TTL). `document.uploaded_by_user_id`
 attributes uploads. Endpoints: `POST /api/auth/dev-login`, `GET
 /api/auth/me`, `POST /api/auth/logout`, `GET`/`POST
-/api/companies/{id}/members`. Tests: `tests/test_auth.py` (9/9, no gateway
+/api/companies/{id}/members`. Tests: `tests/test_auth.py` (12/12, no gateway
 key needed — pure DB/HTTP against `TestClient`).
 
 Frontend: `web/src/features/auth/` (`AuthContext`/`useAuth`, `authApi.ts`
@@ -154,8 +262,8 @@ JSON in the UI).
 
 ## Environments
 
-- **UAT:** Vercel project `jagaos` (scope `fresfrida`), behind Vercel login. Frontend only.
-- **Production:** AWS Lightsail per GAPS §5. **Not built yet.** UAT will be migrated to it later (plan: `docs/UAT-DEPLOYMENT.md`, "Migrating UAT to AWS Lightsail").
+- **UAT:** Vercel project `jagaos` (scope `fresfrida`), behind Vercel login. Frontend only, now calling the live Lightsail backend cross-origin (see below).
+- **Production:** AWS Lightsail per GAPS §5. **Live since 2026-09-22** (DECISIONS #32): instance `jaga`, static IP `13.251.52.222`, `https://13-251-52-222.nip.io` (nip.io wildcard DNS, real Let's Encrypt cert, no purchased domain yet). Backend only — the frontend still runs from Vercel and calls this URL cross-origin (CORS already allowed `jagaos.vercel.app`); same-origin serving of `web/dist` from the box itself is still on the backlog.
 - Vercel's "production" target (`--prod`) is only how UAT is published. The Vercel site is UAT, not production.
 
 ## Architecture (intended)
@@ -184,7 +292,8 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Reusable UI | `components/ui/*` (Button, Badge, Card, Container, Reveal, EmptyState, MemoryCard, SourceLabel, Logo) |
 | Session state, login/logout, role helpers | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
 | Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
-| The real logged-in app: upload, review queue, gap analysis, obligations, trace | `features/ops/OpsConsole.tsx`, `features/ops/opsApi.ts` |
+| Client-side photo downscale before upload (2026-09-22) | `lib/imageNormalize.ts` |
+| The real logged-in app: upload, review queue, gap analysis, obligations, trace — 4 tabs, not one long scroll (2026-09-22, DECISIONS #36) | `features/ops/OpsConsole.tsx`, `features/ops/opsApi.ts` |
 | Login form | `pages/LoginPage.tsx` |
 
 ## Commands (run in `web/`)
@@ -213,7 +322,8 @@ see the callout below on why that matters for `/ops` specifically.
 
 - **Vercel UAT (login required):** project `jagaos`, scope `fresfrida`, alias `https://jagaos.vercel.app`. Project protection is `all`, so logged-out requests get 302 to Vercel login (verified 2026-09-21, re-verified 2026-09-22). Runbook and post-deploy check: `docs/UAT-DEPLOYMENT.md`. Real production = AWS Lightsail (GAPS §5), not deployed yet; migrate UAT there later.
 - **Git-based auto-deploy** (`vercel git connect` to `github.com/fresfrida/jagaos`) — in progress 2026-09-22, blocked on the `fresfrida` Vercel account needing a GitHub login connection added first (account-level, one-time, via the Vercel dashboard — not something the CLI or an agent can do). Once connected, every push to `main` deploys automatically; Root Directory needs setting to `web` (the repo is no longer web-only — it now holds the Python backend at root too).
-- **⚠ `/ops` will not work from the phone via the Vercel URL, even after auto-deploy is set up.** It's a real backend console (`web/src/features/ops/OpsConsole.tsx`), not mock data, and its `VITE_API_BASE_URL` currently points at `http://127.0.0.1:8000` — reachable only from the same Mac running `uvicorn`. Vercel hosts the static frontend only; it does not run the Python backend. Until the backend is reachable from the internet (Lightsail, or an interim tunnel), `/ops` only works against `localhost` regardless of where the frontend itself is deployed. The marketing/product pages (`/`, `/calendar`, `/tags` — mock data via `searchService.ts`) have no such dependency and work fine over Vercel today.
+- **`/ops` now works from the phone via the Vercel URL** (fixed 2026-09-22, DECISIONS #32) — `VITE_API_BASE_URL` was repointed from `http://127.0.0.1:8000` to `https://13-251-52-222.nip.io` (the live Lightsail backend) and Vercel redeployed. CORS already allowed `jagaos.vercel.app`, so no backend code change was needed, just the env var + redeploy.
+- **The Lightsail box's database started empty** — deploying backend *code* there doesn't carry over the local `jaga.db`. `owner@try-demo.test` / "Try Demo Pte Ltd" was re-seeded directly against the live URL: `scripts/seed_dev_db.py`'s target is now configurable (`JAGA_API_BASE_URL` env var, was hardcoded to `127.0.0.1:8000`), run as `JAGA_API_BASE_URL=https://13-251-52-222.nip.io python scripts/seed_dev_db.py` from a machine with the demo PDFs (`evals/demo_corpus/files/`) — no need to copy anything onto the box itself. The local dev DB (`./data/jaga.db`) and the Lightsail DB are now two separate, unsynced databases; seeding one does not seed the other.
 - Repo: `github.com/fresfrida/jagaos` (private), pushed 2026-09-22. Commit and push still need an explicit request each time (standing rule, not automated). `web/.vercel/` exists locally for CLI deploys: keep it out of git (gitignored). Local author is the neutral `JagaOS`.
 - `bootstrap.sh` puts the static site in `/var/www/jaga/web`; copy `web/dist/*` there.
 - `deploy/Caddyfile` was edited 2026-09-21 so root static files are served (catch-all `handle`). **Not yet validated** with `caddy validate`; do that on the box.
@@ -229,6 +339,9 @@ see the callout below on why that matters for `/ops` specifically.
 - Fonts load from Google Fonts at runtime (external request).
 - PWA is manifest + icon only; no service worker, no offline behaviour.
 - Screenshots in `docs/screenshots/` were taken with headless Chrome against `vite preview`.
+- **`dev-login`'s known risk (DECISIONS #30) is now live, not theoretical** — the backend is internet-reachable (`https://13-251-52-222.nip.io`) and login is still "any email in, session out," no proof of ownership. This is now the top-priority backlog item (`docs/KANBAN.md`).
+- Backend code on Lightsail was deployed by hand (`scp`, not `git clone`) — a future code change there needs a manual re-copy until that's set up. The box's Python is 3.12 (`bootstrap.sh`'s choice), not the repo's documented 3.11 (DECISIONS #7).
+- The Lightsail DB and the local dev DB are separate and unsynced — seeding or testing against one has no effect on the other. See "Deployment notes" above.
 
 ## How to resume
 

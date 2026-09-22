@@ -75,7 +75,11 @@ def test_classify_then_extract_then_verify_on_real_invoice(seeded_company):
 
     state.update(verify(state))
     assert state["verify_result"]["ok"] is True, state["verify_result"]["reasons"]
-    assert state["verify_result"]["needs_review"] is False
+    # 2026-09-22 (DECISIONS #40): no document is ever auto-filed, even a
+    # clean one — needs_review is now unconditional outside the injection
+    # quarantine branch. `ok=True` here is what still distinguishes "clean"
+    # from "flagged" now that both go to review.
+    assert state["verify_result"]["needs_review"] is True
 
 
 SAMPLE_STATUTORY_TEXT = """ACRA Notice of Change of Registered Office

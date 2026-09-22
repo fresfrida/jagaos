@@ -22,6 +22,7 @@ ExpectationStatus = Literal[
 ]
 DocumentStatus = Literal[
     "received", "proposed", "needs_review", "filed", "rejected", "quarantined",
+    "archived",
 ]
 
 _OBLIGATION_TRANSITIONS: dict[str, set[str]] = {
@@ -42,14 +43,21 @@ _EXPECTATION_TRANSITIONS: dict[str, set[str]] = {
 }
 
 _DOCUMENT_TRANSITIONS: dict[str, set[str]] = {
-    "received": {"proposed", "quarantined"},
-    "proposed": {"needs_review", "filed", "quarantined"},
+    "received": {"proposed", "quarantined", "archived"},
+    "proposed": {"needs_review", "filed", "quarantined", "archived"},
     # A human confirming or correcting a flagged document — the resolve
     # endpoint (app/main.py), never an LLM node.
-    "needs_review": {"filed", "rejected"},
-    "filed": set(),
-    "rejected": set(),
-    "quarantined": set(),
+    "needs_review": {"filed", "rejected", "archived"},
+    "filed": {"archived"},
+    "rejected": {"archived"},
+    # 2026-09-22: archive is a deliberate escape hatch from a dead-end
+    # quarantine (DECISIONS #37, supersedes #33's "don't add one yet" for
+    # this specific case — thought through separately, as #33 asked).
+    # Archive is soft (document/audit trail untouched, just hidden from
+    # default views) so this doesn't weaken the quarantine guardrail itself.
+    "quarantined": {"archived"},
+    # No restore path on purpose — "don't build a full trash/restore UI".
+    "archived": set(),
 }
 
 

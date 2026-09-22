@@ -14,12 +14,13 @@ Requires `uvicorn app.main:app --reload` already running. Run:
     python scripts/seed_dev_db.py
 """
 
+import os
 import sys
 from pathlib import Path
 
 import httpx
 
-API = "http://127.0.0.1:8000"
+API = os.environ.get("JAGA_API_BASE_URL", "http://127.0.0.1:8000")
 FILES_DIR = Path(__file__).parent.parent / "evals" / "demo_corpus" / "files"
 
 OWNER_EMAIL = "owner@try-demo.test"

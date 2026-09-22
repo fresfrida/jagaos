@@ -14,20 +14,30 @@ from typing import Annotated
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from langgraph.errors import InvalidUpdateError
 from langgraph.types import Command
 
 load_dotenv()
 
 from app.auth import CurrentMembership, get_current_membership, hash_token, issue_session, require_role  # noqa: E402
-from app.db import DB_PATH, get_conn, init_db  # noqa: E402
+from app.db import (  # noqa: E402
+    DB_PATH,
+    build_fts5_query,
+    get_conn,
+    init_db,
+    link_tags,
+    reindex_document_search,
+)
 from app.graph.ingest import ingest  # noqa: E402
 from app.graph.pipeline import PIPELINE  # noqa: E402
+from app.rules.transitions import InvalidTransition, transition_document  # noqa: E402
 from app.models import (  # noqa: E402
     AddMemberRequest,
     AuthResponse,
     CompanyOut,
     DevLoginRequest,
+    DocumentEditRequest,
     MemberOut,
     ReviewResolution,
     UserOut,
@@ -264,33 +274,27 @@ async def upload_document(
             "SELECT status FROM document WHERE id = ?", (document_id,)
         ).fetchone()["status"]
 
-    if doc_status == "needs_review":
-        with get_conn(DB_PATH) as conn:
-            review_item = conn.execute(
-                "SELECT id, question FROM review_item WHERE document_id = ? "
-                "AND status = 'open' ORDER BY id DESC LIMIT 1",
-                (document_id,),
-            ).fetchone()
-        return {
-            "document_id": document_id,
-            "status": "needs_review",
-            "thread_id": thread_id,
-            "review_item_id": review_item["id"] if review_item else None,
-            "review": {"question": review_item["question"]} if review_item else None,
-        }
-
     if doc_status == "quarantined":
         return {"document_id": document_id, "status": "quarantined",
                 "verify": result.get("verify_result")}
 
+    # 2026-09-22 (DECISIONS #40): no document is ever filed without an
+    # explicit human confirmation — verify.py now always sets needs_review,
+    # so doc_status here is only ever "quarantined" (above) or
+    # "needs_review". There is no third, auto-filed "processed" case left
+    # to return; a branch for one would be dead code.
+    with get_conn(DB_PATH) as conn:
+        review_item = conn.execute(
+            "SELECT id, question FROM review_item WHERE document_id = ? "
+            "AND status = 'open' ORDER BY id DESC LIMIT 1",
+            (document_id,),
+        ).fetchone()
     return {
         "document_id": document_id,
-        "status": "processed",
-        "classify": result.get("classify_result"),
-        "extract": result.get("extract_result"),
-        "verify": result.get("verify_result"),
-        "events": result.get("events"),
-        "obligations_created": result.get("obligations_created"),
+        "status": "needs_review",
+        "thread_id": thread_id,
+        "review_item_id": review_item["id"] if review_item else None,
+        "review": {"question": review_item["question"]} if review_item else None,
     }
 
 
@@ -350,7 +354,7 @@ def list_review_items(
 ) -> list[dict]:
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
-            "SELECT r.*, d.filename AS document_filename, "
+            "SELECT r.*, d.filename AS document_filename, d.media_type AS document_media_type, "
             # thread_id == run_id, generated in app/graph/ingest.py as
             # sha256[:12] — not its own column, derived the same way here
             # rather than adding one for a value that never changes.
@@ -387,17 +391,193 @@ def list_obligations(
         return [dict(r) for r in rows]
 
 
+def _attach_tags(conn, docs: list[dict]) -> list[dict]:
+    """Attaches a `tags: list[str]` to each dict in `docs` (each must have
+    an `id`) with one extra query, not one per document. Shared by
+    list_documents and search_documents below."""
+    ids = [d["id"] for d in docs]
+    if not ids:
+        return docs
+    placeholders = ",".join("?" * len(ids))
+    tag_rows = conn.execute(
+        f"SELECT dt.document_id, t.name FROM document_tag dt "
+        f"JOIN tag t ON t.id = dt.tag_id WHERE dt.document_id IN ({placeholders})",
+        ids,
+    ).fetchall()
+    tags_by_doc: dict[int, list[str]] = {}
+    for row in tag_rows:
+        tags_by_doc.setdefault(row["document_id"], []).append(row["name"])
+    for d in docs:
+        d["tags"] = tags_by_doc.get(d["id"], [])
+    return docs
+
+
 @app.get("/api/documents")
 def list_documents(
     membership: Annotated[CurrentMembership, Depends(get_current_membership)],
 ) -> list[dict]:
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
-            "SELECT id, filename, lane, doc_type, status, received_at "
+            "SELECT id, filename, lane, doc_type, status, received_at, description "
             "FROM document WHERE company_id = ? ORDER BY received_at DESC",
             (membership.company_id,),
         ).fetchall()
+        return _attach_tags(conn, [dict(r) for r in rows])
+
+
+@app.get("/api/search")
+def search_documents(
+    q: str,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> list[dict]:
+    """Real full-text search (ARCHITECTURE.md's original "SQLite FTS5"
+    plan, first implementation 2026-09-22) over document_search
+    (app/db.py) — filename, doc_type, description, extracted_text, and
+    tag names. Tenant-scoped via document_search's own UNINDEXED
+    company_id column, filtered in the same MATCH query — a company's
+    session can never see another company's match. Empty/missing q
+    returns an empty list, never the whole company's documents."""
+    query = build_fts5_query(q)
+    if not query:
+        return []
+    with get_conn(DB_PATH) as conn:
+        matches = conn.execute(
+            "SELECT rowid FROM document_search WHERE document_search MATCH ? "
+            "AND company_id = ? ORDER BY rank",
+            (query, membership.company_id),
+        ).fetchall()
+        ordered_ids = [r["rowid"] for r in matches]
+        if not ordered_ids:
+            return []
+        placeholders = ",".join("?" * len(ordered_ids))
+        docs = conn.execute(
+            f"SELECT id, filename, doc_type, description, status FROM document "
+            f"WHERE id IN ({placeholders})",
+            ordered_ids,
+        ).fetchall()
+        docs_by_id = {d["id"]: dict(d) for d in docs}
+        _attach_tags(conn, list(docs_by_id.values()))
+    # FTS5's rank order (relevance), not the IN-clause's arbitrary order.
+    return [docs_by_id[doc_id] for doc_id in ordered_ids if doc_id in docs_by_id]
+
+
+@app.get("/api/tags")
+def list_tags(
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> list[dict]:
+    """For the Tags sidebar — each tag with how many (non-archived or not,
+    deliberately not filtered here) documents currently carry it."""
+    with get_conn(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT t.id, t.name, COUNT(dt.document_id) AS document_count "
+            "FROM tag t LEFT JOIN document_tag dt ON dt.tag_id = t.id "
+            "WHERE t.company_id = ? GROUP BY t.id ORDER BY t.name",
+            (membership.company_id,),
+        ).fetchall()
         return [dict(r) for r in rows]
+
+
+@app.patch("/api/documents/{document_id}")
+def edit_document(
+    document_id: int, body: DocumentEditRequest,
+    membership: Annotated[CurrentMembership, Depends(require_role("user"))],
+) -> dict:
+    """Edit description and/or the tag set. user+ (same bar as uploading —
+    tagging/describing is routine organizational work, not an admin-level
+    action like archiving or resolving a review). `tags`, when present,
+    REPLACES the document's whole tag set."""
+    with get_conn(DB_PATH) as conn:
+        doc = conn.execute(
+            "SELECT company_id FROM document WHERE id = ?", (document_id,)
+        ).fetchone()
+    if doc is None or doc["company_id"] != membership.company_id:
+        raise HTTPException(404, "document not found")
+
+    with get_conn(DB_PATH) as conn:
+        if body.description is not None:
+            conn.execute(
+                "UPDATE document SET description = ? WHERE id = ?",
+                (body.description, document_id),
+            )
+        if body.tags is not None:
+            conn.execute("DELETE FROM document_tag WHERE document_id = ?", (document_id,))
+            link_tags(membership.company_id, document_id, body.tags, conn)
+
+    reindex_document_search(document_id, DB_PATH)
+    return {"status": "updated"}
+
+
+@app.get("/api/documents/{document_id}/file")
+def get_document_file(
+    document_id: int,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> FileResponse:
+    """Streams the original uploaded bytes back. Added 2026-09-22: the
+    review queue previously showed a reviewer the extracted fields with no
+    way to see the source photo/PDF next to them — a confirm/reject on
+    fields you can't check against the source isn't a safety check.
+
+    content_disposition_type="inline" (verified against the installed
+    Starlette source — the default is "attachment", which would force a
+    download instead of letting <img>/<embed> render it) so the frontend's
+    blob-URL preview actually displays.
+
+    404 on cross-tenant access, not 403 (unlike get_trace below, which does
+    leak cross-tenant existence via 403 "Not a member") — deliberate for
+    this endpoint specifically, per explicit instruction: don't confirm a
+    document id is real to a caller who can't read it.
+    """
+    with get_conn(DB_PATH) as conn:
+        doc = conn.execute(
+            "SELECT company_id, stored_path, media_type, filename FROM document WHERE id = ?",
+            (document_id,),
+        ).fetchone()
+    if doc is None or doc["company_id"] != membership.company_id:
+        raise HTTPException(404, "document not found")
+    return FileResponse(
+        doc["stored_path"], media_type=doc["media_type"],
+        filename=doc["filename"], content_disposition_type="inline",
+    )
+
+
+@app.post("/api/documents/{document_id}/archive")
+def archive_document(
+    document_id: int,
+    membership: Annotated[CurrentMembership, Depends(require_role("admin"))],
+) -> dict:
+    """Soft-delete, added 2026-09-22 (DECISIONS #37). Archive, not hard
+    delete: the row, file, and full audit trail (extractions, trace,
+    security_events) all stay intact — this product's own pitch is "don't
+    lose evidence," so a casual click permanently erasing a document would
+    contradict that. Archiving only hides it from the default Documents-tab
+    list. Routed through transition_document() (never raw SQL, unlike
+    app/guards/injection.py::quarantine() — a separate, already-flagged
+    pre-existing issue, not copied here). admin+ gated: archiving is a real
+    action on shared company data, the same bar as resolving a review.
+    """
+    with get_conn(DB_PATH) as conn:
+        doc = conn.execute(
+            "SELECT company_id FROM document WHERE id = ?", (document_id,)
+        ).fetchone()
+    if doc is None or doc["company_id"] != membership.company_id:
+        raise HTTPException(404, "document not found")
+
+    try:
+        transition_document(document_id, "archived", actor=membership.email, db_path=DB_PATH)
+    except InvalidTransition:
+        # Every other status can reach "archived" now (rules/transitions.py)
+        # — the only way this fires is the document being archived already.
+        raise HTTPException(409, "document is already archived") from None
+
+    with get_conn(DB_PATH) as conn:
+        # Drops it out of the Needs-Review count too — an open review_item
+        # pointing at an archived document is a dead end otherwise.
+        # 'dismissed' is an existing review_item.status value (app/db.py).
+        conn.execute(
+            "UPDATE review_item SET status = 'dismissed' WHERE document_id = ? AND status = 'open'",
+            (document_id,),
+        )
+    return {"status": "archived"}
 
 
 @app.get("/api/trace/{document_id}")

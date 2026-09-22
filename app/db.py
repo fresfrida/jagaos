@@ -67,9 +67,46 @@ CREATE TABLE IF NOT EXISTS document (
     lane TEXT,                      -- statutory | invoice | important | memory
     doc_type TEXT,
     status TEXT NOT NULL DEFAULT 'received',
-    -- received|extracted|proposed|needs_review|filed|rejected|quarantined
+    -- received|extracted|proposed|needs_review|filed|rejected|quarantined|archived
     extracted_text TEXT,
-    text_source TEXT                -- pdfplumber | ocr | exif | none
+    text_source TEXT,               -- pdfplumber | ocr | exif | none
+    description TEXT                -- one-sentence, human-readable; set by
+                                     -- classify.py (app/graph/classify.py),
+                                     -- editable by the user afterward
+);
+
+CREATE TABLE IF NOT EXISTS tag (
+    id INTEGER PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES company(id),
+    name TEXT NOT NULL,
+    UNIQUE(company_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS document_tag (
+    document_id INTEGER NOT NULL REFERENCES document(id),
+    tag_id INTEGER NOT NULL REFERENCES tag(id),
+    PRIMARY KEY (document_id, tag_id)
+);
+
+-- Real full-text search (ARCHITECTURE.md's original "SQLite FTS5" plan;
+-- 2026-09-22, first implementation). A standalone (non-contentless) FTS5
+-- table: it stores its own copy of the indexed text rather than pulling
+-- from `document`/`tag` live, which is the simplest way to keep in sync
+-- correctly when the source spans two tables (document_tag/tag → a
+-- denormalized tag_names string) — every write goes through
+-- app.db.reindex_document_search() below rather than app code touching
+-- this table directly. rowid IS document.id (set explicitly on insert),
+-- so a document's row is always `WHERE rowid = ?`, never a separate
+-- lookup column. company_id is UNINDEXED (stored, not full-text-searched)
+-- so a search can be scoped with a plain `AND company_id = ?` — never
+-- return a match across tenants.
+CREATE VIRTUAL TABLE IF NOT EXISTS document_search USING fts5(
+    filename,
+    doc_type,
+    description,
+    extracted_text,
+    tag_names,
+    company_id UNINDEXED
 );
 
 CREATE TABLE IF NOT EXISTS extraction (
@@ -186,6 +223,7 @@ CREATE INDEX IF NOT EXISTS idx_document_company ON document(company_id);
 CREATE INDEX IF NOT EXISTS idx_obligation_company_status ON obligation(company_id, status);
 CREATE INDEX IF NOT EXISTS idx_expectation_company_status ON expectation(company_id, status);
 CREATE INDEX IF NOT EXISTS idx_trace_run ON trace(run_id);
+CREATE INDEX IF NOT EXISTS idx_document_tag_tag ON document_tag(tag_id);
 """
 
 
@@ -199,6 +237,7 @@ _MIGRATIONS = [
     "ALTER TABLE review_item ADD COLUMN action TEXT",
     "ALTER TABLE review_item ADD COLUMN resolved_json TEXT",
     "ALTER TABLE document ADD COLUMN uploaded_by_user_id INTEGER REFERENCES app_user(id)",
+    "ALTER TABLE document ADD COLUMN description TEXT",
 ]
 
 
@@ -228,3 +267,76 @@ def get_conn(db_path: str = DB_PATH):
         conn.commit()
     finally:
         conn.close()
+
+
+def reindex_document_search(document_id: int, db_path: str = DB_PATH) -> None:
+    """Recomputes one document's document_search row from source-of-truth
+    columns (document.filename/doc_type/description/extracted_text, plus
+    tag names via document_tag/tag) — delete + re-insert rather than
+    UPDATE, so the row is always freshly derived, never partially stale.
+    Call this every time description, tags, or extracted_text change:
+    app/graph/ingest.py (extracted_text first set), app/graph/classify.py
+    (description/tags first set), app/main.py's document-edit endpoint
+    (description/tags changed by a user)."""
+    with get_conn(db_path) as conn:
+        doc = conn.execute(
+            "SELECT company_id, filename, doc_type, description, extracted_text "
+            "FROM document WHERE id = ?",
+            (document_id,),
+        ).fetchone()
+        if doc is None:
+            return
+        tag_rows = conn.execute(
+            "SELECT t.name FROM tag t JOIN document_tag dt ON dt.tag_id = t.id "
+            "WHERE dt.document_id = ? ORDER BY t.name",
+            (document_id,),
+        ).fetchall()
+        tag_names = " ".join(r["name"] for r in tag_rows)
+
+        conn.execute("DELETE FROM document_search WHERE rowid = ?", (document_id,))
+        conn.execute(
+            "INSERT INTO document_search "
+            "(rowid, filename, doc_type, description, extracted_text, tag_names, company_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (document_id, doc["filename"], doc["doc_type"] or "", doc["description"] or "",
+             doc["extracted_text"] or "", tag_names, doc["company_id"]),
+        )
+
+
+def link_tags(company_id: int, document_id: int, tag_names: list[str], conn) -> None:
+    """get-or-create each tag by (company_id, name) then link it to the
+    document. Shared by app/graph/classify.py (LLM-suggested tags) and
+    app/main.py's document-edit endpoint (user-edited tags) — one place
+    for "what does linking a tag mean," not two copies drifting apart.
+    Caller owns the connection/transaction and re-indexing afterward."""
+    for raw in tag_names:
+        name = raw.strip().lower()
+        if not name:
+            continue
+        # UNIQUE(company_id, name): two documents in the same company
+        # sharing a tag reuse one row, not a duplicate — the whole point
+        # of a tag as a real browsing/filter axis.
+        conn.execute(
+            "INSERT INTO tag (company_id, name) VALUES (?, ?) "
+            "ON CONFLICT(company_id, name) DO NOTHING",
+            (company_id, name),
+        )
+        tag_row = conn.execute(
+            "SELECT id FROM tag WHERE company_id = ? AND name = ?", (company_id, name),
+        ).fetchone()
+        conn.execute(
+            "INSERT OR IGNORE INTO document_tag (document_id, tag_id) VALUES (?, ?)",
+            (document_id, tag_row["id"]),
+        )
+
+
+def build_fts5_query(raw: str) -> str:
+    """Turns free-text user input into a safe FTS5 MATCH query: each word
+    is stripped of quote characters and wrapped in its own quotes (so FTS5
+    query-syntax operators typed by a user — NOT, OR, -, : — are treated
+    as literal words, never parsed as operators) with a trailing * for
+    prefix matching. Words are implicitly ANDed (FTS5's default). Returns
+    "" for empty/whitespace input — callers should treat that as "no
+    query", not "match everything"."""
+    tokens = [t.replace('"', "") for t in raw.split()]
+    return " ".join(f'"{t}"*' for t in tokens if t)
