@@ -36,6 +36,7 @@ Updated 2026-09-21.
 - (none)
 
 ## Done
+- [x] 2026-09-22 GitHub repo created and everything pushed: `github.com/fresfrida/jagaos` (private), `main` branch, AWS Innovation Sandbox access confirmed working (`aws sts get-caller-identity`, account 443670029323, role via IAM Identity Center SSO). One commit, 106 files — the full backend, evals, tests, and the already-in-progress frontend routing work that was sitting uncommitted.
 - [x] 2026-09-21 backend skeleton (`app/`, `ARCHITECTURE.md` §9 layout): SQLite schema (10 tables), Pydantic tool contracts, gateway client with cost accounting, local text extraction (pdfplumber/pytesseract/EXIF), injection guardrail, statutory-calendar + gap-analysis rules, authority-separated status transitions, full LangGraph pipeline (ingest→classify→extract→verify→human_review→derive_events→derive_expectations→derive_obligations→archive) with `interrupt()`, FastAPI endpoints. Installed into conda env `agent`.
 - [x] 2026-09-21 verified without a gateway key: `pytest tests/test_rules_smoke.py` (5/5 — schema, Annual Return date math, injection guardrail, obligation transition authority separation) and `python evals/run.py` (10/10 adversarial — injection + GST arithmetic; eval suite caught and fixed one real regex gap).
 - [x] 2026-09-21 **verified live against the real gateway, all three LLM nodes**: classify→extract→verify on a synthetic invoice (7/7 fields, citations, GST check passed) and derive_events on a synthetic statutory letter (correct event kind + date). Found and fixed two real bugs in the process — `haiku`/`sonnet` model aliases rejected (only `sonnet4.5` approved for this key), and tool calls silently truncate without explicit `max_tokens` (now set to 2048). Both documented in `GAPS.md` §11.
@@ -59,8 +60,8 @@ Updated 2026-09-21.
 - [x] UAT policy (`docs/UAT-DEPLOYMENT.md`), Caddyfile catch-all fix, `scripts/prepush-check.sh`, `.vercel/` git-ignored
 
 ## Blocked / needs a decision
-- [ ] Lightsail migration needs: AWS access path (IAM key vs console), spend approval (~$24/mo of the USD 100 credit), and a decision on UAT access control there.
-- [ ] **Push blocked: no git remote.** Need the remote URL (and confirmation of which branch). Also decide whether the root strategy docs (`STRATEGY.md`, `WINNING.md`, `MOAT.md`) belong in a public repo.
+- [ ] Lightsail migration needs: spend approval (~$24/mo of the USD 100 credit; AWS access path resolved 2026-09-22, see Done) and a decision on UAT access control there.
+- [ ] Repo is private for now (`github.com/fresfrida/jagaos`) — flip to public + add a license (MIT/Apache-2.0, `SUBMISSION.md` §5) before the 28 Sep submission. Decide whether the root strategy docs (`STRATEGY.md`, `WINNING.md`, `MOAT.md`) belong in a public repo, and re-run `scripts/prepush-check.sh` (also update it — it currently flags `.env`/`.vercel` by mere existence, not by git-tracked status, which is now a false positive now that local dev needs `.env`) before flipping visibility.
 - [ ] Standing rule (DECISIONS #26): deploy every change to UAT with `vercel deploy --prod --yes` from `web/` (Vercel's target name; this is UAT), then check logged-out 302 and a deep path. Delete `web/.vercel/` before any git push.
 - [x] Vercel team scope is now `fresfrida` (renamed 2026-09-21; team ID unchanged). Local CLI link still valid: project `jagaos` is found under `fresfrida`. Dashboard: vercel.com/fresfrida.
 - [ ] Old Vercel project `jaga` is being retired: never deploy to it. The UAT project is `jagaos` under scope `fresfrida`.
