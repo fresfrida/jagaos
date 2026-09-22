@@ -2,14 +2,16 @@
  * features/search/searchService.ts on purpose: that boundary is for the
  * marketing preview's mock "memories" model, this one talks to the actual
  * ARCHITECTURE.md pipeline (documents/expectations/obligations/trace).
- * Base URL: VITE_API_BASE_URL (web/.env, never committed). */
+ * Base URL: VITE_API_BASE_URL (web/.env, never committed).
+ *
+ * Every call here requires a session (2026-09-22) — company_id is no
+ * longer a parameter anywhere; the backend derives it from the bearer
+ * token via app/auth.py. Auth itself (login/me/logout, token storage)
+ * lives in features/auth/authApi.ts; this file imports authHeaders()
+ * rather than re-implementing it. */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-
-export interface Company {
-  id: number
-  name: string
-}
+import { apiRequest } from '../../lib/apiClient'
+import { authHeaders } from '../auth/authApi'
 
 export interface ClassifyResult {
   lane: string
@@ -103,50 +105,28 @@ export interface TraceReport {
   total_cost_usd: number
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, init)
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`${res.status} ${res.statusText}: ${body}`)
-  }
-  return res.json() as Promise<T>
+/** Every ops call carries the session automatically — callers never pass
+ * a token or a company_id by hand. */
+function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return apiRequest<T>(path, { ...init, headers: { ...authHeaders(), ...init?.headers } })
 }
 
 export const opsApi = {
   health: () => request<{ status: string }>('/api/health'),
 
-  listCompanies: () => request<Company[]>('/api/companies'),
-
-  createCompany: (params: { name: string; fye_month: number; fye_day: number }) =>
-    request<Company>(
-      `/api/companies?${new URLSearchParams({
-        name: params.name,
-        fye_month: String(params.fye_month),
-        fye_day: String(params.fye_day),
-      })}`,
-      { method: 'POST' },
-    ),
-
-  uploadDocument: (companyId: number, file: File) => {
+  uploadDocument: (file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return request<UploadResult>(
-      `/api/documents?${new URLSearchParams({ company_id: String(companyId), source_channel: 'web' })}`,
-      { method: 'POST', body: form },
-    )
+    return request<UploadResult>('/api/documents?source_channel=web', { method: 'POST', body: form })
   },
 
-  listDocuments: (companyId: number) =>
-    request<DocumentRow[]>(`/api/documents?${new URLSearchParams({ company_id: String(companyId) })}`),
+  listDocuments: () => request<DocumentRow[]>('/api/documents'),
 
-  listExpectations: (companyId: number) =>
-    request<Expectation[]>(`/api/expectations?${new URLSearchParams({ company_id: String(companyId) })}`),
+  listExpectations: () => request<Expectation[]>('/api/expectations'),
 
-  listObligations: (companyId: number) =>
-    request<Obligation[]>(`/api/obligations?${new URLSearchParams({ company_id: String(companyId) })}`),
+  listObligations: () => request<Obligation[]>('/api/obligations'),
 
-  listReviewItems: (companyId: number) =>
-    request<ReviewItem[]>(`/api/review?${new URLSearchParams({ company_id: String(companyId) })}`),
+  listReviewItems: () => request<ReviewItem[]>('/api/review'),
 
   resolveReview: (
     reviewItemId: number,

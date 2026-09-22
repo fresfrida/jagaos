@@ -26,6 +26,31 @@ CREATE TABLE IF NOT EXISTS company (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS app_user (
+    id INTEGER PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS membership (
+    id INTEGER PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES company(id),
+    user_id INTEGER NOT NULL REFERENCES app_user(id),
+    role TEXT NOT NULL,   -- owner | admin | user | viewer — see app/auth.py ROLE_ORDER
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(company_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS session (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES app_user(id),
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS document (
     id INTEGER PRIMARY KEY,
     company_id INTEGER NOT NULL REFERENCES company(id),
@@ -36,6 +61,7 @@ CREATE TABLE IF NOT EXISTS document (
     stored_path TEXT NOT NULL,
     source_channel TEXT NOT NULL,   -- telegram | web | email
     source_identity TEXT,
+    uploaded_by_user_id INTEGER REFERENCES app_user(id),
     received_at TEXT NOT NULL DEFAULT (datetime('now')),
     occurred_on TEXT,
     lane TEXT,                      -- statutory | invoice | important | memory
@@ -172,6 +198,7 @@ _MIGRATIONS = [
     "ALTER TABLE extraction ADD COLUMN source TEXT NOT NULL DEFAULT 'llm'",
     "ALTER TABLE review_item ADD COLUMN action TEXT",
     "ALTER TABLE review_item ADD COLUMN resolved_json TEXT",
+    "ALTER TABLE document ADD COLUMN uploaded_by_user_id INTEGER REFERENCES app_user(id)",
 ]
 
 

@@ -111,3 +111,56 @@ class ReviewResolution(BaseModel):
 
     action: Literal["confirm", "reject"]
     corrected_fields: dict[str, Any] = Field(default_factory=dict)
+
+
+RoleName = Literal["owner", "admin", "user", "viewer"]
+
+
+class DevLoginRequest(BaseModel):
+    """POST /api/auth/dev-login body. Placeholder for real magic-link email
+    (app/auth.py's docstring) — email in, session out, no delivery step.
+    Give company_name to create a new company (caller becomes its owner);
+    omit it to log into an existing membership."""
+
+    email: str
+    name: str | None = None
+    company_name: str | None = None
+    fye_month: int | None = None
+    fye_day: int | None = None
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    name: str | None
+
+
+class CompanyOut(BaseModel):
+    id: int
+    name: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user: UserOut
+    company: CompanyOut
+    role: RoleName
+
+
+class MeResponse(BaseModel):
+    user: UserOut
+    company: CompanyOut
+    role: RoleName
+
+
+class MemberOut(BaseModel):
+    user_id: int
+    email: str
+    name: str | None
+    role: RoleName
+
+
+class AddMemberRequest(BaseModel):
+    email: str
+    name: str | None = None
+    role: RoleName

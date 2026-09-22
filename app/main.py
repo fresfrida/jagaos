@@ -1,25 +1,37 @@
 """FastAPI app. ARCHITECTURE.md §8/§9.
 
-Single-tenant for this pass — PLATFORM.md's user/membership/session layer
-is deferred (see docs/KANBAN.md) until this core loop is proven end to end
-on a real document, per WINNING.md's cut list.
+Multi-user as of 2026-09-22 (DECISIONS.md): every data endpoint requires a
+session (app/auth.py) and derives company_id from the caller's membership —
+never from a client-supplied parameter. app_user/membership/session are the
+smallest slice of PLATFORM.md's model that makes that true, with a simpler
+4-role set (owner/admin/user/viewer) than PLATFORM.md's original six.
 """
 
 import tempfile
 from pathlib import Path
+from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.errors import InvalidUpdateError
 from langgraph.types import Command
 
 load_dotenv()
 
+from app.auth import CurrentMembership, get_current_membership, hash_token, issue_session, require_role  # noqa: E402
 from app.db import DB_PATH, get_conn, init_db  # noqa: E402
 from app.graph.ingest import ingest  # noqa: E402
 from app.graph.pipeline import PIPELINE  # noqa: E402
-from app.models import ReviewResolution  # noqa: E402
+from app.models import (  # noqa: E402
+    AddMemberRequest,
+    AuthResponse,
+    CompanyOut,
+    DevLoginRequest,
+    MemberOut,
+    ReviewResolution,
+    UserOut,
+)
 
 app = FastAPI(title="JagaOS API")
 
@@ -53,6 +65,150 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.post("/api/auth/dev-login")
+def dev_login(body: DevLoginRequest) -> AuthResponse:
+    if "@" not in body.email:
+        raise HTTPException(400, "Not a valid email")
+
+    with get_conn(DB_PATH) as conn:
+        user = conn.execute(
+            "SELECT id, email, name FROM app_user WHERE email = ?", (body.email,)
+        ).fetchone()
+        if user is None:
+            cur = conn.execute(
+                "INSERT INTO app_user (email, name) VALUES (?, ?)", (body.email, body.name)
+            )
+            user_id = cur.lastrowid
+        else:
+            user_id = user["id"]
+
+        if body.company_name:
+            if body.fye_month is None or body.fye_day is None:
+                raise HTTPException(400, "fye_month and fye_day are required to create a company")
+            cur = conn.execute(
+                "INSERT INTO company (name, fye_month, fye_day) VALUES (?, ?, ?)",
+                (body.company_name, body.fye_month, body.fye_day),
+            )
+            company_id = cur.lastrowid
+            conn.execute(
+                "INSERT INTO membership (company_id, user_id, role) VALUES (?, ?, 'owner')",
+                (company_id, user_id),
+            )
+            role = "owner"
+        else:
+            membership = conn.execute(
+                "SELECT company_id, role FROM membership WHERE user_id = ? ORDER BY id LIMIT 1",
+                (user_id,),
+            ).fetchone()
+            if membership is None:
+                raise HTTPException(
+                    400, "No company membership yet — provide company_name to create one"
+                )
+            company_id, role = membership["company_id"], membership["role"]
+
+        company = conn.execute(
+            "SELECT id, name FROM company WHERE id = ?", (company_id,)
+        ).fetchone()
+        final_user = conn.execute(
+            "SELECT id, email, name FROM app_user WHERE id = ?", (user_id,)
+        ).fetchone()
+
+    token = issue_session(user_id)
+    return AuthResponse(
+        token=token,
+        user=UserOut(id=final_user["id"], email=final_user["email"], name=final_user["name"]),
+        company=CompanyOut(id=company["id"], name=company["name"]),
+        role=role,
+    )
+
+
+@app.get("/api/auth/me")
+def auth_me(membership: Annotated[CurrentMembership, Depends(get_current_membership)]) -> dict:
+    with get_conn(DB_PATH) as conn:
+        company = conn.execute(
+            "SELECT id, name FROM company WHERE id = ?", (membership.company_id,)
+        ).fetchone()
+    return {
+        "user": {"id": membership.user_id, "email": membership.email, "name": membership.name},
+        "company": {"id": company["id"], "name": company["name"]},
+        "role": membership.role,
+    }
+
+
+@app.post("/api/auth/logout")
+def logout(
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+    authorization: Annotated[str, Header()],
+) -> dict:
+    token = authorization.removeprefix("Bearer ").strip()
+    with get_conn(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE session SET revoked_at = datetime('now') WHERE user_id = ? "
+            "AND token_hash = ?",
+            (membership.user_id, hash_token(token)),
+        )
+    return {"status": "logged_out"}
+
+
+@app.get("/api/companies/{company_id}/members")
+def list_members(
+    company_id: int, membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> list[MemberOut]:
+    if company_id != membership.company_id:
+        raise HTTPException(403, "Not a member of this company")
+    with get_conn(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT u.id AS user_id, u.email, u.name, m.role FROM membership m "
+            "JOIN app_user u ON u.id = m.user_id WHERE m.company_id = ? ORDER BY m.id",
+            (company_id,),
+        ).fetchall()
+        return [MemberOut(**dict(r)) for r in rows]
+
+
+@app.post("/api/companies/{company_id}/members")
+def add_member(
+    company_id: int, body: AddMemberRequest,
+    membership: Annotated[CurrentMembership, Depends(require_role("admin"))],
+) -> MemberOut:
+    if company_id != membership.company_id:
+        raise HTTPException(403, "Not a member of this company")
+    with get_conn(DB_PATH) as conn:
+        if body.role == "owner":
+            # One owner per company, many admins (DECISIONS.md #29,
+            # resolved 2026-09-22) — a policy statement is not the same as
+            # an enforced one; check it here rather than trust every caller
+            # to know the rule.
+            existing_owner = conn.execute(
+                "SELECT id FROM membership WHERE company_id = ? AND role = 'owner'",
+                (company_id,),
+            ).fetchone()
+            if existing_owner:
+                raise HTTPException(409, "This company already has an owner")
+
+        user = conn.execute(
+            "SELECT id, email, name FROM app_user WHERE email = ?", (body.email,)
+        ).fetchone()
+        if user is None:
+            cur = conn.execute(
+                "INSERT INTO app_user (email, name) VALUES (?, ?)", (body.email, body.name)
+            )
+            user_id, email, name = cur.lastrowid, body.email, body.name
+        else:
+            user_id, email, name = user["id"], user["email"], user["name"]
+
+        existing = conn.execute(
+            "SELECT id FROM membership WHERE company_id = ? AND user_id = ?",
+            (company_id, user_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(409, "Already a member of this company")
+        conn.execute(
+            "INSERT INTO membership (company_id, user_id, role) VALUES (?, ?, ?)",
+            (company_id, user_id, body.role),
+        )
+    return MemberOut(user_id=user_id, email=email, name=name, role=body.role)
+
+
 @app.get("/api/companies")
 def list_companies() -> list[dict]:
     with get_conn(DB_PATH) as conn:
@@ -78,15 +234,16 @@ def create_company(
 
 @app.post("/api/documents")
 async def upload_document(
-    company_id: int, file: UploadFile, source_channel: str = "web",
+    membership: Annotated[CurrentMembership, Depends(require_role("user"))],
+    file: UploadFile, source_channel: str = "web",
 ) -> dict:
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
 
     ingest_state = ingest(
-        company_id=company_id, source_path=tmp_path, filename=file.filename,
-        source_channel=source_channel,
+        company_id=membership.company_id, source_path=tmp_path, filename=file.filename,
+        source_channel=source_channel, uploaded_by_user_id=membership.user_id,
     )
     if ingest_state.get("text_source") == "duplicate":
         return {"document_id": ingest_state["document_id"], "status": "duplicate"}
@@ -138,17 +295,23 @@ async def upload_document(
 
 
 @app.post("/api/review/{review_item_id}/resolve")
-def resolve_review(review_item_id: int, thread_id: str, body: ReviewResolution) -> dict:
+def resolve_review(
+    review_item_id: int, thread_id: str, body: ReviewResolution,
+    membership: Annotated[CurrentMembership, Depends(require_role("admin"))],
+) -> dict:
     # All the actual state changes (review_item, extraction rows, document
     # status) happen inside app/graph/human_review.py on resume, not here —
     # that keeps "what does resolving mean" in one place instead of split
     # between this endpoint and the graph node.
     with get_conn(DB_PATH) as conn:
         item = conn.execute(
-            "SELECT id FROM review_item WHERE id = ? AND status = 'open'", (review_item_id,)
+            "SELECT id, company_id FROM review_item WHERE id = ? AND status = 'open'",
+            (review_item_id,),
         ).fetchone()
         if item is None:
             raise HTTPException(404, "review item not found or already resolved")
+        if item["company_id"] != membership.company_id:
+            raise HTTPException(403, "Not a member of this company")
 
     try:
         result = PIPELINE.invoke(
@@ -182,7 +345,9 @@ def resolve_review(review_item_id: int, thread_id: str, body: ReviewResolution) 
 
 
 @app.get("/api/review")
-def list_review_items(company_id: int) -> list[dict]:
+def list_review_items(
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> list[dict]:
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT r.*, d.filename AS document_filename, "
@@ -192,47 +357,63 @@ def list_review_items(company_id: int) -> list[dict]:
             " substr(d.sha256, 1, 12) AS thread_id "
             "FROM review_item r JOIN document d ON d.id = r.document_id "
             "WHERE r.company_id = ? AND r.status = 'open' ORDER BY r.id DESC",
-            (company_id,),
+            (membership.company_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
 @app.get("/api/expectations")
-def list_expectations(company_id: int) -> list[dict]:
+def list_expectations(
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> list[dict]:
     """The gap analysis. INDEXING.md §0 — dashed lines on the timeline."""
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT * FROM expectation WHERE company_id = ? ORDER BY status, due_on",
-            (company_id,),
+            (membership.company_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
 @app.get("/api/obligations")
-def list_obligations(company_id: int) -> list[dict]:
+def list_obligations(
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> list[dict]:
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT * FROM obligation WHERE company_id = ? ORDER BY due_on",
-            (company_id,),
+            (membership.company_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
 @app.get("/api/documents")
-def list_documents(company_id: int) -> list[dict]:
+def list_documents(
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> list[dict]:
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT id, filename, lane, doc_type, status, received_at "
             "FROM document WHERE company_id = ? ORDER BY received_at DESC",
-            (company_id,),
+            (membership.company_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
 @app.get("/api/trace/{document_id}")
-def get_trace(document_id: int) -> dict:
+def get_trace(
+    document_id: int,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> dict:
     """Agent trace panel. ARCHITECTURE.md §6/§7 — cost per document."""
     with get_conn(DB_PATH) as conn:
+        doc = conn.execute(
+            "SELECT company_id FROM document WHERE id = ?", (document_id,)
+        ).fetchone()
+        if doc is None:
+            raise HTTPException(404, "document not found")
+        if doc["company_id"] != membership.company_id:
+            raise HTTPException(403, "Not a member of this company")
         rows = conn.execute(
             "SELECT * FROM trace WHERE document_id = ? ORDER BY at", (document_id,)
         ).fetchall()

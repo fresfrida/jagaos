@@ -1,15 +1,18 @@
 # Kanban
 
-Updated 2026-09-21.
+Updated 2026-09-22.
 
 ## Backlog
+- [ ] **Real magic-link email**, replacing `dev-login`'s placeholder (`app/auth.py`'s docstring, DECISIONS #30) — needed before this backend is ever internet-reachable (Lightsail), since anyone who knows/guesses an email can currently "log in" as it. Fine for today's local-Mac demo, not fine beyond that.
+- [ ] **`document.sha256` is UNIQUE globally, not per-company** (`app/db.py`) — found live 2026-09-22 seeding a second "Try Demo Pte Ltd": every upload came back `duplicate` because company #1 already held byte-identical files, even though it's a different company/tenant entirely. Needs `UNIQUE(company_id, sha256)` instead of a bare column constraint — SQLite can't `ALTER` a table's unique constraint, so this is a rebuild-the-table migration, not a one-line fix. Low urgency for the single-demo-company submission path, real before any second real tenant exists.
+- [ ] Member-management UI (frontend) for `POST/GET /api/companies/{id}/members` (backend done, tested — `tests/test_auth.py`) — right now the only way to add a teammate with a role is `curl`/Swagger
+- [ ] Company settings page (edit name/FYE) — owner-only per the permissions table in `app/auth.py`'s docstring, no UI yet
+- [ ] A polished product frame distinct from `/ops`'s debug-console styling, per `PLATFORM.md`'s original vision (dedicated obligations/gap-analysis views, not shared tables) — `/ops` is now genuinely the logged-in app (session + role-gated), just not restyled beyond its original debug-tool look
 - [ ] **Root planning docs moved to `MDs/`** (user's own reorganization, 2026-09-22 — not a session mistake, confirmed). Every doc/code comment across this repo that references e.g. "`GAPS.md`", "`ARCHITECTURE.md`" by its old root-relative name is now technically pointing at a moved file (they're still readable, just at `MDs/GAPS.md` etc. instead). Not rewritten yet — a lot of references, low urgency since they're still findable, but worth a pass before the write-up/submission cites specific paths.
 - [ ] Semantic (not substring) doc_type matching in `app/graph/derive_expectations.py::_matches_doc_type` — the current fix is real but will miss a differently-worded doc_type (e.g. "Reg. of Members" vs `share_register`)
-- [ ] Build the review-queue UI in `/ops` (backend resolve path is now verified live — `tests/test_pipeline_review_diagnostic.py` — but there's no frontend for it yet, still Swagger/curl-only)
 - [ ] Expand `evals/demo_corpus/` (currently 8 documents) if a bigger synthetic set would strengthen the write-up's Impact & Outcomes numbers — team decision, not a technical blocker
 - [ ] Decide whether to load the team's real "19 documents, 14 held" **checklist** (the list of expected doc types, not the actual files) into `app/rules/expectations.py` — currently a small placeholder starter set. The checklist itself isn't personal data the way the documents are, so this may not have the same privacy concern the team raised about uploading real documents.
-- [ ] Scheduler (`APScheduler`) + Telegram bot — "the clock" per `MOAT.md`'s one-liner; nothing plays the escalation-ladder demo beat without it
-- [ ] Multi-user layer from `PLATFORM.md` (`user`, `membership`, `session`, magic links, hash-chained `audit_log`) — deferred until the core loop above is proven on a real document
+- [ ] Scheduler (`APScheduler`) + Telegram bot — "the clock" per `MOAT.md`'s one-liner; nothing plays the escalation-ladder demo beat without it. **Explicitly deprioritized 2026-09-22** (DECISIONS #28) — no more backend pipeline work until the logged-in app flow is proven.
 - [ ] Golden-path eval cases (`evals/cases/golden/`) — needs ~15 labelled real documents once the gateway is confirmed working
 - [ ] Swap `MemorySaver` for a durable LangGraph checkpointer before relying on human-review pause/resume past a demo session
 - [ ] Fill in `docs/WRITEUP.md` (write-up PDF draft) as real KPIs/timestamps land; keep its claim↔evidence table in sync with `SUBMISSION.md` §3
@@ -21,10 +24,8 @@ Updated 2026-09-21.
 - [ ] Commit the route-based build (waiting for an explicit request)
 - [ ] Decide whether the landing should also link How it works / Stack
 - [ ] Add lint + a test runner (vitest) and cover `parseHash` and `memoryMatching`
-- [ ] Real Log In page (currently a placeholder anchor)
 - [ ] If wanted: separate routes/pages for Calendar and Tags instead of one frame with two tabs
 - [ ] Replace `mockSearchService` with a fetch to a real endpoint once `app/` has one (recall graph, ARCHITECTURE.md §3, not built yet)
-- [ ] Real sign-in page (magic link) behind "Sign In"
 - [ ] Pricing / Security / Use Cases sections or pages; repoint nav links
 - [ ] Footer link targets
 - [ ] Self-host fonts (drop Google Fonts request)
@@ -36,6 +37,7 @@ Updated 2026-09-21.
 - (none)
 
 ## Done
+- [x] 2026-09-22 **Auth + 4-role model, the logged-in core loop** (DECISIONS #28–31): `app_user`/`membership`/`session` tables; `app/auth.py` (session dependency, `require_role`, role order viewer<user<admin<owner); `dev-login`/`me`/`logout` + member-add/list endpoints; every existing data endpoint now requires a session and derives `company_id` from it instead of a trusted client parameter (real tenant-isolation fix, not just a login UX one). Frontend: `features/auth/` (session context + client), `/login` page, `/ops` reworked to be session-scoped and role-aware (upload hidden below `user`, review resolve hidden below `admin`) instead of its own company picker. Consolidated the frontend's two duplicate `fetch` wrappers into one `web/src/lib/apiClient.ts` (also fixed raw-JSON error messages in the process). New tests: `tests/test_auth.py`, 9/9, gateway-free (login, role gates, tenant isolation, missing/garbage token). Full suite 20/20. Typecheck + build clean. Verified live in a real (headless, system Chrome via Playwright) browser: empty login form, owner signup -> redirect to `/ops` showing company/role, second email without a company fails cleanly with a readable error, header shows email + Log Out. Screenshots taken during the session (scratchpad, not committed).
 - [x] 2026-09-22 GitHub repo created and everything pushed: `github.com/fresfrida/jagaos` (private), `main` branch, AWS Innovation Sandbox access confirmed working (`aws sts get-caller-identity`, account 443670029323, role via IAM Identity Center SSO). One commit, 106 files — the full backend, evals, tests, and the already-in-progress frontend routing work that was sitting uncommitted.
 - [x] 2026-09-22 Vercel `jagaos` connected to `github.com/fresfrida/jagaos` for git-based auto-deploy (needed two manual owner steps first: a GitHub login connection on the Vercel account, then installing the Vercel GitHub App with access to the repo — neither doable from the CLI). Root Directory set to `web` (the repo is no longer web-only). Deployment protection re-verified `all` via the API afterward — held, did not reset.
 - [x] 2026-09-21 backend skeleton (`app/`, `ARCHITECTURE.md` §9 layout): SQLite schema (10 tables), Pydantic tool contracts, gateway client with cost accounting, local text extraction (pdfplumber/pytesseract/EXIF), injection guardrail, statutory-calendar + gap-analysis rules, authority-separated status transitions, full LangGraph pipeline (ingest→classify→extract→verify→human_review→derive_events→derive_expectations→derive_obligations→archive) with `interrupt()`, FastAPI endpoints. Installed into conda env `agent`.
@@ -63,7 +65,7 @@ Updated 2026-09-21.
 ## Blocked / needs a decision
 - [ ] Lightsail migration needs: spend approval (~$24/mo of the USD 100 credit; AWS access path resolved 2026-09-22, see Done) and a decision on UAT access control there.
 - [ ] Repo is private for now (`github.com/fresfrida/jagaos`) — flip to public + add a license (MIT/Apache-2.0, `SUBMISSION.md` §5) before the 28 Sep submission. Decide whether the root strategy docs (`STRATEGY.md`, `WINNING.md`, `MOAT.md`) belong in a public repo, and re-run `scripts/prepush-check.sh` (also update it — it currently flags `.env`/`.vercel` by mere existence, not by git-tracked status, which is now a false positive now that local dev needs `.env`) before flipping visibility.
-- [ ] Standing rule (DECISIONS #26): deploy every change to UAT with `vercel deploy --prod --yes` from `web/` (Vercel's target name; this is UAT), then check logged-out 302 and a deep path. Delete `web/.vercel/` before any git push.
+- [ ] Standing rule (DECISIONS #26): every change reaches UAT. **Mechanism changed 2026-09-22**: git-based auto-deploy on push to `main` now does this (no more manual `vercel deploy --prod --yes` needed) — but push itself still needs an explicit ask (commit/push were never covered by #26). Check logged-out 302 and a deep path after any push that touches `web/`.
 - [x] Vercel team scope is now `fresfrida` (renamed 2026-09-21; team ID unchanged). Local CLI link still valid: project `jagaos` is found under `fresfrida`. Dashboard: vercel.com/fresfrida.
 - [ ] Old Vercel project `jaga` is being retired: never deploy to it. The UAT project is `jagaos` under scope `fresfrida`.
 - [ ] Names may still appear inside screenshots/PDFs in `admin/`, `Kiro/`, `DB/` (images not scanned). Check before making the repo public.

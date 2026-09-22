@@ -1,13 +1,16 @@
 import { Container } from '../components/ui/Container'
 import { ButtonLink } from '../components/ui/ButtonLink'
 import { Logo } from '../components/ui/Logo'
+import { useAuth } from '../features/auth/AuthContext'
 import { useScrolled } from '../hooks/useScrolled'
 import { cn } from '../lib/cn'
+import { navigate } from '../router/navigate'
 import { Link } from '../router/Link'
 import { ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute } from '../router/routes'
 
 export function Header({ current }: { current: ResolvedRoute }) {
   const scrolled = useScrolled()
+  const { status, user, logout } = useAuth()
 
   return (
     <header
@@ -43,10 +46,23 @@ export function Header({ current }: { current: ResolvedRoute }) {
           </nav>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          {/* Placeholder target until there is a real sign-in page. */}
-          <Link href={routeHref('get-started')} className="rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3">
-            Log In
-          </Link>
+          {status === 'signed-in' && user ? (
+            <>
+              <Link href={routeHref('ops')} className="hidden truncate text-[13px] text-muted sm:block sm:max-w-[160px]">
+                {user.name || user.email}
+              </Link>
+              <button
+                onClick={() => void logout().then(() => navigate(routeHref('home')))}
+                className="rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3"
+              >
+                Log Out
+              </button>
+            </>
+          ) : (
+            <Link href={routeHref('login')} className="rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3">
+              Log In
+            </Link>
+          )}
           {/* Hidden on phones: it duplicates the Calendar tab and the row would not fit. */}
           <span className="hidden sm:block">
             <ButtonLink href={routeHref('calendar')} size="sm">

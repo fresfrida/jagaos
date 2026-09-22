@@ -24,7 +24,8 @@ os.environ["JAGA_DB_PATH"] = _TEST_DB
 
 _TABLES = [
     "notification", "security_event", "trace", "review_item", "obligation",
-    "expectation", "event", "extraction", "document", "company",
+    "expectation", "event", "extraction", "document", "session", "membership",
+    "app_user", "company",
 ]
 
 

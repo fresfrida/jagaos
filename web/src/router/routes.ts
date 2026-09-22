@@ -1,7 +1,7 @@
 import { PRODUCT_NAME } from '../config/product'
 
 /** Real URL paths (/calendar), served by the SPA fallback on Vite, Caddy and Vercel (see web/vercel.json). */
-export type RouteId = 'home' | 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'get-started' | 'ops'
+export type RouteId = 'home' | 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'get-started' | 'login' | 'ops'
 export type ResolvedRoute = RouteId | 'not-found'
 /** Pages that share the title + content layout. */
 export type FrameRouteId = 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'ops'
@@ -31,10 +31,11 @@ export const ROUTES: Record<RouteId, RouteConfig> = {
     description: 'A small, auditable stack: each part has a single responsibility.',
   },
   'get-started': { path: '/get-started', title: 'Get started' },
+  login: { path: '/login', title: 'Log in' },
   ops: {
     path: '/ops',
-    title: 'Ops console',
-    description: 'Real backend test console — upload a document, see classify/extract/verify, gap analysis and obligations. Not part of the product UI.',
+    title: 'Your documents',
+    description: 'Add a document, watch it get classified and extracted, confirm anything flagged, and see the obligations and gaps it produces.',
   },
 }
 

@@ -38,22 +38,25 @@ def main() -> None:
     db_module.init_db(DB_PATH)
     client = TestClient(app)
 
-    company = client.post(
-        "/api/companies",
-        params={
-            "name": "Bright Harbour Pte Ltd",
+    # 2026-09-22: every data endpoint now requires a session
+    # (app/auth.py) — sign in via dev-login (real magic-link email isn't
+    # set up; see its docstring) rather than the old open POST /api/companies.
+    auth = client.post(
+        "/api/auth/dev-login",
+        json={
+            "email": "demo-corpus@jagaos.test",
+            "company_name": "Bright Harbour Pte Ltd",
             "fye_month": 12,
             "fye_day": 31,
-            "uen": "202312345A",
-            "gst_registered": True,
         },
     ).json()
-    company_id = company["id"]
+    headers = {"Authorization": f"Bearer {auth['token']}"}
 
     lines = [
         "# Demo corpus run — Bright Harbour Pte Ltd (synthetic)",
         "",
-        f"Run at {datetime.now(timezone.utc).isoformat()}",
+        f"Run at {datetime.now(timezone.utc).isoformat()}, company #{auth['company']['id']}, "
+        f"logged in as {auth['user']['email']} ({auth['role']})",
         "",
         "**This is a fictional company and a synthetic document set** "
         "(WINNING.md's \"clearly-labelled active-SME corpus\"), used in "
@@ -71,8 +74,9 @@ def main() -> None:
         with open(path, "rb") as f:
             resp = client.post(
                 "/api/documents",
-                params={"company_id": company_id, "source_channel": "web"},
+                params={"source_channel": "web"},
                 files={"file": (path.name, f, "application/pdf")},
+                headers=headers,
             )
         body = resp.json()
         status = body.get("status")
@@ -89,9 +93,9 @@ def main() -> None:
                 note = f"obligations_created={body.get('obligations_created')}"
         lines.append(f"| {path.name} | {status} | {lane_type} | {note} |")
 
-    expectations = client.get("/api/expectations", params={"company_id": company_id}).json()
-    obligations = client.get("/api/obligations", params={"company_id": company_id}).json()
-    documents = client.get("/api/documents", params={"company_id": company_id}).json()
+    expectations = client.get("/api/expectations", headers=headers).json()
+    obligations = client.get("/api/obligations", headers=headers).json()
+    documents = client.get("/api/documents", headers=headers).json()
 
     satisfied = [e for e in expectations if e["status"] == "satisfied"]
     missing = [e for e in expectations if e["status"] == "missing"]
@@ -119,7 +123,7 @@ def main() -> None:
     total_cost = 0.0
     trace_rows = 0
     for d in documents:
-        trace = client.get(f"/api/trace/{d['id']}").json()
+        trace = client.get(f"/api/trace/{d['id']}", headers=headers).json()
         total_cost += trace.get("total_cost_usd", 0) or 0
         trace_rows += len(trace.get("nodes", []))
 

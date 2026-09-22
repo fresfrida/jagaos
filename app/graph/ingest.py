@@ -40,6 +40,7 @@ def ingest(
     filename: str,
     source_channel: str,
     source_identity: str | None = None,
+    uploaded_by_user_id: int | None = None,
     db_path: str = DB_PATH,
 ) -> PipelineState:
     """Not a LangGraph node itself (it runs before we have a document_id to
@@ -72,12 +73,12 @@ def ingest(
         cur = conn.execute(
             "INSERT INTO document "
             "(company_id, sha256, filename, media_type, bytes, stored_path, "
-            " source_channel, source_identity, occurred_on, status, "
+            " source_channel, source_identity, uploaded_by_user_id, occurred_on, status, "
             " extracted_text, text_source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?)",
             (
                 company_id, sha, filename, media_type, src.stat().st_size,
-                str(stored_path), source_channel, source_identity,
+                str(stored_path), source_channel, source_identity, uploaded_by_user_id,
                 exif_data.get("occurred_on"), text, text_source,
             ),
         )

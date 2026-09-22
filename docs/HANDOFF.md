@@ -1,20 +1,27 @@
 # Handoff
 
-Last updated: 2026-09-21. Read this first when resuming.
+Last updated: 2026-09-22. Read this first when resuming.
+
+**Priority as of 2026-09-22 (DECISIONS #28): the product is testing agents
+IN the app.** Backend pipeline work (classify/extract/verify/etc.) and
+deploy plumbing (Vercel auto-deploy) are both treated as done for now. What
+matters next is the logged-in, role-based app surface — see "Backend
+status" and "How to resume" below.
 
 ## What this is
 
 **JagaOS** — company memory for SMEs: capture documents, conversations, invoices and decisions, then retrieve them with natural-language search and cited sources.
 
 This repo currently holds:
-- **Planning docs** at the root (`ARCHITECTURE.md`, `PLATFORM.md`, `UI-SPEC.md`, `GAPS.md`, ...). Written for the earlier "JagaOS = Singapore corp-sec records keeper" concept. Useful context, not automatically current. `GAPS.md` §5 is still binding.
-- **`web/`** — the marketing landing page + interactive product preview (this session's work). Frontend only, mock data.
-- **`app/`** — backend skeleton (2026-09-21), per `ARCHITECTURE.md` §9. See "Backend status" below.
+- **Planning docs** at root, moved into `MDs/` by the user 2026-09-22 (`ARCHITECTURE.md`, `PLATFORM.md`, `UI-SPEC.md`, `GAPS.md`, ...). Written for the earlier "JagaOS = Singapore corp-sec records keeper" concept. Useful context, not automatically current. `GAPS.md` §5 is still binding.
+- **`web/`** — the marketing landing page (mock data, logged-out) plus the real logged-in app (`/login`, `/ops`, session-backed). See "Where the main logic lives" below.
+- **`app/`** — backend, per `ARCHITECTURE.md` §9 plus a 4-role auth layer (`app/auth.py`, 2026-09-22, DECISIONS #29-31). See "Backend status" below.
 - **`evals/`** — eval runner + adversarial cases, `evals/report.md` committed (10/10 passing, no gateway key needed).
-- **`tests/`** — pytest smoke tests for the deterministic core (DB schema, statutory rules, injection guardrail, authority-separated transitions). 5/5 passing.
+- **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, and auth/tenant-isolation (`tests/test_auth.py`). 20/20 passing.
 - **`deploy/`** — Lightsail provisioning (Caddy, systemd, `bootstrap.sh`). Untouched.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
+- **GitHub**: `github.com/fresfrida/jagaos` (private). Commit/push still need an explicit ask each time.
 
 ## Backend status (2026-09-21)
 
@@ -97,11 +104,53 @@ documents (≈1.6¢/document, placeholder pricing).
 **Known gaps, in the order they'll bite:**
 - `evals/cases/golden/` is empty — needs ~15 labelled real documents (see `evals/cases/golden/README.md`)
 - `app/rules/expectations.py`'s expected-document-set is a small starter list, **not** the team's real "19 documents, 14 held" checklist — that external data needs to be loaded in before the gap-analysis demo means anything
-- No scheduler (`APScheduler`), no Telegram bot — "the clock" (the actual agent, per `MOAT.md`'s one-liner) doesn't exist yet
-- No multi-user/auth layer (`PLATFORM.md`) — single-tenant only, `company_id` passed as a plain query param, no session/membership tables
+- No scheduler (`APScheduler`), no Telegram bot — "the clock" (the actual agent, per `MOAT.md`'s one-liner) doesn't exist yet. Explicitly deprioritized 2026-09-22 (DECISIONS #28), not a gap to close right now.
 - `LangGraph` checkpointer is `MemorySaver` — a pending human review is lost on server restart; fine for a demo, not for the deployed box without a swap to a durable checkpointer
 - `app/rules/statutory.py`'s Form C-S/C due date (30 Nov) is a working approximation, flagged in its own docstring — confirm before citing a specific date in `docs/WRITEUP.md`
 - `app/llm.py`'s per-token pricing is Anthropic list pricing, not confirmed as the gateway's actual billed rate
+- **`document.sha256` is UNIQUE globally, not per-company** — found live 2026-09-22 seeding a second test company; a byte-identical file can never be uploaded to two different companies. `docs/KANBAN.md` backlog; needs a table rebuild in SQLite, not a one-line fix.
+
+## Auth (added 2026-09-22, DECISIONS #28-31)
+
+Every data endpoint requires a session and derives `company_id` from the
+caller's membership — never from a client-supplied parameter (closes a
+real tenant-isolation gap; every endpoint previously trusted whatever
+`company_id` the client sent). 4 roles, numeric order in `app/auth.py`:
+`viewer < user < admin < owner`. Permissions: viewer reads; user also
+uploads; admin also resolves reviews and adds members; owner also manages
+the company. This is a **simpler, generic set than `PLATFORM.md`'s original
+six** (owner/director/staff/accountant/corpsec/auditor) — a deliberate
+supersession (DECISIONS #29), not an oversight. **Resolved 2026-09-22**:
+corp sec maps to `viewer` (sees everything, changes nothing — already what
+the role does, no new name needed); **one `owner` per company, many
+`admin`s**, enforced in `add_member` (`app/main.py`), not just documented —
+adding a second owner is a 409.
+
+**Login is a placeholder, the session model isn't.** `POST
+/api/auth/dev-login` (email in, session out) exists because no
+email-sending is set up — real magic-link email (`PLATFORM.md`'s original
+design) would swap only that endpoint's internals, not the session/role
+model downstream. **This means anyone who knows/guesses an email can log in
+as it right now** — fine for today's local-Mac-only demo, a real problem
+the moment this backend is reachable from the internet (Lightsail). See
+`app/auth.py`'s module docstring and DECISIONS #30.
+
+Schema: `app_user`, `membership` (`company_id`, `user_id`, `role`),
+`session` (hashed tokens, 7-day TTL). `document.uploaded_by_user_id`
+attributes uploads. Endpoints: `POST /api/auth/dev-login`, `GET
+/api/auth/me`, `POST /api/auth/logout`, `GET`/`POST
+/api/companies/{id}/members`. Tests: `tests/test_auth.py` (9/9, no gateway
+key needed — pure DB/HTTP against `TestClient`).
+
+Frontend: `web/src/features/auth/` (`AuthContext`/`useAuth`, `authApi.ts`
+for session storage + the auth calls), `web/src/pages/LoginPage.tsx`.
+`/ops` (`web/src/features/ops/OpsConsole.tsx`) is now session-scoped and
+role-aware — upload hidden below `user`, review Accept/Reject hidden below
+`admin` — instead of its own company create/switch UI. `web/src/lib/apiClient.ts`
+is the one shared fetch wrapper both `authApi.ts` and `opsApi.ts` use (was
+two separate copies before 2026-09-22; also where FastAPI's `{"detail":
+...}` error bodies get turned into a plain message instead of showing raw
+JSON in the UI).
 
 ## Environments
 
@@ -133,6 +182,10 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Route → page mapping; shared frame shell | `pages/Page.tsx`, `pages/FramePage.tsx` |
 | App window chrome around Calendar/Tags | `features/preview/ProductFrame.tsx` |
 | Reusable UI | `components/ui/*` (Button, Badge, Card, Container, Reveal, EmptyState, MemoryCard, SourceLabel, Logo) |
+| Session state, login/logout, role helpers | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
+| Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
+| The real logged-in app: upload, review queue, gap analysis, obligations, trace | `features/ops/OpsConsole.tsx`, `features/ops/opsApi.ts` |
+| Login form | `pages/LoginPage.tsx` |
 
 ## Commands (run in `web/`)
 
@@ -169,7 +222,7 @@ see the callout below on why that matters for `/ops` specifically.
 
 ## Known risks
 
-- Header: logo, tabs Calendar and Tags (`aria-current` on the active one), Log In, Get Started (hidden on phones). The old nav (Product, Use Cases, Security, Stack, Pricing) is gone. The landing (`/`) is hero-only. `/how-it-works`, `/stack` and `/get-started` still exist but have no header tab; they are reached from the footer (Guides, Security) and "Log In". Other footer labels are plain-text placeholders.
+- Header: logo, tabs Calendar and Tags (`aria-current` on the active one), Log In / (email + Log Out when signed in), Get Started (hidden on phones). The old nav (Product, Use Cases, Security, Stack, Pricing) is gone. The landing (`/`) is hero-only. `/how-it-works`, `/stack` and `/get-started` still exist but have no header tab; they are reached from the footer (Guides, Security). Other footer labels are plain-text placeholders. "Log In" now goes to a real `/login` (dev-login placeholder — see the Auth section above for what that means and doesn't mean).
 - The landing has no footer and no scroll, but the hero grows if search results are shown on a very short viewport (verified fine at 1440x900).
 - DB schema screenshots are Postgres-flavoured (uuid, enums, `vector(1536)`, RLS, Supabase `auth_subject`); the chosen store is SQLite. Mapping is unresolved.
 - Python version drift: `ARCHITECTURE.md` says 3.11, `bootstrap.sh` installs 3.12, conda env `agent` is 3.11.15.
@@ -179,6 +232,8 @@ see the callout below on why that matters for `/ops` specifically.
 
 ## How to resume
 
-1. `cd web && npm install && npm run dev`
-2. Read `docs/KANBAN.md` (Doing / Blocked) and `docs/DECISIONS.md`.
-3. Next real milestone: backend skeleton + resolve the schema-to-SQLite mapping, then replace `mockSearchService`.
+1. Read `docs/KANBAN.md` (Doing / Blocked) and `docs/DECISIONS.md`, especially #28-31.
+2. Start both servers: `uvicorn app.main:app --reload` from repo root (backend), `cd web && npm run dev` (frontend, local iteration — the deployed `https://jagaos.vercel.app` is what actually gets checked on the phone, per the Commands section above).
+3. `python scripts/seed_dev_db.py` if you want a company with data already in it (idempotent — safe to re-run) rather than starting from an empty `/login` signup.
+4. Log in at `/login`, land on `/ops`, upload a document, watch it get classified/extracted, resolve anything flagged, see the gap analysis and obligations. That loop working, end to end, in the browser, is the current bar — not another backend node.
+5. Next real milestones, in the order they'd bite: member-management UI (backend's done, no frontend), a company settings page, a product frame with its own styling instead of `/ops`'s debug-console look (`docs/KANBAN.md` Backlog has the full list).

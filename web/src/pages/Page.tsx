@@ -8,6 +8,7 @@ import { HowItWorks } from '../sections/HowItWorks'
 import { StackList } from '../sections/StackList'
 import { FramePage } from './FramePage'
 import { GetStartedPage } from './GetStartedPage'
+import { LoginPage } from './LoginPage'
 import { NotFoundPage } from './NotFoundPage'
 
 /** Maps a route to its page. Pages compose features; they hold no logic of their own. */
@@ -45,6 +46,8 @@ export function Page({ route }: { route: ResolvedRoute }) {
       )
     case 'get-started':
       return <GetStartedPage />
+    case 'login':
+      return <LoginPage />
     case 'ops':
       return (
         <FramePage route="ops">
