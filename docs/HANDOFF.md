@@ -323,6 +323,21 @@ other eight **"No document date (8)"** rather than hiding them. Screenshots:
 `ops-dates-upload-date.png`, `ops-dates-document-date.png`,
 `ops-live-upload-receivables-detected.png`.
 
+**`doc_type` dropdown + `vendor_name` autocomplete (2026-09-22, DECISIONS
+#45) — amendment to the metadata rework above.** Rule: category fields are
+dropdowns, name fields are free text with autocomplete. `doc_type` is now
+a `<select>` hard-locked to `DOC_TYPES` (mirrors `classify.py`'s prompt
+vocabulary) for every lane except statutory, which keeps the free-text
+input it already had (its doc_type is a name, not a category — forcing it
+into a dropdown would break `derive_expectations.py`'s slug matching). A
+value outside `DOC_TYPES` gets a synthesized "(legacy)" option rather than
+vanishing. `vendor_name` stays free text with a shared `<datalist>`
+autocomplete sourced from this company's existing vendor names (no new
+endpoint). `bucket`'s server-side rejection was re-verified live (422 on
+an invalid value), not assumed. Typecheck/build clean, suite still 31/31.
+Screenshots: `docs/screenshots/ops-doctype-dropdown-invoice-lane.png`,
+`ops-doctype-freetext-statutory-lane.png`, `ops-vendor-autocomplete.png`.
+
 **Known gaps, in the order they'll bite:**
 - `evals/cases/golden/` is empty — needs ~15 labelled real documents (see `evals/cases/golden/README.md`)
 - `app/rules/expectations.py`'s expected-document-set is a small starter list, **not** the team's real "19 documents, 14 held" checklist — that external data needs to be loaded in before the gap-analysis demo means anything

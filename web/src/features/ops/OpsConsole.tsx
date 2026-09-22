@@ -217,7 +217,7 @@ function DocumentViewerModal({
 }
 
 const FIELD_CLASS =
-  'mt-1 block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted'
+  'block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted'
 
 /** doc_type as a dropdown, hard-locked to DOC_TYPES — EXCEPT the statutory
  * lane, which stays free text (2026-09-22, DECISIONS #45: category fields
@@ -226,27 +226,32 @@ const FIELD_CLASS =
  * expectation slugs by derive_expectations.py::_matches_doc_type, not a
  * closed vocabulary, so forcing it into DOC_TYPES would break gap
  * matching). Shared by ReviewQueueCard and DocumentCard so the lane-based
- * branch exists in exactly one place. A current value outside DOC_TYPES
- * (a pre-rework document, classified before this vocabulary existed) gets
- * its own "(legacy)" option instead of silently vanishing from the
- * dropdown or being coerced to something else on save. */
+ * branch exists in exactly one place; `className` is supplied by the
+ * caller rather than fixed here since the two cards' surrounding layout
+ * differs (one sits under a visible `<label>` and needs `mt-1`, the other
+ * doesn't). A current value outside DOC_TYPES (a pre-rework document,
+ * classified before this vocabulary existed) gets its own "(legacy)"
+ * option instead of silently vanishing from the dropdown or being coerced
+ * to something else on save. */
 function DocTypeField({
   lane,
   value,
   disabled,
   onChange,
+  className,
 }: {
   lane: string | null
   value: string
   disabled: boolean
   onChange: (value: string) => void
+  className: string
 }) {
   if (lane === 'statutory') {
-    return <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={FIELD_CLASS} />
+    return <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={className} />
   }
   const isLegacyValue = value !== '' && !(DOC_TYPES as readonly string[]).includes(value)
   return (
-    <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={FIELD_CLASS}>
+    <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={className}>
       <option value="">—</option>
       {isLegacyValue && <option value={value}>{value} (legacy)</option>}
       {DOC_TYPES.map((dt) => (
@@ -395,11 +400,12 @@ function ReviewQueueCard({
           </label>
           <label className="text-[12px] text-muted">
             Doc type
-            <input
+            <DocTypeField
+              lane={item.document_lane}
               value={docType}
               disabled={!canResolve}
-              onChange={(e) => setDocType(e.target.value)}
-              className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+              onChange={setDocType}
+              className={`mt-1 ${FIELD_CLASS}`}
             />
           </label>
           <label className="text-[12px] text-muted">
@@ -408,6 +414,7 @@ function ReviewQueueCard({
               value={vendorName}
               disabled={!canResolve}
               placeholder="—"
+              list={VENDOR_NAMES_DATALIST_ID}
               onChange={(e) => setVendorName(e.target.value)}
               className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
             />
@@ -569,16 +576,12 @@ function DocumentCard({
               <option key={b} value={b}>{b}</option>
             ))}
           </select>
-          <input
-            value={docType}
-            onChange={(e) => setDocType(e.target.value)}
-            placeholder="Doc type"
-            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
-          />
+          <DocTypeField lane={doc.lane} value={docType} disabled={false} onChange={setDocType} className={FIELD_CLASS} />
           <input
             value={vendorName}
             onChange={(e) => setVendorName(e.target.value)}
             placeholder="Vendor name"
+            list={VENDOR_NAMES_DATALIST_ID}
             className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
           />
           <input
@@ -891,9 +894,18 @@ export function OpsConsole() {
   const visibleDocuments = activeBucketFilter
     ? archivedFiltered.filter((d) => d.bucket === activeBucketFilter)
     : archivedFiltered
+  // 2026-09-22 (DECISIONS #45): vendor_name autocomplete source — distinct
+  // values already on this company's documents, no new endpoint. Sourced
+  // from the full `documents` list (not search/bucket-filtered) so the
+  // suggestions don't shrink just because the Documents tab has a filter
+  // active.
+  const vendorNames = [...new Set(documents.map((d) => d.vendor_name).filter((v): v is string => Boolean(v)))].sort()
 
   return (
     <div className="space-y-6">
+      <datalist id={VENDOR_NAMES_DATALIST_ID}>
+        {vendorNames.map((v) => <option key={v} value={v} />)}
+      </datalist>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
         <span className="inline-flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${apiUp ? 'bg-sage' : 'bg-red-500'}`} aria-hidden="true" />
