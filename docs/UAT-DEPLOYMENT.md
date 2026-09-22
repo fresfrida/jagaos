@@ -17,9 +17,10 @@ Status: **tentative**, agreed 2026-09-21, updated same day (placeholder retired)
 1. **Lightsail is the only real deployment.** The submission's "Deployment evidence / URL" is the Lightsail instance. Nothing else is ever cited as evidence.
 2. **Vercel is UAT only.** The UAT copy of the frontend runs on Vercel behind a login. Real production is AWS Lightsail (GAPS §5). Never cite the Vercel URL in the README, write-up, video, slides or the submission's deployment-evidence field.
 3. **Sign-off happens on Lightsail.** A Vercel pass means "looks right". It does not mean "accepted". Final UAT sign-off requires the checklist below on the Lightsail URL.
-4. **The API is same-origin.** The frontend calls relative `/api/...`. No absolute API URLs in `web/`, no CORS allowance for preview domains, no `*.vercel.app` in backend config.
-5. **Frontend only on Vercel.** No backend, no secrets, no env values, no real data. The build uses mock data.
+4. **The product pages are same-origin; `/ops` is a deliberate, documented exception.** `/`, `/calendar`, `/tags` etc. call relative `/api/...` against mock data — no absolute API URLs, no CORS allowance, no `*.vercel.app` in backend config, unchanged. **`/ops`** (added 2026-09-22, `web/src/features/ops/`) is a real backend test console, not part of the product — it calls an absolute `VITE_API_BASE_URL` and `app/main.py` allows `https://jagaos.vercel.app` in CORS so it *can* work once the backend is publicly reachable. It doesn't work yet (backend is localhost-only) — see `docs/HANDOFF.md`'s callout. Don't read this exception as license to loosen rule 4 for the actual product pages.
+5. **Frontend only on Vercel.** No backend, no secrets, no env values, no real data, for the product pages. The `/ops` exception above is dev tooling, not the product, and still carries no secrets (the gateway key lives in the backend's own `.env`, never in `web/`).
 6. **Standing permission (2026-09-21, "for now"):** every change is deployed to the UAT (Vercel `jagaos`, behind login) so the owner can see it. Nothing else is pre-approved: commits, pushes, any new URL, and any other host still need an explicit yes. Withdraw this rule when the owner says so.
+7. **(2026-09-22) Testing shifted to the deployed UAT URL, not `npm run dev`.** The owner tests on their phone against `https://jagaos.vercel.app`, so it needs to stay current — this is why git-based auto-deploy (below) matters now. `npm run dev` is still fine for active local iteration, but isn't what gets checked on the phone until it's pushed and deployed.
 
 ## Why (the four risks this mitigates)
 
@@ -32,11 +33,13 @@ Status: **tentative**, agreed 2026-09-21, updated same day (placeholder retired)
 
 ## Vercel UAT deployment (login required)
 
-Project `jagaos` under scope `fresfrida` is the **UAT environment**. Its `.vercel.app` alias serves the real app (the frontend) behind Vercel Authentication. The earlier placeholder page is **retired** (2026-09-21).
+Project `jagaos` under scope `fresfrida` is the **UAT environment**. Its `.vercel.app` alias (`https://jagaos.vercel.app`) serves the real app (the frontend) behind Vercel Authentication. The earlier placeholder page is **retired** (2026-09-21).
 
-**Why this is safe now:** the project's Deployment Protection level is `all` (API value; dashboard: Vercel Authentication → All Deployments). Under the earlier level, `all_except_custom_domains` (Standard Protection), the production alias was public even with protection "on". Do not lower it.
+**Why this is safe now:** the project's Deployment Protection level is `all` (API value; dashboard: Vercel Authentication → All Deployments). Under the earlier level, `all_except_custom_domains` (Standard Protection), the production alias was public even with protection "on". Do not lower it. **Re-verify this setting holds after connecting git deploy below** — a repo-connection change is a plausible place for a protection setting to silently reset; don't assume it carries over unchecked.
 
-From `web/`:
+**Deploy mechanism, as of 2026-09-22: switching from manual CLI to git-based auto-deploy.** Historically every deploy was a manual `vercel deploy --prod --yes` from `web/`. The owner now wants every push to `main` (`github.com/fresfrida/jagaos`) to deploy automatically, so the phone-tested UAT URL always reflects what's pushed. Status: blocked on a one-time manual step — the `fresfrida` Vercel account needs a GitHub login connection added via the dashboard (Account Settings → Login Connections) before `vercel git connect` will succeed; the CLI cannot do this step. Once connected, also set the project's Root Directory to `web` (the repo is no longer web-only — `app/`, the Python backend, now lives at root too, and a git-based build checks out the whole repo).
+
+Manual deploy (still works, useful if auto-deploy is ever down or for a one-off preview) — from `web/`:
 
 ```bash
 npm run typecheck && npm run build     # must pass first

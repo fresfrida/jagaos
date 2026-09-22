@@ -23,13 +23,21 @@ from app.models import ReviewResolution  # noqa: E402
 
 app = FastAPI(title="JagaOS API")
 
-# Local-dev only: the Vite dev server runs on a different origin (5173 vs
-# this app's 8000), so the browser blocks fetch() without this. Tighten to
-# the real deployed frontend origin before Lightsail (ARCHITECTURE.md §8
-# serves both behind the same Caddy host, so this won't be needed there).
+# The Vite dev server runs on a different origin than this app (5173 vs
+# 8000), so the browser blocks fetch() without this. https://jagaos.vercel.app
+# is listed too so /ops keeps working once it can reach a public backend —
+# it can't yet (docs/HANDOFF.md: Vercel hosts the static frontend only, not
+# this Python process; VITE_API_BASE_URL is still localhost-only). Tighten to
+# just the real deployed frontend origin once Lightsail replaces both
+# (ARCHITECTURE.md §8 serves them behind the same Caddy host, so this whole
+# CORS block goes away there — same-origin needs none of it).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://jagaos.vercel.app",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )

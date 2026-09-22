@@ -136,24 +136,35 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 
 ## Commands (run in `web/`)
 
+**Standing preference (2026-09-22): check the deployed Vercel UAT URL
+(`https://jagaos.vercel.app`, login required) first, not `npm run dev`.**
+The user tests on their phone against that URL, so it needs to actually be
+current — that's what git-based auto-deploy (below) is for. Reach for
+`npm run dev` only when actively iterating on frontend code locally, and
+remember the deployed site won't reflect that iteration until it's pushed.
+
 ```bash
 npm install
-npm run dev          # http://localhost:5173
+npm run dev          # local iteration only — http://localhost:5173, not what's tested on the phone
 npm run typecheck    # tsc, strict (there is no lint or test runner yet)
 npm run build        # typecheck + production build to web/dist
 npm run preview      # serve dist on :4173
 ```
 
-Python (nothing to run yet): `conda activate agent` (conda env, Python 3.11, lives outside the repo at `/opt/anaconda3/envs/agent`).
+Python backend: `conda activate agent` (conda env, Python 3.11, lives
+outside the repo at `/opt/anaconda3/envs/agent`), then
+`uvicorn app.main:app --reload` from the repo root. Also localhost-only —
+see the callout below on why that matters for `/ops` specifically.
 
 ## Deployment notes
 
-- **Vercel UAT (login required):** project `jagaos`, scope `fresfrida`. The `.vercel.app` alias serves the real app; project protection is `all`, so logged-out requests get 302 to Vercel login (verified 2026-09-21). The placeholder page is retired. Runbook and post-deploy check: `docs/UAT-DEPLOYMENT.md`. Real production = AWS Lightsail (GAPS §5), not deployed yet; migrate UAT there later.
-- **The UAT URL serves the current working tree** (path routes + layout-shift fix), deployed 2026-09-21 under the standing rule "deploy every change to UAT" (DECISIONS #26). Direct hits like `/calendar` work through `web/vercel.json` (verified). Unknown paths return HTTP 200 with the Not found page (SPA soft-404). **The code is not committed** (latest commit `2bf00b3` is older than what is live).
-- Git: local repo initialised 2026-09-21 with one commit; **no remote configured, nothing pushed**. Commit and push still need an explicit request. `web/.vercel/` exists locally for deploys: delete it before any push (the pre-push check fails while it exists). Local author is the neutral `JagaOS`.
+- **Vercel UAT (login required):** project `jagaos`, scope `fresfrida`, alias `https://jagaos.vercel.app`. Project protection is `all`, so logged-out requests get 302 to Vercel login (verified 2026-09-21, re-verified 2026-09-22). Runbook and post-deploy check: `docs/UAT-DEPLOYMENT.md`. Real production = AWS Lightsail (GAPS §5), not deployed yet; migrate UAT there later.
+- **Git-based auto-deploy** (`vercel git connect` to `github.com/fresfrida/jagaos`) — in progress 2026-09-22, blocked on the `fresfrida` Vercel account needing a GitHub login connection added first (account-level, one-time, via the Vercel dashboard — not something the CLI or an agent can do). Once connected, every push to `main` deploys automatically; Root Directory needs setting to `web` (the repo is no longer web-only — it now holds the Python backend at root too).
+- **⚠ `/ops` will not work from the phone via the Vercel URL, even after auto-deploy is set up.** It's a real backend console (`web/src/features/ops/OpsConsole.tsx`), not mock data, and its `VITE_API_BASE_URL` currently points at `http://127.0.0.1:8000` — reachable only from the same Mac running `uvicorn`. Vercel hosts the static frontend only; it does not run the Python backend. Until the backend is reachable from the internet (Lightsail, or an interim tunnel), `/ops` only works against `localhost` regardless of where the frontend itself is deployed. The marketing/product pages (`/`, `/calendar`, `/tags` — mock data via `searchService.ts`) have no such dependency and work fine over Vercel today.
+- Repo: `github.com/fresfrida/jagaos` (private), pushed 2026-09-22. Commit and push still need an explicit request each time (standing rule, not automated). `web/.vercel/` exists locally for CLI deploys: keep it out of git (gitignored). Local author is the neutral `JagaOS`.
 - `bootstrap.sh` puts the static site in `/var/www/jaga/web`; copy `web/dist/*` there.
 - `deploy/Caddyfile` was edited 2026-09-21 so root static files are served (catch-all `handle`). **Not yet validated** with `caddy validate`; do that on the box.
-- UAT and deployment rules (Vercel policy, Lightsail checklist, pre-push check): `docs/UAT-DEPLOYMENT.md`. Run `./scripts/prepush-check.sh` before any push.
+- UAT and deployment rules (Vercel policy, Lightsail checklist, pre-push check): `docs/UAT-DEPLOYMENT.md`. Run `./scripts/prepush-check.sh` before any push (see `docs/KANBAN.md` Blocked — the script currently has two false-positive checks worth fixing).
 - Reverse proxy: `deploy/` uses Caddy; the original brief said Nginx. Undecided, see DECISIONS.md.
 
 ## Known risks
