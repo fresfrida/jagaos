@@ -8,6 +8,7 @@ node_modules/
 dist/
 .DS_Store
 *.db
+data/
 .vercel/
 vercel.json
 # private / third-party material, never commit (admin/ screenshots contain the team API key)
@@ -15,3 +16,11 @@ admin/
 Kiro/
 DB/
 assets/
+!web/vercel.json
+# unexplained backup-looking mirror of the root docs, not authored by this
+# session's work — excluded until its origin/purpose is confirmed, see
+# docs/KANBAN.md
+MDs/
+# regenerated duplicate copies of evals/demo_corpus/files/*, written by
+# evals/demo_corpus/run.py — not meant to be checked in
+evals/demo_corpus/store/

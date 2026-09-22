@@ -57,6 +57,42 @@ the build supports that sentence.
 point. The model is the commodity; the accountability layer is the product.
 That is the same thesis the AWS and DBS judges sell for a living.
 
+## "Isn't this just Siri now?" (added 2026-09-21)
+
+Apple's Siri AI (public launch fall 2026) is the most credible near-term
+counter, and it will come up — judges follow Apple keynotes. Get the facts
+right before using this on stage: Siri AI runs on iPhone, iPad, **and Mac
+(M1 or later)**, plus Vision Pro and Watch — it is **not** phone-only. Do not
+claim a device restriction that a judge can disprove by opening their MacBook.
+The real gaps are structural, same pattern as the ChatGPT answer above:
+
+1. **Single user, tied to one Apple ID.** Siri is a personal assistant. It
+   has no concept of a company: no shared queue between a director and their
+   co-director, no per-document attribution, no activity log an auditor can
+   read. JagaOS's multi-user model (`WINNING.md` Part 3) is company-shaped;
+   Siri's is person-shaped.
+2. **No compliance-grade provenance.** Siri can read what's on your screen
+   in the moment. It does not keep a 5-year, field → source → verifier
+   record an auditor or IRAS will accept (`MOAT.md` point 4, above). Screen
+   understanding is not a ledger.
+3. **No statutory obligation model.** Siri acts on context you show it or
+   ask about; it does not derive a company's Annual Return / AGM / Form C-S
+   deadlines from its constitution and FYE and hold them on a clock with an
+   escalation ladder. It has never heard of s155.
+4. **Platform lock-in, the SME's problem not ours.** Siri AI requires recent
+   Apple hardware across the org (M1+ Macs, iPhone 15 Pro+). A Singapore SME
+   with a Windows PC and an Android phone at the front desk is locked out
+   entirely. JagaOS is a web app plus a Telegram bot — any device, and it
+   runs on the company's own AWS, not Apple's cloud.
+5. **No gap analysis.** Even with perfect on-device recall, Siri cannot tell
+   you which of nineteen expected documents you don't have, because nothing
+   defines the expected set for a Singapore company. That is still our
+   moat sentence, unchanged by this launch.
+
+One-line version for the pitch, if asked: *"Siri knows what's on your
+screen. It doesn't know what your company is missing — and it doesn't take
+minutes when your Annual Return is due and everyone's asleep."*
+
 ## Dormant is an asset, not an excuse
 
 Our SME is dormant. Do not hide it — it is the **purest instance of the

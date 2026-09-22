@@ -1,0 +1,19 @@
+# GST arithmetic adversarial cases. Checked against
+# app.graph.verify._check_invoice_arithmetic — deterministic, no LLM call.
+- id: gst_correct
+  subtotal: "100.00"
+  gst: "9.00"
+  total: "109.00"
+  expect_flag: false
+
+- id: gst_wrong_rate
+  subtotal: "100.00"
+  gst: "7.00"
+  total: "107.00"
+  expect_flag: true
+
+- id: gst_total_mismatch
+  subtotal: "100.00"
+  gst: "9.00"
+  total: "110.50"
+  expect_flag: true

@@ -119,7 +119,44 @@ schemas") handled properly, and it lets us use LangGraph idiomatically for #7.
 Also tested: a **20 KiB body returned HTTP 200**. The starter kit's 8 KiB WAF
 limit is specific to the OpenClaw host, not to this gateway.
 
-## 10. Slack questions to ask today
+## 11. ✅ Live gateway verified end-to-end 2026-09-21 — two real findings
+
+Ran `app/main.py`'s classify → extract → verify loop against the actual
+gateway for the first time, using the team key from the kickoff screenshots
+(`admin/`, never committed — see `.env`). Two things STRATEGY.md/ARCHITECTURE.md
+got wrong, found by running code, not by reading docs:
+
+**a) `haiku` and `sonnet` aliases are rejected.** Only `sonnet4.5` (or the
+full id `global.anthropic.claude-sonnet-4-5-20250929-v1:0`) is callable —
+the gateway returns `400 "Only the approved model is allowed"` for anything
+else. **Consequence:** the cheap-routing design (haiku classifies, sonnet
+extracts) is not available with this team's key. `app/graph/classify.py`
+now uses `sonnet4.5` for everything. This also means the "cost per document"
+number in the write-up (`docs/WRITEUP.md` §3) cannot show a routing saving —
+say so plainly rather than quietly dropping the claim.
+
+**b) A tool call filling a multi-field schema silently truncates without an
+explicit `max_tokens`.** First attempt at `InvoiceFields` extraction
+returned only 3 of 7 fields (`vendor`, `invoice_no`, `issued_on`) — looked
+exactly like a dropped-field schema bug (and the first hypothesis, testing
+whether `Decimal`'s `anyOf[number,string]` JSON-schema shape confused the
+tool parser, was wrong). The real cause: `output_tokens` was capped at
+~256 by the gateway's own default, cutting the JSON mid-object. Fixed by
+passing `max_tokens=2048` explicitly in `app/llm.py`. **Any team using this
+gateway's tool calling for a schema with more than 2-3 fields will hit this
+silently** — it does not error, it just returns a truncated (and therefore
+Pydantic-validation-failing) object that looks like a model or schema
+problem. Worth a Slack post for other teams.
+
+**Verified working after both fixes**: a synthetic invoice (`Acme Supplies
+Pte Ltd, subtotal 500.00, GST 45.00, total 545.00`) classified correctly as
+`invoice`, extracted all 7 fields with per-field confidence and character
+offsets, and passed the GST-arithmetic verify check with no review needed.
+One extract call: 1508 input / 539 output tokens (~1.26 cents at Anthropic
+list pricing — `app/llm.py`'s placeholder rate, not yet the gateway's
+actual billed rate). Test: `tests/test_gateway_live.py`.
+
+## 12. Slack questions to ask today
 
 - [ ] Is the 30-minute video a maximum or a target?
 - [ ] Will image/vision input be enabled on the gateway?

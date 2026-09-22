@@ -1,4 +1,5 @@
 import type { AnchorHTMLAttributes, ReactNode } from 'react'
+import { Link } from '../../router/Link'
 import { buttonClasses, type ButtonSize, type ButtonVariant } from './Button'
 
 interface ButtonLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
@@ -7,12 +8,12 @@ interface ButtonLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
   icon?: ReactNode
 }
 
-/** A real <a> that looks like a Button. Use for navigation; use <Button> for actions. */
+/** A real link (client-side routed for "/..." hrefs) that looks like a Button. Use <Button> for actions. */
 export function ButtonLink({ variant, size, icon, className, children, ...rest }: ButtonLinkProps) {
   return (
-    <a className={buttonClasses(variant, size, className)} {...rest}>
+    <Link className={buttonClasses(variant, size, className)} {...rest}>
       {icon}
       {children}
-    </a>
+    </Link>
   )
 }

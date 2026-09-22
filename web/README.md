@@ -20,9 +20,18 @@ npm run build      # typecheck + production build to dist/
 npm run preview    # serve dist/ on http://localhost:4173
 ```
 
-## Deep links
+## Pages
 
-`/#calendar` and `/#tags` open the product preview frame in that mode and scroll to it. The hero, header and bottom buttons use them.
+Real URL paths (History API). A static host needs an SPA fallback to `index.html`: Vite dev/preview and the Caddyfile have it, Vercel uses `vercel.json`.
+
+| URL | Page |
+|---|---|
+| `/` | Landing (hero only, one viewport, no scroll) |
+| `/calendar`, `/tags` | Product preview frames (header tabs) |
+| `/how-it-works`, `/stack` | Content pages (linked from the footer) |
+| `/get-started` | Get started (Log In placeholder target) |
+
+Add a page: add an entry in `src/router/routes.ts` and a case in `src/pages/Page.tsx`. Link with `<Link href="/x">` (never a bare `<a>` for internal paths, it would reload the page).
 
 ## Rename the product
 
@@ -39,8 +48,10 @@ src/
     search/      MemorySearch, useMemorySearch, searchService (mock, swap for API)
     calendar/    week grid, agenda, event details
     tags/        tag sidebar + list
-    preview/     ProductPreview (mode switching)
-  sections/      Header, Hero, HowItWorks, StackList, FinalCTA, Footer
+    preview/     ProductFrame (window chrome)
+  router/        routes, Link, navigate, useRoute, useRouteEffects
+  pages/         Page (route -> page), FramePage, GetStartedPage, NotFoundPage
+  sections/      Header, Hero, HowItWorks, StackList, Footer
 ```
 
 Environment: copy `.env.example` to `.env` if you need `VITE_API_BASE_URL`. It is optional and unused by the mock.

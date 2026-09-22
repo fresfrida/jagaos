@@ -2,6 +2,8 @@ import { Container } from '../components/ui/Container'
 import { Logo } from '../components/ui/Logo'
 import { PRODUCT_NAME } from '../config/product'
 import { FOOTER_COLUMNS, FOOTER_TAGLINE } from '../config/site'
+import { Link } from '../router/Link'
+import { routeHref } from '../router/routes'
 
 const socialClass = 'flex h-9 w-9 items-center justify-center rounded-control border border-line text-muted transition-colors hover:border-ink/40 hover:text-ink'
 
@@ -35,12 +37,15 @@ export function Footer() {
               <nav key={column.title} aria-label={column.title}>
                 <h2 className="font-sans text-sm font-medium tracking-normal text-ink">{column.title}</h2>
                 <ul className="mt-4 space-y-3">
-                  {column.links.map((label) => (
+                  {column.links.map(({ label, route }) => (
                     <li key={label}>
-                      {/* Placeholder targets until these pages exist. */}
-                      <a href="#top" className="text-sm text-muted transition-colors hover:text-ink">
-                        {label}
-                      </a>
+                      {route ? (
+                        <Link href={routeHref(route)} className="text-sm text-muted transition-colors hover:text-ink">
+                          {label}
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-muted">{label}</span>
+                      )}
                     </li>
                   ))}
                 </ul>

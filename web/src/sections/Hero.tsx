@@ -2,13 +2,12 @@ import { motion } from 'framer-motion'
 import { Container } from '../components/ui/Container'
 import { HERO } from '../config/site'
 import { MemorySearch } from '../features/search/MemorySearch'
-import { PreviewLink } from '../features/preview/PreviewLink'
-import type { PreviewMode } from '../features/preview/types'
+import { RouteCta } from '../components/RouteCta'
 
-/** The first screen. Exactly one viewport tall (minus the 65px sticky header: 64px + 1px border) so nothing below bleeds into it. */
-export function Hero({ onOpenPreview }: { onOpenPreview: (mode: PreviewMode) => void }) {
+/** The whole landing page: header + this hero fill exactly one viewport (65px = sticky header 64px + 1px border). */
+export function Hero() {
   return (
-    <section id="top" className="flex min-h-[calc(100svh-65px)] items-center py-10">
+    <section className="flex min-h-[calc(100svh-65px)] items-center py-10">
       <Container className="w-full">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -29,8 +28,8 @@ export function Hero({ onOpenPreview }: { onOpenPreview: (mode: PreviewMode) => 
           </div>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <PreviewLink mode="calendar" onOpen={onOpenPreview} />
-            <PreviewLink mode="tags" onOpen={onOpenPreview} variant="secondary" />
+            <RouteCta route="calendar" />
+            <RouteCta route="tags" variant="secondary" />
           </div>
         </motion.div>
       </Container>

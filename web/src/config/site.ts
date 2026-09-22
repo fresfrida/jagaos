@@ -1,12 +1,9 @@
 import { PRODUCT_NAME } from './product'
 
-import type { PreviewMode } from '../features/preview/types'
+import type { RouteId } from '../router/routes'
 
-/** The two hero/CTA links. Each is a real link (#calendar, #tags) to a frame of the product preview. */
-export const PREVIEW_LINKS: Record<PreviewMode, { label: string; href: string }> = {
-  calendar: { label: 'View Calendar', href: '#calendar' },
-  tags: { label: 'View Tags', href: '#tags' },
-}
+/** Labels of the two hero / Get Started buttons. Each links to its own page (/calendar, /tags). */
+export const CTA_LABELS = { calendar: 'Calendar in Time', tags: 'Relevant Tags' } as const
 
 export const HERO = {
   pill: 'New: AI memory for growing teams',
@@ -47,16 +44,28 @@ export const FINAL_CTA = {
   copy: 'Start organising your company knowledge without adding another administrative burden.',
 } as const
 
+export interface FooterLink {
+  label: string
+  /** Links without a route are placeholders until those pages exist. */
+  route?: RouteId
+}
+
 export interface FooterColumn {
   title: string
-  links: string[]
+  links: FooterLink[]
 }
 
 export const FOOTER_COLUMNS: FooterColumn[] = [
-  { title: 'Product', links: ['Search', 'Calendar', 'Tags', 'Security'] },
-  { title: 'Solutions', links: ['Operations', 'Finance', 'Customer Success', 'Founders'] },
-  { title: 'Resources', links: ['Documentation', 'API', 'Guides', 'Status'] },
-  { title: 'Company', links: ['About', 'Contact', 'Privacy', 'Terms'] },
+  {
+    title: 'Product',
+    links: [{ label: 'Search', route: 'home' }, { label: 'Calendar', route: 'calendar' }, { label: 'Tags', route: 'tags' }, { label: 'Security', route: 'stack' }],
+  },
+  { title: 'Solutions', links: ['Operations', 'Finance', 'Customer Success', 'Founders'].map((label) => ({ label })) },
+  {
+    title: 'Resources',
+    links: [{ label: 'Documentation' }, { label: 'API' }, { label: 'Guides', route: 'how-it-works' }, { label: 'Status' }],
+  },
+  { title: 'Company', links: ['About', 'Contact', 'Privacy', 'Terms'].map((label) => ({ label })) },
 ]
 
 export const FOOTER_TAGLINE = `${PRODUCT_NAME} helps small teams keep what they know.`

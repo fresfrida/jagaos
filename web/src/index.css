@@ -20,7 +20,7 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-    scroll-padding-top: 5rem; /* sticky header offset for anchor links */
+    scrollbar-gutter: stable; /* reserve the scrollbar's space so pages with and without one do not shift sideways */
     -webkit-text-size-adjust: 100%;
   }
   body {
