@@ -30,13 +30,13 @@ export interface StackRow {
 /** Hosted services outside Lightsail + Bedrock are deliberately absent (GAPS.md §5). */
 export const STACK_ROWS: StackRow[] = [
   { name: 'Vite + React + TypeScript', description: 'A typed front end, built to static files.', responsibility: 'App' },
-  { name: 'AWS Lightsail', description: 'One instance in Singapore serves the site and the API.', responsibility: 'Host' },
-  { name: 'Magic-link sign-in', description: 'Passwordless email links, revocable sessions and role checks.', responsibility: 'Identity' },
+  { name: 'AWS Lightsail', description: 'One instance in Singapore serves the API.', responsibility: 'Host' },
+  { name: 'Session-based auth', description: 'Hashed session tokens, revocable, with role checks per company.', responsibility: 'Identity' },
   { name: 'SQLite', description: 'One database file per instance, scoped by organisation.', responsibility: 'Data' },
   { name: 'Local file storage', description: 'Original documents stored by content hash, outside the web root.', responsibility: 'Files' },
-  { name: 'SQLite FTS5', description: 'Full-text search over extracted text, with cited passages.', responsibility: 'Search' },
-  { name: 'AWS Bedrock: Claude Sonnet 4.5', description: 'Reads documents and proposes fields, tags and dates.', responsibility: 'Extract', highlight: true },
-  { name: 'Jev via langchain-typesafe', description: 'Scores each proposed field and flags uncertain ones for review.', responsibility: 'Validate', highlight: true },
+  { name: 'SQLite FTS5', description: 'Full-text search across filenames, descriptions and extracted text.', responsibility: 'Search' },
+  { name: 'AWS Bedrock: Claude Sonnet 4.5', description: 'Reads documents and proposes fields, buckets and dates.', responsibility: 'Extract', highlight: true },
+  { name: 'Deterministic verification', description: 'Confidence floor and GST arithmetic checks — code, not a model call — flag anything uncertain for human review.', responsibility: 'Validate', highlight: true },
 ]
 
 export const FINAL_CTA = {
