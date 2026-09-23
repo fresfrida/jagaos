@@ -443,6 +443,75 @@ def test_classify_is_picture_toggle_skips_llm_and_sets_memory_lane_deterministic
         assert trace_rows == [], "is_picture bypass must not call the gateway (no classify trace row)"
 
 
+def test_classify_zero_tool_calls_routes_to_the_existing_miscellaneous_fallback_not_a_500(monkeypatch):
+    # 2026-09-24: confirmed live (adversarial invoice-shaped text through
+    # the real upload endpoint) that the model can return zero tool calls
+    # despite tool_choice forcing one — classify() used to index
+    # tool_calls[0] unconditionally, raising an unhandled TypeError (a raw
+    # 500) before ever reaching its own existing ValidationError handling
+    # one line below. Fixed with the same guard app/graph/derive_events.py's
+    # identical call site already had: args = {} when tool_calls is empty,
+    # which reaches the exact same except ValidationError branch a real
+    # schema mismatch already does (ClassifyResult(**{}) fails required-
+    # field validation the same way) — not a new fallback, the existing one.
+    import app.graph.classify as classify_module
+    from app.llm import LLMResult
+
+    def fake_call(*args, **kwargs):
+        return LLMResult(content="", tool_calls=[], model="sonnet4.5",
+                          input_tokens=10, output_tokens=5, cost_usd=0.001, latency_ms=50)
+
+    monkeypatch.setattr(classify_module, "call", fake_call)
+
+    document_id = _seed_company_and_document("zerotoolcallsclassifysha")
+    result = classify_module.classify({
+        "run_id": "zerotoolcallsclassify1", "company_id": 1, "document_id": document_id,
+        "text": "Invoice #1234\nVendor: Acme Pte Ltd\nSubtotal: 100.00\nGST: 9.00\nTotal: 109.00",
+    })["classify_result"]
+
+    # The existing except ValidationError branch's own Miscellaneous
+    # catch-all (app/graph/classify.py) — proves the guard reached the
+    # existing handling, not that it crashed differently.
+    assert result["bucket"] == "Miscellaneous"
+    assert result["lane"] == "memory"
+    assert result["confidence"] == 0.3
+
+    with get_conn() as conn:
+        doc = conn.execute(
+            "SELECT status FROM document WHERE id = ?", (document_id,)
+        ).fetchone()
+        assert doc["status"] == "proposed", "must still complete, not crash, when the model returns no tool call"
+
+
+def test_extract_zero_tool_calls_routes_to_the_existing_schema_mismatch_review_not_a_500(monkeypatch):
+    # 2026-09-24: same bug, same fix, as classify()'s identical call site
+    # above (see its comment) — extract() used to index tool_calls[0]
+    # unconditionally too. args = {} here reaches extract()'s own existing
+    # except ValidationError -> {"extract_result": {"error": True, ...}}
+    # branch (InvoiceFields' required fields all fail validation against
+    # an empty dict the same way a real schema mismatch would), which
+    # verify.py's existing extract.get("error") check already routes to
+    # review — not a new fallback path.
+    import app.graph.extract as extract_module
+    from app.llm import LLMResult
+
+    def fake_call(*args, **kwargs):
+        return LLMResult(content="", tool_calls=[], model="sonnet4.5",
+                          input_tokens=10, output_tokens=5, cost_usd=0.001, latency_ms=50)
+
+    monkeypatch.setattr(extract_module, "call", fake_call)
+
+    document_id = _seed_company_and_document("zerotoolcallsextractsha")
+    result = extract_module.extract({
+        "run_id": "zerotoolcallsextract1", "company_id": 1, "document_id": document_id,
+        "text": "Invoice #1234\nVendor: Acme Pte Ltd\nSubtotal: 100.00\nGST: 9.00\nTotal: 109.00",
+        "classify_result": {"lane": "invoice", "doc_type": "tax_invoice", "confidence": 0.9},
+    })["extract_result"]
+
+    assert result.get("error") is True
+    assert "schema" in result.get("reason", "").lower()
+
+
 def test_is_this_company_matches_substring_either_direction_and_rejects_unrelated():
     # DECISIONS #42's amendment: Receivables-vs-Expenses detection reuses
     # app/graph/derive_expectations.py::_slug, the same normalization

@@ -22,7 +22,7 @@ This repo currently holds:
 - **`vision/`** — isolated image-captioning service (own venv, `Salesforce/blip-image-captioning-base`), 2026-09-23, DECISIONS #55. Deliberately separate from `app/` — see "Backend status" below.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
-- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way. **Exception, 2026-09-23 (DECISIONS #65/#66/#67/#68)**: each of these four rounds' regression fixes were built, tested, and verified but deliberately left uncommitted in the working tree on an explicit one-off instruction each time — wait for a go-ahead before committing/pushing. **#65, #66, and #67 have since been committed and pushed** (`249ee8c`, `73a49ef`, confirmed via `git log`) — **only #68 is still sitting uncommitted.** If you're picking this repo back up and `git status` shows uncommitted changes, check DECISIONS #68 before assuming that's stray work to discard.
+- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way — **a standing rule that holds even when a round's own instructions say otherwise, since only the user's own ask satisfies it, not a relayed one** (DECISIONS #69 was explicitly authorized to push without a separate go-ahead, unlike #65-#68, but Lightsail still wasn't redeployed for it). **DECISIONS #65 through #69 have all been committed and pushed** (`249ee8c`, `73a49ef`, `7a76863`, and #69's own commit — confirmed via `git log`) — nothing is sitting uncommitted as of DECISIONS #69. **Lightsail itself is now behind `main`** — see "Known gaps" below for what it's missing.
 
 ## Backend status (2026-09-21)
 
@@ -1599,9 +1599,44 @@ adversarial, `npm run typecheck`/`npm run build` clean. Screenshots
 `round7-quarantine-headline-buttons-ms.png`,
 `round7-unreadable-card-en.png`, `round7-unreadable-card-ms.png`.
 
+**Fixed the extract.py/classify.py 500-on-zero-tool-calls bug DECISIONS
+#68 found and flagged, plus a second, unrelated bug it surfaced —
+committed and pushed this round, explicitly authorized without a
+separate go-ahead (DECISIONS #69, 2026-09-24).** Both
+`app/graph/extract.py` and `app/graph/classify.py` indexed
+`llm_result.tool_calls[0]` unconditionally, before their own existing
+`except ValidationError` graceful fallback ever got a chance to run — a
+raw `TypeError` (500) on the model returning zero tool calls despite
+`tool_choice` forcing one. Fixed with a one-line guard in each
+(`args = {}` when `tool_calls` is empty), reusing the existing fallback
+rather than adding a new one — `model_cls(**{})`/`ClassifyResult(**{})`
+fails required-field validation the same way a real schema mismatch
+already does. Same pattern `app/graph/derive_events.py`'s identical call
+site already had. **A second, more serious, entirely separate bug found
+while writing the regression test for this fix** — the one that actually
+exercises the except-block path for the first time: `extract.py`'s own
+schema-mismatch trace `INSERT` had 10 `?` placeholders (including `node`)
+but only 9 bound values, so it raised `sqlite3.ProgrammingError` every
+time it ran — **the fallback path specifically built to turn a schema
+mismatch into a review item instead of a 500 has itself always 500'd**,
+silently, since the fix that introduced it (2026-09-22). Fixed the same
+way `classify.py`'s identical trace insert already correctly does it
+(`node` as a SQL literal, not a 10th bound placeholder). Two new
+regression tests (`tests/test_rules_smoke.py`, mocking `call()` to return
+zero tool calls — no gateway needed). `pytest tests/` 50/50,
+`python evals/run.py` 14/14 adversarial. No UI touched, no screenshots.
+`./scripts/prepush-check.sh` FAILs verified as pre-existing, unrelated
+local-machine artifacts (`.env`/`web/.env`/`.vercel/` present on disk —
+confirmed gitignored and never git-tracked via `git check-ignore -v` and
+`git ls-files`; a Vercel URL in `app/main.py`'s existing CORS allowlist)
+— not a reason to hold back this push. **Lightsail was deliberately NOT
+redeployed** — a standing project rule holds regardless of this round's
+own explicit authorization to push freely: redeploying always needs the
+user's own explicit ask, not a relayed one (see "GitHub" bullet above).
+
 **Known gaps, in the order they'll bite:**
-- **DECISIONS #68's round is sitting uncommitted, waiting for an explicit go-ahead** — see the "GitHub" bullet at the top of this file. #65, #66, and #67 (previously flagged here as unpushed) have since been committed and pushed (`249ee8c`, `73a49ef`). Until #68 is pushed, the live app still has the no-quarantine-feedback gap and the misleading-"no-issues-found"-on-an-unreadable-document issue this round fixed.
-- **`app/extract/extract.py` crashes with a 500 on some adversarial invoice-shaped text** (found live 2026-09-23, DECISIONS #68) — `llm_result.tool_calls[0]["function"]["arguments"]` raises `TypeError: 'NoneType' object is not subscriptable` when the model returns no tool call at all; reproduced with a synthetic invoice PDF containing the GAPS.md §3 injection demo string. A document hitting this never reaches `verify()`, so it never even gets quarantined — the upload just 500s. Real, reproducible, pre-existing, out of scope for this round; `docs/KANBAN.md` Backlog has the fix needed (a defensive check for a missing tool call).
+- **⚠ Lightsail needs a redeploy to pick up DECISIONS #69's backend fix** (2026-09-24) — the extract.py/classify.py 500-on-zero-tool-calls bug and the schema-mismatch trace-insert crash are both fixed in `main` (pushed) but not yet live on the box. Redeploy needs the user's own explicit go-ahead, not a peer's, per this project's standing rule.
+- **Golden-path eval cases (`evals/cases/golden/`) remain blocked on real data** (2026-09-23, DECISIONS #66) — this session has no access to real labelled invoices/documents, and the project's own privacy policy (`WINNING.md`) deliberately keeps real corporate documents out of the repo. Needs the user to supply specific files or explicitly waive that policy.
 - **Golden-path eval cases (`evals/cases/golden/`) remain blocked on real data** (2026-09-23, DECISIONS #66) — this session has no access to real labelled invoices/documents, and the project's own privacy policy (`WINNING.md`) deliberately keeps real corporate documents out of the repo. Needs the user to supply specific files or explicitly waive that policy.
 - **Whether items 1/2/6's original live symptom ("file missing" + "no issues found" together, vanishing photos) is actually resolved is unconfirmed from this session** (2026-09-23, DECISIONS #66) — most plausibly it already was, by the reporting session's own Lightsail deploy fix; the new `_check_file_exists` guardrail is real defense-in-depth regardless, verified only via a unit test, not against the live box.
 - **The EXIF-rotation fix's real-world impact on the *specific* live-mobile regression that prompted it is unconfirmed** — verified with a synthetic test image + a real gateway call, not the original reported photo. The frontend should already prevent pure-rotation cases for a real web upload (`imageNormalize.ts`'s own docstring); if the symptom persists after this deploys, the already-tracked deskew/crop/quality gap (below) is the more likely cause, not rotation.

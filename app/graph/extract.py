@@ -71,7 +71,15 @@ def extract(state: PipelineState) -> PipelineState:
 
     llm_result = call("sonnet4.5", SYSTEM, user, tools=[tool],
                        tool_choice={"type": "function", "function": {"name": tool_name}})
-    args = json.loads(llm_result.tool_calls[0]["function"]["arguments"])
+    # 2026-09-24: confirmed live (adversarial invoice-shaped text) that the
+    # model can return zero tool calls despite tool_choice forcing one —
+    # indexing tool_calls[0] unconditionally raised a raw TypeError (500),
+    # before ever reaching the ValidationError handling one line below.
+    # Same guard app/graph/derive_events.py's identical call site already
+    # has; args = {} here reaches the exact same handling as a real schema
+    # mismatch (model_cls(**{}) fails required-field validation the same
+    # way), not a new code path.
+    args = json.loads(llm_result.tool_calls[0]["function"]["arguments"]) if llm_result.tool_calls else {}
     try:
         parsed = model_cls(**args)
     except ValidationError as e:
@@ -83,10 +91,19 @@ def extract(state: PipelineState) -> PipelineState:
         # unsure" (ARCHITECTURE.md §12) applies to our own schema mismatches
         # too, not just low-confidence values.
         with get_conn(DB_PATH) as conn:
+            # 2026-09-24: found while adding the tool_calls guard above (a
+            # real regression test exercising this branch for the first
+            # time) — this INSERT had 10 `?` placeholders (including node)
+            # but only 9 bound values, missing one for node entirely.
+            # sqlite3 raised "Incorrect number of bindings supplied" here on
+            # every real schema mismatch — the exact fallback path meant to
+            # prevent a 500 was itself always 500ing. node is now a literal
+            # in the SQL, same pattern app/graph/classify.py's identical
+            # trace INSERT already uses, not a new convention.
             conn.execute(
                 "INSERT INTO trace (run_id, company_id, document_id, node, model, "
                 " input_tokens, output_tokens, cost_usd, latency_ms, decision) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, 'extract', ?, ?, ?, ?, ?, ?)",
                 (state["run_id"], state["company_id"], state["document_id"],
                  llm_result.model, llm_result.input_tokens, llm_result.output_tokens,
                  llm_result.cost_usd, llm_result.latency_ms, f"{tool_name}_schema_mismatch"),

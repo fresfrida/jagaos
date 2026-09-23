@@ -113,7 +113,13 @@ def classify(state: PipelineState) -> PipelineState:
         # cost split is available.
         llm_result = call("sonnet4.5", SYSTEM, user, tools=[TOOL],
                            tool_choice={"type": "function", "function": {"name": "classify_document"}})
-        args = json.loads(llm_result.tool_calls[0]["function"]["arguments"])
+        # 2026-09-24: same guard as app/graph/extract.py's identical call
+        # site (see its comment) — confirmed live the model can return zero
+        # tool calls despite tool_choice forcing one, which raised a raw
+        # TypeError (500) here before ever reaching the ValidationError
+        # handling one line below. args = {} reaches that same handling,
+        # not a new code path.
+        args = json.loads(llm_result.tool_calls[0]["function"]["arguments"]) if llm_result.tool_calls else {}
         try:
             result = ClassifyResult(**args).model_dump()
         except ValidationError:
