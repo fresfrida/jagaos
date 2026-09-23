@@ -67,10 +67,10 @@
       "obligations": "Obligations"
     },
     "upload": {
-      "pictureQuestion": "Is this a picture, not a document?",
-      "yes": "Yes",
-      "no": "No",
-      "pictureWarning": "Choosing yes reduces the accuracy of data detected from this file — select no for invoices, forms, and other documents.",
+      "pictureQuestion": "What are you uploading?",
+      "yes": "Photo",
+      "no": "Document",
+      "pictureWarning": "Photos get a simple caption instead of detailed data extraction — choose Document for invoices, forms, and other official paperwork.",
       "clickToUpload": "Click to upload a PDF or image",
       "uploading": "Uploading…",
       "viewerCantUpload": "Viewers can't upload documents — ask an admin or owner.",

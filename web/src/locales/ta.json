@@ -1,135 +1,135 @@
 {
   "app": {
-    "skipToContent": "Skip to content"
+    "skipToContent": "உள்ளடக்கத்திற்குச் செல்"
   },
   "header": {
-    "primaryNav": "Primary",
-    "logIn": "Log In",
-    "logOut": "Log Out",
-    "getStarted": "Get Started",
-    "language": "Language",
+    "primaryNav": "முதன்மை வழிசெலுத்தல்",
+    "logIn": "உள்நுழை",
+    "logOut": "வெளியேறு",
+    "getStarted": "தொடங்குங்கள்",
+    "language": "மொழி",
     "nav": {
-      "calendar": "Calendar",
-      "tags": "Tags",
-      "search": "Search",
-      "companyFiles": "Company Files",
-      "upload": "Upload"
+      "calendar": "நாட்காட்டி",
+      "tags": "குறிச்சொற்கள்",
+      "search": "தேடல்",
+      "companyFiles": "நிறுவன கோப்புகள்",
+      "upload": "பதிவேற்று"
     }
   },
   "auth": {
     "login": {
-      "title": "Log in",
-      "subtitle": "No password yet — enter your email to continue.",
-      "emailLabel": "Email",
-      "newCompanyCheckbox": "I'm setting up a new company",
-      "companyNameLabel": "Company name",
-      "fyeMonthLabel": "FYE month",
-      "fyeDayLabel": "FYE day",
-      "continueButton": "Continue",
-      "createCompanyButton": "Create company & continue"
+      "title": "உள்நுழைக",
+      "subtitle": "இன்னும் கடவுச்சொல் தேவையில்லை — தொடர உங்கள் மின்னஞ்சலை உள்ளிடவும்.",
+      "emailLabel": "மின்னஞ்சல்",
+      "newCompanyCheckbox": "நான் புதிய நிறுவனத்தை அமைக்கிறேன்",
+      "companyNameLabel": "நிறுவனத்தின் பெயர்",
+      "fyeMonthLabel": "நிதியாண்டு முடியும் மாதம்",
+      "fyeDayLabel": "நிதியாண்டு முடியும் நாள்",
+      "continueButton": "தொடரவும்",
+      "createCompanyButton": "நிறுவனத்தை உருவாக்கி தொடரவும்"
     }
   },
   "common": {
     "buttons": {
-      "save": "Save",
-      "cancel": "Cancel",
-      "clear": "Clear",
-      "close": "Close",
-      "delete": "Delete"
+      "save": "சேமி",
+      "cancel": "ரத்துசெய்",
+      "clear": "அழி",
+      "close": "மூடு",
+      "delete": "நீக்கு"
     }
   },
   "ops": {
     "status": {
-      "filed": "filed",
-      "processed": "processed",
-      "needsReview": "needs review",
-      "quarantined": "quarantined",
-      "missing": "missing",
-      "satisfied": "satisfied",
-      "open": "open",
-      "archived": "archived"
+      "filed": "தாக்கல் செய்யப்பட்டது",
+      "processed": "செயலாக்கப்பட்டது",
+      "needsReview": "மறுஆய்வு தேவை",
+      "quarantined": "தனிமைப்படுத்தப்பட்டது",
+      "missing": "காணவில்லை",
+      "satisfied": "பூர்த்தி செய்யப்பட்டது",
+      "open": "திறந்துள்ளது",
+      "archived": "நீக்கப்பட்டது"
     },
     "backend": {
-      "checking": "Checking backend…",
-      "reachable": "Backend reachable",
+      "checking": "பின்தளத்தை சரிபார்க்கிறது…",
+      "reachable": "பின்தளம் அணுகக்கூடியது",
       "unreachable": "Backend unreachable — start it with `uvicorn app.main:app --reload` in app/"
     },
     "session": {
-      "checking": "Checking your session…",
-      "redirecting": "Redirecting to log in…"
+      "checking": "உங்கள் அமர்வைச் சரிபார்க்கிறது…",
+      "redirecting": "உள்நுழைவுக்குத் திருப்பி விடப்படுகிறது…"
     },
     "tabs": {
-      "ariaLabel": "Ops sections",
-      "review": "Upload & Review",
-      "documents": "Documents",
-      "dates": "Dates",
-      "gaps": "Gap Analysis",
-      "obligations": "Obligations"
+      "ariaLabel": "பயன்பாட்டுப் பிரிவுகள்",
+      "review": "பதிவேற்றம் & மறுஆய்வு",
+      "documents": "ஆவணங்கள்",
+      "dates": "தேதிகள்",
+      "gaps": "இடைவெளி பகுப்பாய்வு",
+      "obligations": "கடமைகள்"
     },
     "upload": {
-      "pictureQuestion": "Is this a picture, not a document?",
-      "yes": "Yes",
-      "no": "No",
-      "pictureWarning": "Choosing yes reduces the accuracy of data detected from this file — select no for invoices, forms, and other documents.",
-      "clickToUpload": "Click to upload a PDF or image",
-      "uploading": "Uploading…",
-      "viewerCantUpload": "Viewers can't upload documents — ask an admin or owner.",
-      "uploadReplacement": "Upload a replacement",
-      "lastResult": "Last upload result:",
+      "pictureQuestion": "இது புகைப்படமா, ஆவணமா?",
+      "yes": "புகைப்படம்",
+      "no": "ஆவணம்",
+      "pictureWarning": "\"புகைப்படம்\" தேர்ந்தெடுத்தால் எளிய விளக்கம் மட்டுமே கிடைக்கும், விரிவான தரவு பிரித்தெடுப்பு இருக்காது — விலைப்பட்டியல், படிவங்கள் போன்ற உத்தியோகபூர்வ ஆவணங்களுக்கு \"ஆவணம்\" தேர்ந்தெடுக்கவும்.",
+      "clickToUpload": "PDF அல்லது படத்தைப் பதிவேற்ற கிளிக் செய்யவும்",
+      "uploading": "பதிவேற்றுகிறது…",
+      "viewerCantUpload": "பார்வையாளர்கள் ஆவணங்களைப் பதிவேற்ற முடியாது — நிர்வாகி அல்லது உரிமையாளரைத் தொடர்பு கொள்ளவும்.",
+      "uploadReplacement": "மாற்று ஆவணத்தைப் பதிவேற்றவும்",
+      "lastResult": "சமீபத்திய பதிவேற்ற முடிவு:",
       "classifiedAs": "classified as {{lane}} / {{docType}} ({{confidence}}% confident)",
-      "injectionSuspected": "injection suspected",
+      "injectionSuspected": "உள்ளீட்டு தாக்குதல் சந்தேகிக்கப்படுகிறது",
       "reviewLabel": "Review: {{question}}",
-      "quarantinedMessage": "Quarantined by the injection guardrail — obligation table untouched.",
+      "quarantinedMessage": "உள்ளீட்டு பாதுகாப்பினால் தனிமைப்படுத்தப்பட்டது — கடமைகள் அட்டவணை பாதிக்கப்படவில்லை.",
       "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
     },
     "review": {
-      "needsReview": "Needs review ({{count}})",
+      "needsReview": "மறுஆய்வு தேவை ({{count}})",
       "document": {
-        "heading": "Document",
-        "filenameLabel": "Filename",
-        "descriptionLabel": "Description",
+        "heading": "ஆவணம்",
+        "filenameLabel": "கோப்புப் பெயர்",
+        "descriptionLabel": "விளக்கம்",
         "descriptionPendingPlaceholder": "No caption yet — tap the mic or type one",
-        "generatingCaption": "Generating caption…",
-        "bucketLabel": "Bucket",
-        "docTypeLabel": "Doc type",
-        "vendorNameLabel": "Vendor name"
+        "generatingCaption": "தலைப்பு உருவாக்கப்படுகிறது…",
+        "bucketLabel": "வகை",
+        "docTypeLabel": "ஆவண வகை",
+        "vendorNameLabel": "விற்பனையாளர் பெயர்"
       },
-      "extractedFieldsHeading": "Extracted fields",
+      "extractedFieldsHeading": "பிரித்தெடுக்கப்பட்ட புலங்கள்",
       "expiredMessage": "This document can no longer be reviewed automatically.",
-      "acceptAsIs": "Accept as-is",
-      "acceptWithCorrections": "Accept with corrections",
-      "reject": "Reject",
+      "acceptAsIs": "அப்படியே ஏற்றுக்கொள்",
+      "acceptWithCorrections": "திருத்தங்களுடன் ஏற்றுக்கொள்",
+      "reject": "நிராகரி",
       "onlyAdminCanResolve": "Only an admin or owner can resolve this.",
-      "deleteButton": "Delete",
+      "deleteButton": "நீக்கு",
       "deleteOrReupload": "or re-upload the document to try reviewing it again.",
       "onlyAdminCanDelete": "Only an admin or owner can delete this — or re-upload the document to try reviewing it again."
     },
     "companyFiles": {
-      "heading": "Company Files"
+      "heading": "நிறுவன கோப்புகள்"
     },
     "search": {
-      "heading": "Search",
-      "prompt": "Type something above to search your documents."
+      "heading": "தேடல்",
+      "prompt": "உங்கள் ஆவணங்களைத் தேட மேலே ஏதாவது தட்டச்சு செய்யவும்."
     },
     "tags": {
-      "intro": "Jump straight into Company Files, pre-filtered by category."
+      "intro": "வகை வாரியாக முன்-வடிகட்டப்பட்ட நிறுவன கோப்புகளுக்கு நேரடியாகச் செல்லவும்."
     },
     "documents": {
-      "heading": "Documents ({{count}})",
-      "searchPlaceholder": "Search documents…",
-      "noMatch": "No documents match that search.",
-      "noneUploaded": "No documents uploaded yet.",
-      "noCaptionYet": "No caption yet",
-      "filenamePlaceholder": "Filename",
-      "descriptionPlaceholder": "Description",
-      "vendorNamePlaceholder": "Vendor name",
-      "noBucketOption": "No bucket",
-      "view": "View",
-      "trace": "Trace",
-      "edit": "Edit",
-      "delete": "Delete",
-      "deleteConfirmMessage": "Delete {{filename}}? This can't be undone.",
-      "moreActions": "More actions",
+      "heading": "ஆவணங்கள் ({{count}})",
+      "searchPlaceholder": "ஆவணங்களைத் தேடு…",
+      "noMatch": "அந்தத் தேடலுக்குப் பொருந்தும் ஆவணங்கள் இல்லை.",
+      "noneUploaded": "இதுவரை ஆவணங்கள் எதுவும் பதிவேற்றப்படவில்லை.",
+      "noCaptionYet": "இன்னும் தலைப்பு இல்லை",
+      "filenamePlaceholder": "கோப்புப் பெயர்",
+      "descriptionPlaceholder": "விளக்கம்",
+      "vendorNamePlaceholder": "விற்பனையாளர் பெயர்",
+      "noBucketOption": "வகை இல்லை",
+      "view": "காண்க",
+      "trace": "தடமறிதல்",
+      "edit": "திருத்து",
+      "delete": "நீக்கு",
+      "deleteConfirmMessage": "{{filename}} ஐ நீக்கவா? இதைச் செயல்தவிர்க்க முடியாது.",
+      "moreActions": "மேலும் செயல்கள்",
       "traceHeading": "Trace — document #{{documentId}} · total ${{cost}}",
       "traceTable": {
         "node": "Node",
@@ -138,44 +138,44 @@
         "cost": "Cost",
         "decision": "Decision"
       },
-      "noDocumentDate": "No document date"
+      "noDocumentDate": "ஆவண தேதி இல்லை"
     },
     "dates": {
-      "uploadDate": "Upload date",
-      "documentDate": "Document date",
-      "noDocumentDate": "No document date ({{count}})",
-      "noneUploaded": "No documents uploaded yet."
+      "uploadDate": "பதிவேற்ற தேதி",
+      "documentDate": "ஆவண தேதி",
+      "noDocumentDate": "ஆவண தேதி இல்லை ({{count}})",
+      "noneUploaded": "இதுவரை ஆவணங்கள் எதுவும் பதிவேற்றப்படவில்லை."
     },
     "gaps": {
-      "heading": "Gap analysis — {{satisfied}} of {{total}} held",
+      "heading": "இடைவெளி பகுப்பாய்வு — {{total}} இல் {{satisfied}} உள்ளது",
       "empty": "No expectations yet — upload a statutory document that reads as a company event (incorporation, corp sec change)."
     },
     "obligations": {
-      "heading": "Obligations ({{count}})",
-      "empty": "No obligations derived yet."
+      "heading": "கடமைகள் ({{count}})",
+      "empty": "இன்னும் கடமைகள் எதுவும் உருவாக்கப்படவில்லை."
     },
     "documentViewer": {
       "loadFailed": "Couldn't load the source file.",
       "loading": "Loading source…",
-      "closePreview": "Close preview",
+      "closePreview": "முன்னோட்டத்தை மூடு",
       "previewLabel": "Preview: {{filename}}"
     },
     "documentPreview": {
       "loadFailed": "Couldn't load the source file.",
       "loading": "Loading source…",
-      "openSourcePdf": "Open source PDF"
+      "openSourcePdf": "மூல PDF ஐத் திற"
     },
     "voiceCaption": {
-      "stopRecording": "Stop recording caption",
-      "recordCaption": "Record a caption by voice"
+      "stopRecording": "தலைப்பு பதிவை நிறுத்து",
+      "recordCaption": "குரல் மூலம் தலைப்பைப் பதிவு செய்"
     },
     "pictureToggle": {
-      "label": "This is a picture, not a document",
-      "alreadyMarked": "(already marked)",
+      "label": "இது புகைப்படம், ஆவணம் அல்ல",
+      "alreadyMarked": "(ஏற்கனவே குறிக்கப்பட்டது)",
       "reducesAccuracy": "Reduces the accuracy of data detected from this file."
     },
     "docType": {
-      "legacySuffix": "{{value}} (legacy)"
+      "legacySuffix": "{{value}} (பழையது)"
     }
   }
 }

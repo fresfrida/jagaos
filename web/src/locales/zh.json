@@ -1,135 +1,135 @@
 {
   "app": {
-    "skipToContent": "Skip to content"
+    "skipToContent": "跳至内容"
   },
   "header": {
-    "primaryNav": "Primary",
-    "logIn": "Log In",
-    "logOut": "Log Out",
-    "getStarted": "Get Started",
-    "language": "Language",
+    "primaryNav": "主导航",
+    "logIn": "登录",
+    "logOut": "登出",
+    "getStarted": "开始使用",
+    "language": "语言",
     "nav": {
-      "calendar": "Calendar",
-      "tags": "Tags",
-      "search": "Search",
-      "companyFiles": "Company Files",
-      "upload": "Upload"
+      "calendar": "日历",
+      "tags": "标签",
+      "search": "搜索",
+      "companyFiles": "公司文件",
+      "upload": "上传"
     }
   },
   "auth": {
     "login": {
-      "title": "Log in",
-      "subtitle": "No password yet — enter your email to continue.",
-      "emailLabel": "Email",
-      "newCompanyCheckbox": "I'm setting up a new company",
-      "companyNameLabel": "Company name",
-      "fyeMonthLabel": "FYE month",
-      "fyeDayLabel": "FYE day",
-      "continueButton": "Continue",
-      "createCompanyButton": "Create company & continue"
+      "title": "登录",
+      "subtitle": "暂无需密码 — 输入邮箱即可继续。",
+      "emailLabel": "邮箱",
+      "newCompanyCheckbox": "我正在设立新公司",
+      "companyNameLabel": "公司名称",
+      "fyeMonthLabel": "财政年度结束月份",
+      "fyeDayLabel": "财政年度结束日期",
+      "continueButton": "继续",
+      "createCompanyButton": "创建公司并继续"
     }
   },
   "common": {
     "buttons": {
-      "save": "Save",
-      "cancel": "Cancel",
-      "clear": "Clear",
-      "close": "Close",
-      "delete": "Delete"
+      "save": "保存",
+      "cancel": "取消",
+      "clear": "清除",
+      "close": "关闭",
+      "delete": "删除"
     }
   },
   "ops": {
     "status": {
-      "filed": "filed",
-      "processed": "processed",
-      "needsReview": "needs review",
-      "quarantined": "quarantined",
-      "missing": "missing",
-      "satisfied": "satisfied",
-      "open": "open",
-      "archived": "archived"
+      "filed": "已存档",
+      "processed": "已处理",
+      "needsReview": "待审核",
+      "quarantined": "已隔离",
+      "missing": "缺失",
+      "satisfied": "已满足",
+      "open": "未处理",
+      "archived": "已删除"
     },
     "backend": {
-      "checking": "Checking backend…",
-      "reachable": "Backend reachable",
+      "checking": "正在检查后端…",
+      "reachable": "后端可连接",
       "unreachable": "Backend unreachable — start it with `uvicorn app.main:app --reload` in app/"
     },
     "session": {
-      "checking": "Checking your session…",
-      "redirecting": "Redirecting to log in…"
+      "checking": "正在检查您的登录状态…",
+      "redirecting": "正在跳转至登录页…"
     },
     "tabs": {
-      "ariaLabel": "Ops sections",
-      "review": "Upload & Review",
-      "documents": "Documents",
-      "dates": "Dates",
-      "gaps": "Gap Analysis",
-      "obligations": "Obligations"
+      "ariaLabel": "功能分区",
+      "review": "上传与审核",
+      "documents": "文件",
+      "dates": "日期",
+      "gaps": "差距分析",
+      "obligations": "义务"
     },
     "upload": {
-      "pictureQuestion": "Is this a picture, not a document?",
-      "yes": "Yes",
-      "no": "No",
-      "pictureWarning": "Choosing yes reduces the accuracy of data detected from this file — select no for invoices, forms, and other documents.",
-      "clickToUpload": "Click to upload a PDF or image",
-      "uploading": "Uploading…",
-      "viewerCantUpload": "Viewers can't upload documents — ask an admin or owner.",
-      "uploadReplacement": "Upload a replacement",
-      "lastResult": "Last upload result:",
+      "pictureQuestion": "这是照片，还是文件？",
+      "yes": "照片",
+      "no": "文件",
+      "pictureWarning": "选择「照片」时，系统只会生成简单说明，不会提取详细数据 — 发票、表格等正式文件请选择「文件」。",
+      "clickToUpload": "点击上传 PDF 或图片",
+      "uploading": "正在上传…",
+      "viewerCantUpload": "查看者无法上传文件 — 请联系管理员或所有者。",
+      "uploadReplacement": "上传替换文件",
+      "lastResult": "最近上传结果：",
       "classifiedAs": "classified as {{lane}} / {{docType}} ({{confidence}}% confident)",
-      "injectionSuspected": "injection suspected",
+      "injectionSuspected": "疑似注入攻击",
       "reviewLabel": "Review: {{question}}",
-      "quarantinedMessage": "Quarantined by the injection guardrail — obligation table untouched.",
+      "quarantinedMessage": "已被注入防护机制隔离 — 义务表未受影响。",
       "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
     },
     "review": {
-      "needsReview": "Needs review ({{count}})",
+      "needsReview": "待审核 ({{count}})",
       "document": {
-        "heading": "Document",
-        "filenameLabel": "Filename",
-        "descriptionLabel": "Description",
+        "heading": "文件信息",
+        "filenameLabel": "文件名",
+        "descriptionLabel": "说明",
         "descriptionPendingPlaceholder": "No caption yet — tap the mic or type one",
-        "generatingCaption": "Generating caption…",
-        "bucketLabel": "Bucket",
-        "docTypeLabel": "Doc type",
-        "vendorNameLabel": "Vendor name"
+        "generatingCaption": "正在生成说明…",
+        "bucketLabel": "分类",
+        "docTypeLabel": "文件类型",
+        "vendorNameLabel": "供应商名称"
       },
-      "extractedFieldsHeading": "Extracted fields",
+      "extractedFieldsHeading": "提取的字段",
       "expiredMessage": "This document can no longer be reviewed automatically.",
-      "acceptAsIs": "Accept as-is",
-      "acceptWithCorrections": "Accept with corrections",
-      "reject": "Reject",
+      "acceptAsIs": "直接接受",
+      "acceptWithCorrections": "修正后接受",
+      "reject": "拒绝",
       "onlyAdminCanResolve": "Only an admin or owner can resolve this.",
-      "deleteButton": "Delete",
+      "deleteButton": "删除",
       "deleteOrReupload": "or re-upload the document to try reviewing it again.",
       "onlyAdminCanDelete": "Only an admin or owner can delete this — or re-upload the document to try reviewing it again."
     },
     "companyFiles": {
-      "heading": "Company Files"
+      "heading": "公司文件"
     },
     "search": {
-      "heading": "Search",
-      "prompt": "Type something above to search your documents."
+      "heading": "搜索",
+      "prompt": "在上方输入以搜索您的文件。"
     },
     "tags": {
-      "intro": "Jump straight into Company Files, pre-filtered by category."
+      "intro": "按分类快速跳转至公司文件。"
     },
     "documents": {
-      "heading": "Documents ({{count}})",
-      "searchPlaceholder": "Search documents…",
-      "noMatch": "No documents match that search.",
-      "noneUploaded": "No documents uploaded yet.",
-      "noCaptionYet": "No caption yet",
-      "filenamePlaceholder": "Filename",
-      "descriptionPlaceholder": "Description",
-      "vendorNamePlaceholder": "Vendor name",
-      "noBucketOption": "No bucket",
-      "view": "View",
-      "trace": "Trace",
-      "edit": "Edit",
-      "delete": "Delete",
-      "deleteConfirmMessage": "Delete {{filename}}? This can't be undone.",
-      "moreActions": "More actions",
+      "heading": "文件 ({{count}})",
+      "searchPlaceholder": "搜索文件…",
+      "noMatch": "没有符合的文件。",
+      "noneUploaded": "尚未上传任何文件。",
+      "noCaptionYet": "暂无说明",
+      "filenamePlaceholder": "文件名",
+      "descriptionPlaceholder": "说明",
+      "vendorNamePlaceholder": "供应商名称",
+      "noBucketOption": "无分类",
+      "view": "查看",
+      "trace": "追踪",
+      "edit": "编辑",
+      "delete": "删除",
+      "deleteConfirmMessage": "删除 {{filename}}？此操作无法撤销。",
+      "moreActions": "更多操作",
       "traceHeading": "Trace — document #{{documentId}} · total ${{cost}}",
       "traceTable": {
         "node": "Node",
@@ -138,44 +138,44 @@
         "cost": "Cost",
         "decision": "Decision"
       },
-      "noDocumentDate": "No document date"
+      "noDocumentDate": "无文件日期"
     },
     "dates": {
-      "uploadDate": "Upload date",
-      "documentDate": "Document date",
-      "noDocumentDate": "No document date ({{count}})",
-      "noneUploaded": "No documents uploaded yet."
+      "uploadDate": "上传日期",
+      "documentDate": "文件日期",
+      "noDocumentDate": "无文件日期 ({{count}})",
+      "noneUploaded": "尚未上传任何文件。"
     },
     "gaps": {
-      "heading": "Gap analysis — {{satisfied}} of {{total}} held",
+      "heading": "差距分析 — 已持有 {{satisfied}} / {{total}}",
       "empty": "No expectations yet — upload a statutory document that reads as a company event (incorporation, corp sec change)."
     },
     "obligations": {
-      "heading": "Obligations ({{count}})",
-      "empty": "No obligations derived yet."
+      "heading": "义务 ({{count}})",
+      "empty": "尚未生成任何义务。"
     },
     "documentViewer": {
       "loadFailed": "Couldn't load the source file.",
       "loading": "Loading source…",
-      "closePreview": "Close preview",
+      "closePreview": "关闭预览",
       "previewLabel": "Preview: {{filename}}"
     },
     "documentPreview": {
       "loadFailed": "Couldn't load the source file.",
       "loading": "Loading source…",
-      "openSourcePdf": "Open source PDF"
+      "openSourcePdf": "打开原始 PDF"
     },
     "voiceCaption": {
-      "stopRecording": "Stop recording caption",
-      "recordCaption": "Record a caption by voice"
+      "stopRecording": "停止录制说明",
+      "recordCaption": "语音录制说明"
     },
     "pictureToggle": {
-      "label": "This is a picture, not a document",
-      "alreadyMarked": "(already marked)",
+      "label": "这是照片，不是文件",
+      "alreadyMarked": "（已标记）",
       "reducesAccuracy": "Reduces the accuracy of data detected from this file."
     },
     "docType": {
-      "legacySuffix": "{{value}} (legacy)"
+      "legacySuffix": "{{value}}（旧版）"
     }
   }
 }

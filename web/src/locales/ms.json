@@ -1,135 +1,135 @@
 {
   "app": {
-    "skipToContent": "Skip to content"
+    "skipToContent": "Langkau ke kandungan"
   },
   "header": {
-    "primaryNav": "Primary",
-    "logIn": "Log In",
-    "logOut": "Log Out",
-    "getStarted": "Get Started",
-    "language": "Language",
+    "primaryNav": "Navigasi Utama",
+    "logIn": "Log Masuk",
+    "logOut": "Log Keluar",
+    "getStarted": "Mula",
+    "language": "Bahasa",
     "nav": {
-      "calendar": "Calendar",
-      "tags": "Tags",
-      "search": "Search",
-      "companyFiles": "Company Files",
-      "upload": "Upload"
+      "calendar": "Kalendar",
+      "tags": "Tag",
+      "search": "Carian",
+      "companyFiles": "Fail Syarikat",
+      "upload": "Muat Naik"
     }
   },
   "auth": {
     "login": {
-      "title": "Log in",
-      "subtitle": "No password yet — enter your email to continue.",
-      "emailLabel": "Email",
-      "newCompanyCheckbox": "I'm setting up a new company",
-      "companyNameLabel": "Company name",
-      "fyeMonthLabel": "FYE month",
-      "fyeDayLabel": "FYE day",
-      "continueButton": "Continue",
-      "createCompanyButton": "Create company & continue"
+      "title": "Log masuk",
+      "subtitle": "Tiada kata laluan lagi — masukkan e-mel anda untuk teruskan.",
+      "emailLabel": "E-mel",
+      "newCompanyCheckbox": "Saya sedang menubuhkan syarikat baharu",
+      "companyNameLabel": "Nama syarikat",
+      "fyeMonthLabel": "Bulan akhir tahun kewangan",
+      "fyeDayLabel": "Hari akhir tahun kewangan",
+      "continueButton": "Teruskan",
+      "createCompanyButton": "Cipta syarikat & teruskan"
     }
   },
   "common": {
     "buttons": {
-      "save": "Save",
-      "cancel": "Cancel",
-      "clear": "Clear",
-      "close": "Close",
-      "delete": "Delete"
+      "save": "Simpan",
+      "cancel": "Batal",
+      "clear": "Kosongkan",
+      "close": "Tutup",
+      "delete": "Padam"
     }
   },
   "ops": {
     "status": {
-      "filed": "filed",
-      "processed": "processed",
-      "needsReview": "needs review",
-      "quarantined": "quarantined",
-      "missing": "missing",
-      "satisfied": "satisfied",
-      "open": "open",
-      "archived": "archived"
+      "filed": "difailkan",
+      "processed": "diproses",
+      "needsReview": "perlu disemak",
+      "quarantined": "dikuarantin",
+      "missing": "hilang",
+      "satisfied": "dipenuhi",
+      "open": "terbuka",
+      "archived": "dipadam"
     },
     "backend": {
-      "checking": "Checking backend…",
-      "reachable": "Backend reachable",
+      "checking": "Menyemak pelayan…",
+      "reachable": "Pelayan boleh dicapai",
       "unreachable": "Backend unreachable — start it with `uvicorn app.main:app --reload` in app/"
     },
     "session": {
-      "checking": "Checking your session…",
-      "redirecting": "Redirecting to log in…"
+      "checking": "Menyemak sesi anda…",
+      "redirecting": "Mengalihkan ke log masuk…"
     },
     "tabs": {
-      "ariaLabel": "Ops sections",
-      "review": "Upload & Review",
-      "documents": "Documents",
-      "dates": "Dates",
-      "gaps": "Gap Analysis",
-      "obligations": "Obligations"
+      "ariaLabel": "Bahagian aplikasi",
+      "review": "Muat Naik & Semakan",
+      "documents": "Dokumen",
+      "dates": "Tarikh",
+      "gaps": "Analisis Jurang",
+      "obligations": "Kewajipan"
     },
     "upload": {
-      "pictureQuestion": "Is this a picture, not a document?",
-      "yes": "Yes",
-      "no": "No",
-      "pictureWarning": "Choosing yes reduces the accuracy of data detected from this file — select no for invoices, forms, and other documents.",
-      "clickToUpload": "Click to upload a PDF or image",
-      "uploading": "Uploading…",
-      "viewerCantUpload": "Viewers can't upload documents — ask an admin or owner.",
-      "uploadReplacement": "Upload a replacement",
-      "lastResult": "Last upload result:",
+      "pictureQuestion": "Adakah ini gambar atau dokumen?",
+      "yes": "Gambar",
+      "no": "Dokumen",
+      "pictureWarning": "Pilihan \"Gambar\" hanya menghasilkan kapsyen ringkas, bukan pengekstrakan data terperinci — pilih \"Dokumen\" untuk invois, borang dan dokumen rasmi lain.",
+      "clickToUpload": "Klik untuk muat naik PDF atau imej",
+      "uploading": "Sedang memuat naik…",
+      "viewerCantUpload": "Pelihat tidak boleh memuat naik dokumen — hubungi admin atau pemilik.",
+      "uploadReplacement": "Muat naik gantian",
+      "lastResult": "Keputusan muat naik terakhir:",
       "classifiedAs": "classified as {{lane}} / {{docType}} ({{confidence}}% confident)",
-      "injectionSuspected": "injection suspected",
+      "injectionSuspected": "disyaki suntikan arahan",
       "reviewLabel": "Review: {{question}}",
-      "quarantinedMessage": "Quarantined by the injection guardrail — obligation table untouched.",
+      "quarantinedMessage": "Dikuarantin oleh sekatan suntikan — jadual kewajipan tidak terjejas.",
       "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
     },
     "review": {
-      "needsReview": "Needs review ({{count}})",
+      "needsReview": "Perlu disemak ({{count}})",
       "document": {
-        "heading": "Document",
-        "filenameLabel": "Filename",
-        "descriptionLabel": "Description",
+        "heading": "Dokumen",
+        "filenameLabel": "Nama fail",
+        "descriptionLabel": "Keterangan",
         "descriptionPendingPlaceholder": "No caption yet — tap the mic or type one",
-        "generatingCaption": "Generating caption…",
-        "bucketLabel": "Bucket",
-        "docTypeLabel": "Doc type",
-        "vendorNameLabel": "Vendor name"
+        "generatingCaption": "Menjana kapsyen…",
+        "bucketLabel": "Kategori",
+        "docTypeLabel": "Jenis dokumen",
+        "vendorNameLabel": "Nama pembekal"
       },
-      "extractedFieldsHeading": "Extracted fields",
+      "extractedFieldsHeading": "Medan yang diekstrak",
       "expiredMessage": "This document can no longer be reviewed automatically.",
-      "acceptAsIs": "Accept as-is",
-      "acceptWithCorrections": "Accept with corrections",
-      "reject": "Reject",
+      "acceptAsIs": "Terima seadanya",
+      "acceptWithCorrections": "Terima dengan pembetulan",
+      "reject": "Tolak",
       "onlyAdminCanResolve": "Only an admin or owner can resolve this.",
-      "deleteButton": "Delete",
+      "deleteButton": "Padam",
       "deleteOrReupload": "or re-upload the document to try reviewing it again.",
       "onlyAdminCanDelete": "Only an admin or owner can delete this — or re-upload the document to try reviewing it again."
     },
     "companyFiles": {
-      "heading": "Company Files"
+      "heading": "Fail Syarikat"
     },
     "search": {
-      "heading": "Search",
-      "prompt": "Type something above to search your documents."
+      "heading": "Carian",
+      "prompt": "Taip sesuatu di atas untuk mencari dokumen anda."
     },
     "tags": {
-      "intro": "Jump straight into Company Files, pre-filtered by category."
+      "intro": "Terus ke Fail Syarikat, ditapis mengikut kategori."
     },
     "documents": {
-      "heading": "Documents ({{count}})",
-      "searchPlaceholder": "Search documents…",
-      "noMatch": "No documents match that search.",
-      "noneUploaded": "No documents uploaded yet.",
-      "noCaptionYet": "No caption yet",
-      "filenamePlaceholder": "Filename",
-      "descriptionPlaceholder": "Description",
-      "vendorNamePlaceholder": "Vendor name",
-      "noBucketOption": "No bucket",
-      "view": "View",
-      "trace": "Trace",
+      "heading": "Dokumen ({{count}})",
+      "searchPlaceholder": "Cari dokumen…",
+      "noMatch": "Tiada dokumen sepadan dengan carian itu.",
+      "noneUploaded": "Belum ada dokumen dimuat naik.",
+      "noCaptionYet": "Belum ada kapsyen",
+      "filenamePlaceholder": "Nama fail",
+      "descriptionPlaceholder": "Keterangan",
+      "vendorNamePlaceholder": "Nama pembekal",
+      "noBucketOption": "Tiada kategori",
+      "view": "Lihat",
+      "trace": "Jejak",
       "edit": "Edit",
-      "delete": "Delete",
-      "deleteConfirmMessage": "Delete {{filename}}? This can't be undone.",
-      "moreActions": "More actions",
+      "delete": "Padam",
+      "deleteConfirmMessage": "Padam {{filename}}? Ini tidak boleh dibatalkan.",
+      "moreActions": "Tindakan lain",
       "traceHeading": "Trace — document #{{documentId}} · total ${{cost}}",
       "traceTable": {
         "node": "Node",
@@ -138,44 +138,44 @@
         "cost": "Cost",
         "decision": "Decision"
       },
-      "noDocumentDate": "No document date"
+      "noDocumentDate": "Tiada tarikh dokumen"
     },
     "dates": {
-      "uploadDate": "Upload date",
-      "documentDate": "Document date",
-      "noDocumentDate": "No document date ({{count}})",
-      "noneUploaded": "No documents uploaded yet."
+      "uploadDate": "Tarikh muat naik",
+      "documentDate": "Tarikh dokumen",
+      "noDocumentDate": "Tiada tarikh dokumen ({{count}})",
+      "noneUploaded": "Belum ada dokumen dimuat naik."
     },
     "gaps": {
-      "heading": "Gap analysis — {{satisfied}} of {{total}} held",
+      "heading": "Analisis jurang — {{satisfied}} daripada {{total}} dipegang",
       "empty": "No expectations yet — upload a statutory document that reads as a company event (incorporation, corp sec change)."
     },
     "obligations": {
-      "heading": "Obligations ({{count}})",
-      "empty": "No obligations derived yet."
+      "heading": "Kewajipan ({{count}})",
+      "empty": "Belum ada kewajipan dijana."
     },
     "documentViewer": {
       "loadFailed": "Couldn't load the source file.",
       "loading": "Loading source…",
-      "closePreview": "Close preview",
+      "closePreview": "Tutup pratonton",
       "previewLabel": "Preview: {{filename}}"
     },
     "documentPreview": {
       "loadFailed": "Couldn't load the source file.",
       "loading": "Loading source…",
-      "openSourcePdf": "Open source PDF"
+      "openSourcePdf": "Buka PDF asal"
     },
     "voiceCaption": {
-      "stopRecording": "Stop recording caption",
-      "recordCaption": "Record a caption by voice"
+      "stopRecording": "Hentikan rakaman kapsyen",
+      "recordCaption": "Rakam kapsyen dengan suara"
     },
     "pictureToggle": {
-      "label": "This is a picture, not a document",
-      "alreadyMarked": "(already marked)",
+      "label": "Ini gambar, bukan dokumen",
+      "alreadyMarked": "(sudah ditanda)",
       "reducesAccuracy": "Reduces the accuracy of data detected from this file."
     },
     "docType": {
-      "legacySuffix": "{{value}} (legacy)"
+      "legacySuffix": "{{value}} (lama)"
     }
   }
 }
