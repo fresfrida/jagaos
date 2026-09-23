@@ -112,7 +112,14 @@ def test_resolve_confirm_applies_correction_and_files_document():
         assert human_extraction["value_text"] == "108.0"
 
 
-def test_resolve_reject_stops_the_document():
+def test_resolve_reject_archives_the_document_with_both_transitions_traced():
+    # 2026-09-22 (DECISIONS #50): a reject used to stop at "rejected",
+    # leaving a separate manual "Archive" click as the only way out of what
+    # read as a dead end. Now chains straight through to "archived" — both
+    # edges already existed in app/rules/transitions.py's
+    # _DOCUMENT_TRANSITIONS (needs_review -> rejected -> archived); this
+    # checks both hops actually happen and both land in `trace`, not just
+    # the end state.
     _seed_company_and_document("rejectsha")
     from langgraph.types import Command
 
@@ -133,4 +140,13 @@ def test_resolve_reject_stops_the_document():
 
     with get_conn() as conn:
         doc = conn.execute("SELECT status FROM document WHERE id = 1").fetchone()
-        assert doc["status"] == "rejected", f"expected rejected, got {doc['status']}"
+        assert doc["status"] == "archived", f"expected archived, got {doc['status']}"
+
+        transitions = conn.execute(
+            "SELECT decision FROM trace WHERE document_id = 1 "
+            "AND node = 'rules.transition_document' ORDER BY id"
+        ).fetchall()
+        decisions = [t["decision"] for t in transitions]
+        assert len(decisions) == 2, f"expected exactly 2 recorded transitions, got {decisions}"
+        assert any("needs_review->rejected" in d for d in decisions), decisions
+        assert any("rejected->archived" in d for d in decisions), decisions

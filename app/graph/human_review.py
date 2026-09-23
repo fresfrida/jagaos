@@ -8,8 +8,11 @@ nothing ever applied the human's actual answer. Fixed here: a "confirm"
 files the document and, if corrected_fields were sent, records each as a
 new extraction row with source='human' (the original LLM guess stays on
 record too — a correction is provenance, not an overwrite). A "reject"
-stops the document there; app/graph/pipeline.py's conditional edge skips
-derive_events/expectations/obligations for a rejected document.
+now chains straight through to archived (2026-09-22, DECISIONS #50 —
+previously stopped at "rejected", leaving a separate manual "Archive"
+click as the only way out); app/graph/pipeline.py's conditional edge
+skips derive_events/expectations/obligations for a rejected document
+either way, keyed off review_resolution.action, not document.status.
 """
 
 import json
@@ -61,7 +64,19 @@ def human_review(state: PipelineState) -> PipelineState:
                 (action, json.dumps(corrected_fields), review_item["id"]),
             )
 
-    transition_document(document_id, "filed" if action == "confirm" else "rejected",
-                         actor="human", db_path=DB_PATH)
+    if action == "confirm":
+        transition_document(document_id, "filed", actor="human", db_path=DB_PATH)
+    else:
+        # 2026-09-22 (DECISIONS #50): reject chains straight through to
+        # archived instead of leaving the document sitting in "rejected"
+        # with a separate manual "Archive" click as the only way out —
+        # confirmed live, this read as clunky ("just sits there... no
+        # clear next step"). Both edges already existed in
+        # app/rules/transitions.py's _DOCUMENT_TRANSITIONS
+        # (needs_review -> rejected -> archived); two calls here (not a
+        # new direct edge) so both hops land in `trace`, not just the end
+        # state — same audit-trail guarantee every other transition gets.
+        transition_document(document_id, "rejected", actor="human", db_path=DB_PATH)
+        transition_document(document_id, "archived", actor="human", db_path=DB_PATH)
 
     return {"review_resolution": resolution, "extract_result": extract_result}

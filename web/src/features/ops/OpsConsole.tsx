@@ -1,5 +1,5 @@
 import { Archive, Check, FileText, Loader2, Mic, MicOff, ShieldAlert, Upload, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -328,10 +328,16 @@ function ReviewQueueCard({
   item,
   canResolve,
   onResolved,
+  onRejected,
 }: {
   item: ReviewItem
   canResolve: boolean
   onResolved: () => void
+  // 2026-09-23 (DECISIONS #50): distinct from onResolved (which always
+  // triggers a refresh() that removes this card from the list) — this
+  // lets OpsConsole show a "rejected and archived, upload a replacement?"
+  // prompt that survives the card itself unmounting.
+  onRejected: (filename: string) => void
 }) {
   const proposed = parseProposed(item.proposed_json)
   const fieldNames = Object.keys(proposed).filter((k) => k !== 'injection_suspected' && isProvenance(proposed[k]))
@@ -416,6 +422,7 @@ function ReviewQueueCard({
         }
       }
       await opsApi.resolveReview(item.id, item.thread_id, { action, corrected_fields: correctedFields })
+      if (action === 'reject') onRejected(item.document_filename)
       onResolved()
     } catch (e) {
       if (e instanceof ApiError && e.status === 410) {
@@ -948,6 +955,18 @@ export function OpsConsole() {
   // In-page preview (2026-09-22, doc 2's preview UX pass) — replaces
   // openDocumentSource's window.open() new tab. null means no modal open.
   const [viewingDocument, setViewingDocument] = useState<DocumentRow | null>(null)
+  // 2026-09-23 (DECISIONS #50): filename of the document just rejected, or
+  // null — drives the "rejected and archived, upload a replacement?"
+  // prompt. Lives here rather than inside ReviewQueueCard since that card
+  // unmounts the moment onResolved()'s refresh() removes the now-resolved
+  // item from reviewItems.
+  const [justRejectedFilename, setJustRejectedFilename] = useState<string | null>(null)
+  // Lets "Upload a replacement" open the native file picker directly —
+  // .click() on a hidden file input works when it's the synchronous result
+  // of a real click, same category as the window.open() popup workaround
+  // elsewhere in this file (an async gap in between is what gets blocked,
+  // not the technique itself).
+  const fileInputRef = useRef<HTMLInputElement>(null)
   // 2026-09-23 (DECISIONS #52): the upload-time "is this a picture, not a
   // document?" toggle — defaults to No (the common case is still a real
   // document); reset after every upload in onUpload below.
@@ -985,6 +1004,7 @@ export function OpsConsole() {
   const onUpload = async (file: File) => {
     setBusy(true)
     setError(null)
+    setJustRejectedFilename(null)
     try {
       const normalized = await normalizeImageForUpload(file)
       const result = await opsApi.uploadDocument(normalized, isPictureUpload)
@@ -1161,6 +1181,7 @@ export function OpsConsole() {
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                 {busy ? 'Uploading…' : 'Click to upload a PDF or image'}
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept="application/pdf,image/*"
                   className="hidden"
@@ -1176,6 +1197,29 @@ export function OpsConsole() {
               <p className="flex h-24 items-center justify-center rounded-card border border-dashed border-line text-sm text-muted">
                 Viewers can't upload documents — ask an admin or owner.
               </p>
+            )}
+
+            {/* 2026-09-23 (DECISIONS #50): closes the loop after a reject
+               — it used to just disappear from the queue with no
+               indication of where it went or what to do next. Simple
+               inline prompt, not a modal — "Upload a replacement" opens
+               the file picker directly rather than just scrolling to it. */}
+            {justRejectedFilename && canUpload && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-canvas p-4 text-[13px]">
+                <p className="text-ink">
+                  <span className="font-medium">{justRejectedFilename}</span> rejected and archived. Upload a replacement?
+                </p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setJustRejectedFilename(null)
+                    fileInputRef.current?.click()
+                  }}
+                >
+                  Upload a replacement
+                </Button>
+              </div>
             )}
 
             {lastUpload && (
@@ -1220,6 +1264,7 @@ export function OpsConsole() {
                     item={item}
                     canResolve={canResolve}
                     onResolved={() => void refresh()}
+                    onRejected={setJustRejectedFilename}
                   />
                 ))}
               </div>
