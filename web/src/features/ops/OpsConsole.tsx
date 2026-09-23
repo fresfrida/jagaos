@@ -329,6 +329,7 @@ function ReviewQueueCard({
   canResolve,
   onResolved,
   onRejected,
+  onPoll,
 }: {
   item: ReviewItem
   canResolve: boolean
@@ -338,6 +339,13 @@ function ReviewQueueCard({
   // lets OpsConsole show a "rejected and archived, upload a replacement?"
   // prompt that survives the card itself unmounting.
   onRejected: (filename: string) => void
+  // 2026-09-23 (DECISIONS #56): re-fetches review items from OpsConsole
+  // (the same refresh() every other mutation here already uses) — called
+  // on a short bounded timer while this card is a picture-lane document
+  // still waiting on jaga-vision's background caption. Not a generic
+  // "refresh me" the card invents on its own: one existing data path,
+  // reused.
+  onPoll: () => void
 }) {
   const proposed = parseProposed(item.proposed_json)
   const fieldNames = Object.keys(proposed).filter((k) => k !== 'injection_suspected' && isProvenance(proposed[k]))
@@ -384,6 +392,46 @@ function ReviewQueueCard({
   // only meaningful while the field is still at its initial, unedited
   // value, same as any placeholder.
   const isPendingCaption = isPictureLane && item.document_description === null
+
+  // 2026-09-23 (DECISIONS #56): a caption that lands via a poll tick (or
+  // any other refresh) only reaches this card through the `item` prop —
+  // local `description` state was set once at mount and never otherwise
+  // re-synced from props, so without this the card would show "no
+  // caption yet" forever despite the database already having a real one
+  // (confirmed live: a genuine caption was generated and saved, but the
+  // card never updated short of a full page reload). Guarded on the
+  // functional updater's current value, not a dependency, so this can
+  // never clobber a caption the person is already mid-typing/speaking —
+  // it only ever fills the field from its untouched empty state.
+  useEffect(() => {
+    const fresh = item.document_description
+    if (fresh === null) return
+    setDescription((current) => (current === '' ? fresh : current))
+  }, [item.document_description])
+
+  // Polls only while genuinely needed — picture lane, no caption yet —
+  // for a short bounded window comfortably past jaga-vision's measured
+  // 6-20s captioning time (DECISIONS #55), then gives up silently. Not a
+  // general-purpose real-time system: a plain interval, reusing
+  // OpsConsole's existing refresh() (passed in as onPoll) rather than a
+  // new fetch path. Stops itself the moment item.document_description
+  // stops being null (the effect's own condition below then short-
+  // circuits, and the cleanup from the previous run already cleared the
+  // interval) — no separate "success" bookkeeping needed.
+  useEffect(() => {
+    if (!isPictureLane || item.document_description !== null) return
+    const POLL_INTERVAL_MS = 3500
+    const POLL_WINDOW_MS = 30000
+    const deadline = Date.now() + POLL_WINDOW_MS
+    const id = window.setInterval(() => {
+      if (Date.now() >= deadline) {
+        window.clearInterval(id)
+        return
+      }
+      onPoll()
+    }, POLL_INTERVAL_MS)
+    return () => window.clearInterval(id)
+  }, [isPictureLane, item.document_description, onPoll])
 
   const originalValue = (name: string): string => {
     const field = proposed[name]
@@ -1266,6 +1314,7 @@ export function OpsConsole() {
                     canResolve={canResolve}
                     onResolved={() => void refresh()}
                     onRejected={setJustRejectedFilename}
+                    onPoll={() => void refresh()}
                   />
                 ))}
               </div>

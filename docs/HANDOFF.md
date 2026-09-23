@@ -18,7 +18,7 @@ This repo currently holds:
 - **`app/`** — backend, per `ARCHITECTURE.md` §9 plus a 4-role auth layer (`app/auth.py`, 2026-09-22, DECISIONS #29-31). See "Backend status" below.
 - **`evals/`** — eval runner + adversarial cases, `evals/report.md` committed (10/10 passing, no gateway key needed).
 - **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, auth/tenant-isolation, and vision-caption async wiring (`tests/test_vision_caption.py`, mocked, no torch). 39/39 passing (most need no gateway key).
-- **`deploy/`** — Lightsail provisioning (Caddy, systemd, `bootstrap.sh`, plus `jaga-vision.service` as of 2026-09-23, DECISIONS #55 — not yet deployed).
+- **`deploy/`** — Lightsail provisioning (Caddy, systemd, `bootstrap.sh`, plus `jaga-vision.service`, DECISIONS #55). **`jaga-vision` is now deployed and confirmed working on production** (2026-09-23, DECISIONS #56 — a real uploaded photo got a correct caption, checked directly in the live DB); `MemoryMax` enforcement and the exact dependency versions running on the box are still unconfirmed, see "Known gaps" below.
 - **`vision/`** — isolated image-captioning service (own venv, `Salesforce/blip-image-captioning-base`), 2026-09-23, DECISIONS #55. Deliberately separate from `app/` — see "Backend status" below.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
@@ -590,6 +590,43 @@ real box. No screenshots — no UI change; the existing DECISIONS #52
 review-card UI already renders both the pending and captioned states with
 zero new frontend code.
 
+**`jaga-vision` is now deployed and confirmed generating correct captions
+on production — which surfaced a real frontend bug, now fixed (2026-09-23,
+DECISIONS #56).** Confirmed live, not a hunch: a real photo uploaded
+through the deployed app got a correct caption saved to the database
+("a dining room with a table and chairs") — but the review card kept
+showing "No caption yet" indefinitely, because nothing on the frontend
+ever re-checked after the card's first render. Root cause: `ReviewQueueCard`'s
+local `description` state is a `useState` set once at mount from the
+`item` prop and never otherwise re-synced — even a full `refresh()` at the
+`OpsConsole` level (which does update the `item` prop with fresh data)
+can't reach it, since React doesn't re-run a `useState` initializer just
+because props changed. This meant the card was structurally incapable of
+ever picking up a late-arriving caption, independent of whether polling
+existed. Fixed with two effects: (1) a bounded poll — only while
+`lane === 'memory'` and `document_description === null` — calling
+`OpsConsole`'s existing `refresh()` (reused via a new `onPoll` prop, not a
+new fetch path) every 3.5s for up to 30s, comfortably past jaga-vision's
+measured 6-20s; stops itself the instant a caption lands, no separate
+success/failure bookkeeping. (2) A sync effect that fills local
+`description` from the refreshed `item.document_description` prop, guarded
+so it can never clobber a caption the person is already mid-typing or
+speaking via the existing voice-caption path. Verified live end to end,
+three separate real uploads against the real vision service, not mocked:
+captions appeared in the field unprompted at ~6s each; a fully isolated
+test (fresh company, zero other pending cards) confirmed polling stops
+with zero further `/api/review` requests the instant a caption lands, not
+just eventually — the continued requests seen in a non-isolated test
+turned out to be several *other*, pre-existing stuck picture-lane
+documents from earlier test sessions (some predating jaga-vision's
+existence) each independently polling their own 30s window on page
+load — expected, bounded behavior per card, not a leak; those stale test
+rows are data cleanup, not a code issue. No backend change, no new
+dependency. Typecheck + build clean; backend suite re-run as a safety
+check even though nothing there changed (39/39). Screenshots:
+`docs/screenshots/ops-review-card-caption-poll-before.png`,
+`ops-review-card-caption-poll-after.png`.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -600,7 +637,7 @@ zero new frontend code.
 - `app/rules/statutory.py`'s Form C-S/C due date (30 Nov) is a working approximation, flagged in its own docstring — confirm before citing a specific date in `docs/WRITEUP.md`
 - `app/llm.py`'s per-token pricing is Anthropic list pricing, not confirmed as the gateway's actual billed rate
 - **`document.sha256` is UNIQUE globally, not per-company** — found live 2026-09-22 seeding a second test company; a byte-identical file can never be uploaded to two different companies. `docs/KANBAN.md` backlog; needs a table rebuild in SQLite, not a one-line fix.
-- **`jaga-vision`'s `MemoryMax=2.5G` cap (DECISIONS #55) is unverified — genuinely untestable on macOS (no systemd/cgroups), not just untested.** The whole "isolated service can't take down the box" design depends on this actually firing. `deploy/README.md` has the exact live-box verification procedure; must be run before this service is trusted in front of anyone. Not deployed yet either.
+- **`jaga-vision`'s `MemoryMax=2.5G` cap (DECISIONS #55) is unverified — genuinely untestable on macOS (no systemd/cgroups), not just untested.** The whole "isolated service can't take down the box" design depends on this actually firing. `deploy/README.md` has the exact live-box verification procedure. **`jaga-vision` is deployed and generating correct captions as of 2026-09-23** (DECISIONS #56 — confirmed live, not the same thing as this cap being confirmed) — deployment happening doesn't by itself confirm `MemoryMax` fires; that must still be checked before trusting the isolation in front of anyone.
 
 ## Auth (added 2026-09-22, DECISIONS #28-31)
 
