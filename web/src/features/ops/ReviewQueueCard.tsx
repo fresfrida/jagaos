@@ -8,10 +8,12 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { ApiError } from '../../lib/apiClient'
 import {
   FIELD_CLASS,
   PictureToggleField,
+  PillPicker,
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
@@ -140,6 +142,7 @@ export function ReviewQueueCard({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expired, setExpired] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const isPictureLane = item.document_lane === 'memory'
   // Distinguishes "no caption yet" (the is_picture upload path leaves
   // description NULL on purpose) from "someone deliberately cleared it" —
@@ -337,21 +340,19 @@ export function ReviewQueueCard({
                 </span>
               )}
             </label>
-            <label className="text-[12px] text-muted">
+            <label className="text-[12px] text-muted sm:col-span-3">
               {t('ops.review.document.bucketLabel')}
-              <select
-                value={bucket}
-                disabled={!canResolve}
-                onChange={(e) => setBucket(e.target.value)}
-                className="mt-1 block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
-              >
-                <option value="">—</option>
-                {BUCKETS.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
+              <div className="mt-1">
+                <PillPicker
+                  options={BUCKETS}
+                  value={bucket}
+                  disabled={!canResolve}
+                  onChange={setBucket}
+                  clearLabel={t('ops.documents.noBucketOption')}
+                />
+              </div>
             </label>
-            <label className="text-[12px] text-muted">
+            <label className="text-[12px] text-muted sm:col-span-3">
               {t('ops.review.document.docTypeLabel')}
               <DocTypeField
                 lane={item.document_lane}
@@ -417,14 +418,14 @@ export function ReviewQueueCard({
           <p className="text-[13px] text-red-700">{t('ops.review.expiredMessage')}</p>
           {canResolve ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="secondary" onClick={() => void archiveExpired()} disabled={busy} icon={<Archive size={14} />}>
-                {t('ops.review.archiveButton')}
+              <Button size="sm" variant="secondary" onClick={() => setShowDeleteConfirm(true)} disabled={busy} icon={<Archive size={14} />}>
+                {t('ops.review.deleteButton')}
               </Button>
               {busy && <Loader2 size={16} className="animate-spin self-center text-muted" />}
-              <span className="text-[12px] text-muted">{t('ops.review.archiveOrReupload')}</span>
+              <span className="text-[12px] text-muted">{t('ops.review.deleteOrReupload')}</span>
             </div>
           ) : (
-            <p className="mt-2 text-[12px] text-muted">{t('ops.review.onlyAdminCanArchive')}</p>
+            <p className="mt-2 text-[12px] text-muted">{t('ops.review.onlyAdminCanDelete')}</p>
           )}
         </div>
       ) : canResolve ? (
@@ -449,6 +450,19 @@ export function ReviewQueueCard({
       ) : (
         <p className="mt-4 text-[12px] text-muted">{t('ops.review.onlyAdminCanResolve')}</p>
       )}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        message={t('ops.documents.deleteConfirmMessage', { filename: item.document_filename })}
+        confirmLabel={t('common.buttons.delete')}
+        cancelLabel={t('common.buttons.cancel')}
+        busy={busy}
+        onConfirm={() => {
+          setShowDeleteConfirm(false)
+          void archiveExpired()
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </Card>
   )
 }

@@ -34,7 +34,8 @@
       "save": "Save",
       "cancel": "Cancel",
       "clear": "Clear",
-      "close": "Close"
+      "close": "Close",
+      "delete": "Delete"
     }
   },
   "ops": {
@@ -95,9 +96,9 @@
       },
       "extractedFieldsHeading": "Extracted fields",
       "expiredMessage": "This document can no longer be reviewed automatically.",
-      "archiveButton": "Archive",
-      "archiveOrReupload": "or re-upload the document to try reviewing it again.",
-      "onlyAdminCanArchive": "Only an admin or owner can archive this — or re-upload the document to try reviewing it again.",
+      "deleteButton": "Delete",
+      "deleteOrReupload": "or re-upload the document to try reviewing it again.",
+      "onlyAdminCanDelete": "Only an admin or owner can delete this — or re-upload the document to try reviewing it again.",
       "acceptAsIs": "Accept as-is",
       "acceptWithCorrections": "Accept with corrections",
       "reject": "Reject",
@@ -123,10 +124,13 @@
       "descriptionPlaceholder": "Description",
       "vendorNamePlaceholder": "Vendor name",
       "noBucketOption": "No bucket",
+      "noDocumentDate": "No document date",
       "view": "View",
       "trace": "Trace",
       "edit": "Edit",
-      "archive": "Archive",
+      "delete": "Delete",
+      "deleteConfirmMessage": "Delete {{filename}}? This can't be undone.",
+      "moreActions": "More actions",
       "traceHeading": "Trace — document #{{documentId}} · total ${{cost}}",
       "traceTable": {
         "node": "Node",

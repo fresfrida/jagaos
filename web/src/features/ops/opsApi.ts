@@ -198,6 +198,16 @@ export const opsApi = {
 
   getTrace: (documentId: number) => request<TraceReport>(`/api/trace/${documentId}`),
 
+  // Deliberately named archiveDocument, not deleteDocument (2026-09-23):
+  // this calls the existing /archive endpoint and sets status='archived'
+  // (DECISIONS #53), and that internal name is staying — this is a
+  // user-facing label fix only, not a data-model rename. The UI now shows
+  // "Delete" everywhere this action appears, because it functionally is
+  // permanent from the app's own perspective (no role, not even owner,
+  // can ever see the document again — only direct database access can);
+  // calling it "Archive" in the UI implied a recoverability nobody using
+  // the app actually has. If a future change makes this genuinely
+  // reversible, the internal name and the label should probably converge.
   archiveDocument: (documentId: number) =>
     request<{ status: string }>(`/api/documents/${documentId}/archive`, { method: 'POST' }),
 

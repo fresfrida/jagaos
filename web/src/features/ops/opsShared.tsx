@@ -66,19 +66,71 @@ export function useDocumentBlobUrl(documentId: number, enabled = true): { blobUr
 export const FIELD_CLASS =
   'block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted'
 
-/** doc_type as a dropdown, hard-locked to DOC_TYPES — EXCEPT the statutory
- * lane, which stays free text (2026-09-22, DECISIONS #45: category fields
- * are dropdowns, name fields are free text; statutory's doc_type is a
- * name — "ACRA Certificate of Incorporation" — matched against
- * expectation slugs by derive_expectations.py::_matches_doc_type, not a
- * closed vocabulary, so forcing it into DOC_TYPES would break gap
- * matching). Shared by ReviewQueueCard and DocumentCard so the lane-based
- * branch exists in exactly one place; `className` is supplied by the
- * caller rather than fixed here since the two cards' surrounding layout
- * differs (one sits under a visible `<label>` and needs `mt-1`, the other
- * doesn't). A current value outside DOC_TYPES (a pre-rework document,
- * classified before this vocabulary existed) gets its own "(legacy)"
- * option instead of silently vanishing from the dropdown or being coerced
+/** Single-select pill/button group, replacing a `<select>` for a small
+ * fixed vocabulary (2026-09-23, live user feedback: "should be buttons as
+ * they are easier to select than drop down" — said about Bucket, applied
+ * here generically since doc_type is the same shape of field). An
+ * optional `clearLabel` renders one extra pill that sets the value back
+ * to `""` (unset); omit it for a field that must always hold a value.
+ * `labels` lets one specific option's button text differ from its raw
+ * value (used for doc_type's "(legacy)" suffix below) without needing a
+ * second, parallel options list. */
+export function PillPicker({
+  options,
+  value,
+  disabled,
+  onChange,
+  clearLabel,
+  labels,
+}: {
+  options: readonly string[]
+  value: string
+  disabled: boolean
+  onChange: (value: string) => void
+  clearLabel?: string
+  labels?: Record<string, string>
+}) {
+  const pillClass = (active: boolean) =>
+    `rounded-md border px-2.5 py-1 text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+      active ? 'border-ink bg-ink text-white' : 'border-line bg-white text-muted hover:border-ink/40 hover:text-ink'
+    }`
+  return (
+    <div className="flex flex-wrap gap-1.5" role="group">
+      {clearLabel !== undefined && (
+        <button type="button" disabled={disabled} onClick={() => onChange('')} className={pillClass(value === '')}>
+          {clearLabel}
+        </button>
+      )}
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(opt)}
+          aria-pressed={value === opt}
+          className={pillClass(value === opt)}
+        >
+          {labels?.[opt] ?? opt}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** doc_type as a button group, hard-locked to DOC_TYPES — EXCEPT the
+ * statutory lane, which stays free text (2026-09-22, DECISIONS #45:
+ * category fields are a fixed choice, name fields are free text;
+ * statutory's doc_type is a name — "ACRA Certificate of Incorporation" —
+ * matched against expectation slugs by
+ * derive_expectations.py::_matches_doc_type, not a closed vocabulary, so
+ * forcing it into DOC_TYPES would break gap matching). Shared by
+ * ReviewQueueCard and DocumentCard so the lane-based branch exists in
+ * exactly one place. `className` only applies to the statutory `<input>`
+ * — the button-group branch (2026-09-23, same live feedback that moved
+ * Bucket off a dropdown) lays itself out with `PillPicker` instead of a
+ * single-control class string. A current value outside DOC_TYPES (a
+ * pre-rework document, classified before this vocabulary existed) gets
+ * its own "(legacy)" pill instead of silently vanishing or being coerced
  * to something else on save. */
 export function DocTypeField({
   lane,
@@ -99,13 +151,16 @@ export function DocTypeField({
   }
   const isLegacyValue = value !== '' && !(DOC_TYPES as readonly string[]).includes(value)
   return (
-    <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={className}>
-      <option value="">—</option>
-      {isLegacyValue && <option value={value}>{t('ops.docType.legacySuffix', { value })}</option>}
-      {DOC_TYPES.map((dt) => (
-        <option key={dt} value={dt}>{dt}</option>
-      ))}
-    </select>
+    <div className="mt-1">
+      <PillPicker
+        options={isLegacyValue ? [value, ...DOC_TYPES] : [...DOC_TYPES]}
+        value={value}
+        disabled={disabled}
+        onChange={onChange}
+        clearLabel="—"
+        labels={isLegacyValue ? { [value]: t('ops.docType.legacySuffix', { value }) } : undefined}
+      />
+    </div>
   )
 }
 
@@ -199,8 +254,20 @@ const STATUS_LABEL_KEY: Record<string, string> = {
   archived: 'ops.status.archived',
 }
 
+// 2026-09-23, live user question ("unsure what is 'Filed' status shown
+// for... is it really necessary to be shown"): a badge earns its place by
+// telling a business owner something needs attention (needs review,
+// quarantined) or explaining an otherwise-surprising state (open,
+// missing). The default "processed fine, nothing to do" outcome doesn't —
+// showing nothing here is itself informative (no badge = nothing wrong),
+// so `filed`/`processed` render no pill at all rather than a
+// pipeline-status word most users won't recognize. Every other status
+// this map knows is exceptional enough to keep showing.
+const STATUSES_WITHOUT_A_BADGE = new Set(['filed', 'processed'])
+
 export function StatusPill({ status }: { status: string }) {
   const { t } = useTranslation()
+  if (STATUSES_WITHOUT_A_BADGE.has(status)) return null
   const labelKey = STATUS_LABEL_KEY[status]
   return (
     <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-mono uppercase tracking-wide ${STATUS_TONE[status] ?? 'bg-canvas text-muted'}`}>

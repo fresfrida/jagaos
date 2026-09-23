@@ -732,6 +732,60 @@ Zero browser console errors across the whole pass. `npm run typecheck`/
 `npm run build` both clean. No backend change, so the backend suite wasn't
 re-run.
 
+**Five Company Files / bucket-picker fixes from live user feedback
+(2026-09-23, DECISIONS #60), all display-only or client-side-gating — no
+backend/data-model change.** (1) Every document card (Company Files,
+Search) now shows "Upload date" and "Document date" — the exact wording
+already established by the Calendar page's Dates view, reused rather than
+invented a second time — with a plain "No document date" state when
+`occurred_on` is null. (2) Trace (confirmed via a direct user question,
+"what is trace btw?", to be an agent-debugging view nobody but a
+developer needs day to day) moved out of the primary action row into a
+small "⋯" overflow menu — confirmed via grep it's the only place it was
+reachable, so it's still fully reachable, just de-emphasized. (3)
+`StatusPill` now renders nothing at all for `filed`/`processed` — fixed
+centrally in the one shared component, so this also applies to the
+Calendar hub's Dates rows, which show the same badge. Every exceptional
+status (`needs_review`, `quarantined`, `open`, `missing`) is unaffected.
+(4) **"Archive" is now "Delete" everywhere it's user-facing** — an
+explicit, confirmed decision: the action is already functionally
+permanent from the app's own perspective (DECISIONS #53), so "Archive"
+implied a recoverability nobody using the app actually has. The internal
+name is deliberately unchanged (`opsApi.archiveDocument`,
+`POST /api/documents/{id}/archive`, `status='archived'`) — a code comment
+at the endpoint now says so explicitly. A new shared
+`components/ui/ConfirmDialog.tsx` ("Delete {filename}? This can't be
+undone.") gates both call sites (Company Files/Search action row, the
+review card's expired-review escape hatch) — nothing fires on the first
+click anymore. (5) The Bucket `<select>` (review card, Company Files edit
+form) is now a row of single-select pill buttons (`PillPicker`,
+`opsShared.tsx`) over the same fixed 6 values — live feedback: "should be
+buttons... easier to select than drop down." `doc_type`'s dropdown was
+converted the same way while already in that code (the statutory lane's
+free-text exception is untouched).
+
+**No automated test for the delete-confirmation flow, despite the task
+asking for one** — `web/package.json` has no test runner at all (no
+vitest/RTL, confirmed by reading it fresh before starting); adding one
+would have meant standing up frontend test infrastructure first, a
+separate, much bigger task not requested here and already an open
+`docs/KANBAN.md` Backlog item. Verified live instead (Playwright, real
+login, real backend, network-request interception): opening the dialog
+and clicking Cancel fires zero `POST .../archive` requests; clicking
+Delete fires exactly one and the document disappears from the list.
+Verified live end to end (`owner@try-demo.test`, 17 real seeded
+documents): dates render on every card across Company Files and Search; a
+previously-"FILED" document now shows no badge at all, `needs_review`/
+`quarantined` unaffected, same suppression visible on the Calendar hub's
+Dates rows; the overflow menu opens and Trace still renders the same
+trace table it always did; Bucket and doc_type both render as pill rows
+with the correct value pre-selected in both the review card and Company
+Files' edit form. Zero console errors. `npm run typecheck`/`npm run build`
+both clean. Screenshots: `docs/screenshots/company-files-dates-and-delete.png`,
+`company-files-overflow-menu.png`, `company-files-edit-pill-pickers.png`,
+`company-files-delete-confirm-dialog.png`, `calendar-dates-no-filed-badge.png`,
+`search-dates-and-delete.png`.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -827,7 +881,8 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Tap-to-talk voice captioning (Web Speech API, 2026-09-23, DECISIONS #52) | `hooks/useSpeechCaption.ts` |
 | i18n bootstrap (i18next instance, language persistence) + locale files — EN complete, ZH/TA/MS are English-value stubs pending real translation (2026-09-23, DECISIONS #57) | `i18n.ts`, `locales/{en,zh,ta,ms}.json` |
 | The real logged-in app's shared data layer (documents/expectations/obligations/reviewItems + backend health) and status bar, used by every page below (2026-09-23, DECISIONS #59) | `features/ops/useOpsData.ts`, `features/ops/OpsStatusBar.tsx` |
-| Shared field/status components (`DocTypeField`, `VoiceCaptionButton`, `PictureToggleField`, `StatusPill`, blob-URL fetch hook) and the API client (`BUCKETS`/`DOC_TYPES`, all `/api/documents`\|`/api/search`\|etc. calls) | `features/ops/opsShared.tsx`, `features/ops/opsApi.ts` |
+| Shared field/status components (`DocTypeField`, `PillPicker`, `VoiceCaptionButton`, `PictureToggleField`, `StatusPill` — no badge for `filed`/`processed`, DECISIONS #60 — blob-URL fetch hook) and the API client (`BUCKETS`/`DOC_TYPES`, all `/api/documents`\|`/api/search`\|etc. calls) | `features/ops/opsShared.tsx`, `features/ops/opsApi.ts` |
+| Shared destructive-action confirmation modal ("Delete X? This can't be undone.", 2026-09-23, DECISIONS #60) | `components/ui/ConfirmDialog.tsx` |
 | Upload a document + the review queue — `/upload` | `pages/UploadPage.tsx`, `features/ops/ReviewQueueCard.tsx` |
 | Every document, bucket-filterable (reads `?bucket=` for deep links) — `/company-files` | `pages/CompanyFilesPage.tsx`, `features/ops/DocumentCard.tsx`, `features/ops/DocumentResultsList.tsx` |
 | Real, session-scoped full-text search — `/search` | `pages/SearchPage.tsx` |
