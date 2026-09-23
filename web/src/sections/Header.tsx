@@ -8,7 +8,21 @@ import { cn } from '../lib/cn'
 import { SUPPORTED_LANGUAGES, setLanguage, type LanguageCode } from '../i18n'
 import { navigate } from '../router/navigate'
 import { Link } from '../router/Link'
-import { ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute } from '../router/routes'
+import { OPS_NAV_ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
+
+// 2026-09-23 (header/nav restructure): the logged-in nav's five items
+// (Calendar, Tags, Search, Company Files, Upload) each need a translated
+// label — the logged-out marketing nav's Calendar/Tags share the same two
+// ids, so they're included here too rather than left reading from
+// ROUTES[id].title (untranslated) while their three new neighbors read
+// from t().
+const NAV_LABEL_KEYS: Partial<Record<RouteId, string>> = {
+  calendar: 'header.nav.calendar',
+  tags: 'header.nav.tags',
+  search: 'header.nav.search',
+  'company-files': 'header.nav.companyFiles',
+  upload: 'header.nav.upload',
+}
 
 /** Compact language switcher — a plain <select>, not a custom dropdown
  * widget, per the "keep the control itself simple" brief. Persists via
@@ -48,7 +62,11 @@ export function Header({ current }: { current: ResolvedRoute }) {
           <Logo />
           <nav aria-label={t('header.primaryNav')}>
             <ul className="flex items-center gap-0.5">
-              {TAB_ROUTES.map((id) => {
+              {/* Signed-in nav is the five real-app items in their
+                 specified order; Calendar/Tags are the same two paths as
+                 the logged-out marketing nav (Page.tsx branches on
+                 session state to decide what renders at each). */}
+              {(status === 'signed-in' ? OPS_NAV_ROUTES : TAB_ROUTES).map((id) => {
                 const active = current === id
                 return (
                   <li key={id}>
@@ -61,7 +79,7 @@ export function Header({ current }: { current: ResolvedRoute }) {
                         active ? 'bg-canvas text-ink' : 'text-muted hover:text-ink',
                       )}
                     >
-                      {ROUTES[id].title}
+                      {t(NAV_LABEL_KEYS[id] ?? '')}
                     </Link>
                   </li>
                 )
@@ -73,7 +91,7 @@ export function Header({ current }: { current: ResolvedRoute }) {
           <LanguageSwitcher />
           {status === 'signed-in' && user ? (
             <>
-              <Link href={routeHref('ops')} className="hidden truncate text-[13px] text-muted sm:block sm:max-w-[160px]">
+              <Link href={routeHref('upload')} className="hidden truncate text-[13px] text-muted sm:block sm:max-w-[160px]">
                 {user.name || user.email}
               </Link>
               <button

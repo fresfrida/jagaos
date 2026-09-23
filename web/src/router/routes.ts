@@ -1,15 +1,25 @@
 import { PRODUCT_NAME } from '../config/product'
 
 /** Real URL paths (/calendar), served by the SPA fallback on Vite, Caddy and Vercel (see web/vercel.json). */
-export type RouteId = 'home' | 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'get-started' | 'login' | 'ops'
+export type RouteId =
+  | 'home' | 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'get-started' | 'login' | 'ops'
+  | 'upload' | 'company-files' | 'search'
 export type ResolvedRoute = RouteId | 'not-found'
 /** Pages that share the title + content layout. */
-export type FrameRouteId = 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'ops'
+export type FrameRouteId = 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'ops' | 'upload' | 'company-files' | 'search'
 
 export interface RouteConfig {
   path: string
   title: string
   description?: string
+  // Optional i18n overrides (2026-09-23, header/nav restructure): when
+  // present, FramePage prefers these over the plain `title`/`description`
+  // above. Kept optional rather than required on every route so the
+  // pre-existing frame routes (calendar/tags/how-it-works/stack/ops),
+  // whose static English title/description predate this task, don't need
+  // touching just to add three new routes.
+  titleKey?: string
+  descriptionKey?: string
 }
 
 export const ROUTES: Record<RouteId, RouteConfig> = {
@@ -32,15 +42,29 @@ export const ROUTES: Record<RouteId, RouteConfig> = {
   },
   'get-started': { path: '/get-started', title: 'Get started' },
   login: { path: '/login', title: 'Log in' },
+  // Legacy path, kept as a redirect to /upload (2026-09-23) rather than
+  // removed outright — the deployed app has been the single URL every
+  // bookmark/phone-home-screen shortcut points at since 2026-09-22
+  // (DECISIONS #32), so a dead 404 here would break those silently.
   ops: {
     path: '/ops',
     title: 'Your documents',
     description: 'Add a document, watch it get classified and extracted, confirm anything flagged, and see the obligations and gaps it produces.',
   },
+  upload: { path: '/upload', title: 'Upload', titleKey: 'ops.tabs.review' },
+  'company-files': { path: '/company-files', title: 'Company Files', titleKey: 'ops.companyFiles.heading' },
+  search: { path: '/search', title: 'Search', titleKey: 'ops.search.heading' },
 }
 
-/** The header tabs, in order. */
+/** The logged-out header's nav tabs, in order. */
 export const TAB_ROUTES = ['calendar', 'tags'] as const
+
+/** The logged-in header's nav, in order (2026-09-23, header/nav
+ * restructure): Calendar and Tags are the same two paths as the
+ * logged-out nav above — same URL, different content once signed in
+ * (Page.tsx branches on session state) — plus the three routes promoted
+ * from OpsConsole's remaining tabs. */
+export const OPS_NAV_ROUTES = ['calendar', 'tags', 'search', 'company-files', 'upload'] as const
 
 export const routeHref = (id: RouteId): string => ROUTES[id].path
 

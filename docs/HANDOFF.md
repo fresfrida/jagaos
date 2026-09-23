@@ -14,7 +14,7 @@ status" and "How to resume" below.
 
 This repo currently holds:
 - **Planning docs** at root, moved into `MDs/` by the user 2026-09-22 (`ARCHITECTURE.md`, `PLATFORM.md`, `UI-SPEC.md`, `GAPS.md`, ...). Written for the earlier "JagaOS = Singapore corp-sec records keeper" concept. Useful context, not automatically current. `GAPS.md` §5 is still binding.
-- **`web/`** — the marketing landing page (mock data, logged-out) plus the real logged-in app (`/login`, `/ops`, session-backed). See "Where the main logic lives" below.
+- **`web/`** — the marketing landing page (mock data, logged-out) plus the real logged-in app: `/login`, then five URL-addressable pages (`/upload`, `/company-files`, `/search`, plus `/calendar` and `/tags` which double as the signed-in Calendar hub and Tags landing page once authenticated — DECISIONS #59, 2026-09-23, supersedes the old single tabbed `/ops` page, kept only as a redirect to `/upload`). Session-backed throughout. See "Where the main logic lives" below.
 - **`app/`** — backend, per `ARCHITECTURE.md` §9 plus a 4-role auth layer (`app/auth.py`, 2026-09-22, DECISIONS #29-31). See "Backend status" below.
 - **`evals/`** — eval runner + adversarial cases, `evals/report.md` committed (10/10 passing, no gateway key needed).
 - **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, auth/tenant-isolation, and vision-caption async wiring (`tests/test_vision_caption.py`, mocked, no torch). 39/39 passing (most need no gateway key).
@@ -645,6 +645,93 @@ check even though nothing there changed (39/39). Screenshots:
 
 **Not deployed or verified on the real box** — restarting the live `jaga-vision` service was explicitly out of scope for this task pending a separate go-ahead. What is verified: the backend suite (39/39, unaffected — the existing vision test mocks the `httpx.post` boundary, not `vision/app.py` itself) and the warm-model *pattern*, proven locally (own venv, macOS, not the box): after a clean restart of the local `vision` process, the first successful `/caption` call took **6.37s** and an immediate second call took **0.59s** — confirms the code now behaves as designed (load once, fast thereafter), but these are not the box's real numbers (this Mac already had the model weights cached from #55's original local build, and isn't the box's CPU-only Linux environment) — the ~20s-first/~1-2s-second figures this task expects are Lightsail-specific and still need a real on-box measurement once deployed (`docs/KANBAN.md` Backlog). Frontend typecheck + build clean; the indicator verified live (Playwright, a real `is_picture=true` upload with no vision service running so the poll window stayed active). Screenshot: `docs/screenshots/ops-review-card-generating-caption.png`.
 
+**Header/nav restructure: the real logged-in app is now five URL-addressable
+top-level routes instead of one tabbed `/ops` page (2026-09-23, DECISIONS
+#59).** The whole real app used to live inside `/ops` as a hand-rolled
+tablist (Upload & Review / Documents / Gap Analysis / Obligations / Dates)
+with real conditional rendering per tab but no browser history, back/
+forward, or bookmark support for any individual section. The header's
+signed-in nav is now exactly **Calendar, Tags, Search, Company Files,
+Upload**, in that order, each a real path. Calendar and Tags reuse the
+*same* URLs as the existing logged-out marketing pages — `pages/Page.tsx`
+now calls `useAuth()` and branches: signed-in renders the real page,
+everyone else keeps seeing the unchanged mock `CalendarPreview`/
+`TagsPreview`. Calendar becomes the "find something by when it matters"
+hub — Dates (documents by date, upload/document toggle, unchanged), plus
+Obligations, plus Gap Analysis, as three sections on one page (an explicit
+decision: none of the three were named individually in the header's
+five-item list). Tags becomes a small landing page: six buttons over the
+fixed bucket taxonomy, each linking into Company Files pre-filtered via a
+`?bucket=` query param — "a fast visual entry point... not a new data
+view," per the task's own framing. Three genuinely new routes: `/upload`
+(the old Upload & Review tab, moved as-is), `/company-files` (the old
+Documents tab minus its search box), `/search` (that search box, promoted
+to its own page). `/ops` is kept as a redirect to `/upload`, not removed —
+it's the one URL every existing bookmark/phone-home-screen shortcut points
+at (DECISIONS #32).
+
+`features/ops/OpsConsole.tsx` (1591 lines, one mount for all 5 tabs) is
+deleted. Its content was split, not rewritten: a new `useOpsData` hook
+(`features/ops/useOpsData.ts`) fetches the same 4 collections OpsConsole
+always fetched together (documents/expectations/obligations/reviewItems);
+`RequireSession` (`features/auth/RequireSession.tsx`) is the session-gate-
+and-redirect logic OpsConsole used to inline, now shared across every page
+that needs it; `OpsStatusBar` is the "backend reachable / company · email ·
+role" line, now repeated at the top of each page instead of rendered once;
+`opsShared.tsx` holds the small cross-cutting pieces (`DocTypeField`,
+`VoiceCaptionButton`, `PictureToggleField`, `StatusPill`, the blob-URL
+fetch hook); `ReviewQueueCard.tsx`, `DocumentCard.tsx` (+ `DocumentViewerModal`,
+`DocumentThumbnail`), and `features/calendar/DatesView.tsx` are the same
+components, unchanged, just moved out of the monolith into their own
+files; `DocumentResultsList.tsx` is a new small shared wrapper (list +
+trace table + viewer modal) used by both the Company Files and Search
+pages, since that wiring was duplicated between them otherwise.
+
+**A real, separate router bug was found and fixed in the process, not
+just this task's own redirect**: a component that calls `navigate()` from
+its own first-mount effect races `useRoute`'s `popstate` listener — React
+commits a child's effects before its parent's, so on a fresh page load,
+`useRoute`'s listener (attached in `App`'s own effect) isn't attached yet
+when a *descendant* component's first-mount effect fires `navigate()`
+synchronously. The `/ops`→`/upload` redirect silently no-op'd on a fresh,
+hard-loaded (bookmarked) visit as a direct result — confirmed live via
+Playwright: the URL changed to `/upload`, but the rendered route and
+`document.title` both stayed stuck on `/ops`'s old "Your documents," and
+`#main`'s actual DOM content was empty (`<div style="opacity: 1;"></div>`,
+nothing inside it). Fixed by rewriting the URL in `main.tsx`, before React
+ever mounts, so `parsePath` never sees `/ops` as the live pathname at all
+— the `OpsRedirect` component is kept only as a defensive fallback for a
+theoretical client-side arrival at that route, which no in-app link
+produces anymore (`Header.tsx` and `LoginPage.tsx` were both repointed
+from `routeHref('ops')` to `routeHref('upload')`).
+
+**Disclosed tradeoffs, not fixed here**: navigating between Upload/
+Company Files/Calendar now re-fetches all 4 collections on each landing,
+where the old single OpsConsole mount fetched once and kept tab switches
+free — the direct, necessary consequence of "separate top-level routes,"
+not a bug. Search's vendor-name autocomplete is scoped to the current
+result set only, not the full company list like Review/Company Files —
+deliberately smaller scope so this one new page didn't need its own bulk
+fetch just for one dropdown. The Tags landing page's own one-line intro
+sits directly under the *marketing* page's existing subtitle text
+(`ROUTES.tags.description`, shared by both variants at that path) — a
+little redundant wording, not incorrect (`docs/KANBAN.md` Backlog). The
+header's "Get Started" CTA still points a signed-in user at the marketing
+`/calendar` page, unchanged — out of this task's explicit scope.
+
+Verified live end to end (Playwright, real login as the seeded demo owner
+`owner@try-demo.test`, real documents already in that company — not
+mocked): signed-out `/calendar`/`/tags` render the unchanged marketing
+preview; the signed-in 5-item nav appears in the right order; Company
+Files' bucket chips and the Tags landing page's six buttons both correctly
+deep-link via `?bucket=`; Search returns real results with working view/
+trace/archive; the Calendar hub renders all three merged sections (Dates,
+2 Obligations, Gap Analysis 2 of 6 held) with real data; a hard-loaded
+`/ops` now correctly lands on a fully-rendered, correctly-titled `/upload`.
+Zero browser console errors across the whole pass. `npm run typecheck`/
+`npm run build` both clean. No backend change, so the backend suite wasn't
+re-run.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -693,9 +780,11 @@ key needed — pure DB/HTTP against `TestClient`).
 
 Frontend: `web/src/features/auth/` (`AuthContext`/`useAuth`, `authApi.ts`
 for session storage + the auth calls), `web/src/pages/LoginPage.tsx`.
-`/ops` (`web/src/features/ops/OpsConsole.tsx`) is now session-scoped and
-role-aware — upload hidden below `user`, review Accept/Reject hidden below
-`admin` — instead of its own company create/switch UI. `web/src/lib/apiClient.ts`
+The real app's five pages (`/upload`, `/company-files`, `/search`, plus
+the signed-in `/calendar`/`/tags`, DECISIONS #59) are session-scoped and
+role-aware via the shared `RequireSession`/`useAuth` — upload hidden below
+`user`, review Accept/Reject hidden below `admin` — instead of a company
+create/switch UI. `web/src/lib/apiClient.ts`
 is the one shared fetch wrapper both `authApi.ts` and `opsApi.ts` use (was
 two separate copies before 2026-09-22; also where FastAPI's `{"detail":
 ...}` error bodies get turned into a plain message instead of showing raw
@@ -725,18 +814,24 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Shared matching rules (tag / query / event relations) | `features/memories/memoryMatching.ts` |
 | Mock memories + tags | `features/memories/mockData.ts` |
 | Event → documents/decisions rule | `features/calendar/eventRelations.ts` |
-| Logged-out preview search — deliberately still mock, real search lives in `/ops` instead (2026-09-22, DECISIONS #41 — this file has no session to call a real endpoint with) | `features/search/searchService.ts` |
-| Routes, path parsing, page titles, header tabs | `router/routes.ts` (`ROUTES`, `TAB_ROUTES`, `parsePath`) |
+| Logged-out preview search — deliberately still mock, real search lives at `/search` instead (2026-09-22, DECISIONS #41 — this file has no session to call a real endpoint with) | `features/search/searchService.ts` |
+| Routes, path parsing, page titles, nav lists | `router/routes.ts` (`ROUTES`, `TAB_ROUTES`, `OPS_NAV_ROUTES`, `parsePath`) |
 | Client-side navigation | `router/Link.tsx`, `router/navigate.ts`, `router/useRoute.ts`, `router/useRouteEffects.ts` |
-| Route → page mapping; shared frame shell | `pages/Page.tsx`, `pages/FramePage.tsx` |
-| App window chrome around Calendar/Tags | `features/preview/ProductFrame.tsx` |
+| Route → page mapping (branches on session for `calendar`/`tags`); shared frame shell (optional i18n title/description override) | `pages/Page.tsx`, `pages/FramePage.tsx` |
+| App window chrome around the logged-out Calendar/Tags marketing preview | `features/preview/ProductFrame.tsx` |
 | Reusable UI | `components/ui/*` (Button, Badge, Card, Container, Reveal, EmptyState, MemoryCard, SourceLabel, Logo) |
 | Session state, login/logout, role helpers | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
+| Session-gate-and-redirect guard shared by every real-app page (2026-09-23, DECISIONS #59) | `features/auth/RequireSession.tsx` |
 | Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
 | Client-side photo downscale before upload (2026-09-22) | `lib/imageNormalize.ts` |
 | Tap-to-talk voice captioning (Web Speech API, 2026-09-23, DECISIONS #52) | `hooks/useSpeechCaption.ts` |
 | i18n bootstrap (i18next instance, language persistence) + locale files — EN complete, ZH/TA/MS are English-value stubs pending real translation (2026-09-23, DECISIONS #57) | `i18n.ts`, `locales/{en,zh,ta,ms}.json` |
-| The real logged-in app: upload, review queue, gap analysis, obligations, trace, archive, real search, an in-page document preview, date grouping — 5 tabs, not one long scroll (2026-09-22, DECISIONS #36, #37, #41-44) | `features/ops/OpsConsole.tsx`, `features/ops/opsApi.ts` |
+| The real logged-in app's shared data layer (documents/expectations/obligations/reviewItems + backend health) and status bar, used by every page below (2026-09-23, DECISIONS #59) | `features/ops/useOpsData.ts`, `features/ops/OpsStatusBar.tsx` |
+| Shared field/status components (`DocTypeField`, `VoiceCaptionButton`, `PictureToggleField`, `StatusPill`, blob-URL fetch hook) and the API client (`BUCKETS`/`DOC_TYPES`, all `/api/documents`\|`/api/search`\|etc. calls) | `features/ops/opsShared.tsx`, `features/ops/opsApi.ts` |
+| Upload a document + the review queue — `/upload` | `pages/UploadPage.tsx`, `features/ops/ReviewQueueCard.tsx` |
+| Every document, bucket-filterable (reads `?bucket=` for deep links) — `/company-files` | `pages/CompanyFilesPage.tsx`, `features/ops/DocumentCard.tsx`, `features/ops/DocumentResultsList.tsx` |
+| Real, session-scoped full-text search — `/search` | `pages/SearchPage.tsx` |
+| Signed-in Calendar hub (dates/obligations/gap analysis merged) and Tags landing (six bucket buttons into Company Files) — same URLs as the marketing `/calendar`/`/tags`, session-branched in `Page.tsx` | `features/calendar/CalendarHub.tsx`, `features/calendar/DatesView.tsx`, `features/tags/TagsLanding.tsx` |
 | Login form | `pages/LoginPage.tsx` |
 
 ## Commands (run in `web/`)
@@ -775,7 +870,7 @@ see the callout below on why that matters for `/ops` specifically.
 
 ## Known risks
 
-- Header: logo, tabs Calendar and Tags (`aria-current` on the active one), Log In / (email + Log Out when signed in), Get Started (hidden on phones). The old nav (Product, Use Cases, Security, Stack, Pricing) is gone. The landing (`/`) is hero-only. `/how-it-works`, `/stack` and `/get-started` still exist but have no header tab; they are reached from the footer (Guides, Security). Other footer labels are plain-text placeholders. "Log In" now goes to a real `/login` (dev-login placeholder — see the Auth section above for what that means and doesn't mean).
+- Header: logo, a nav that depends on session state (`aria-current` on the active item) — signed-out shows the marketing tabs Calendar and Tags; signed-in shows all five real-app items, Calendar/Tags/Search/Company Files/Upload, in that order (2026-09-23, DECISIONS #59) — plus Log In / (email + Log Out when signed in), Get Started (hidden on phones, still points at the marketing `/calendar` even when signed in — `docs/KANBAN.md` Backlog). The old nav (Product, Use Cases, Security, Stack, Pricing) is gone. The landing (`/`) is hero-only. `/how-it-works`, `/stack` and `/get-started` still exist but have no header tab; they are reached from the footer (Guides, Security). Other footer labels are plain-text placeholders. "Log In" now goes to a real `/login` (dev-login placeholder — see the Auth section above for what that means and doesn't mean).
 - The landing has no footer and no scroll, but the hero grows if search results are shown on a very short viewport (verified fine at 1440x900).
 - DB schema screenshots are Postgres-flavoured (uuid, enums, `vector(1536)`, RLS, Supabase `auth_subject`); the chosen store is SQLite. Mapping is unresolved.
 - Python version drift: `ARCHITECTURE.md` says 3.11, `bootstrap.sh` installs 3.12, conda env `agent` is 3.11.15.
@@ -791,5 +886,5 @@ see the callout below on why that matters for `/ops` specifically.
 1. Read `docs/KANBAN.md` (Doing / Blocked) and `docs/DECISIONS.md`, especially #28-31.
 2. Start both servers: `uvicorn app.main:app --reload` from repo root (backend), `cd web && npm run dev` (frontend, local iteration — the deployed `https://jagaos.vercel.app` is what actually gets checked on the phone, per the Commands section above).
 3. `python scripts/seed_dev_db.py` if you want a company with data already in it (idempotent — safe to re-run) rather than starting from an empty `/login` signup.
-4. Log in at `/login`, land on `/ops`, upload a document, watch it get classified/extracted, resolve anything flagged, see the gap analysis and obligations. That loop working, end to end, in the browser, is the current bar — not another backend node.
+4. Log in at `/login`, land on `/upload`, upload a document, watch it get classified/extracted, resolve anything flagged, then check `/calendar` (dates/obligations/gap analysis), `/company-files`, and `/search` (2026-09-23, DECISIONS #59 — five real pages, not one tabbed `/ops`; the old URL still works, redirecting to `/upload`). That loop working, end to end, in the browser, is the current bar — not another backend node.
 5. Next real milestones, in the order they'd bite: member-management UI (backend's done, no frontend), a company settings page, a product frame with its own styling instead of `/ops`'s debug-console look (`docs/KANBAN.md` Backlog has the full list).

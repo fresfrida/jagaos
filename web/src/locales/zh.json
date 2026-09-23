@@ -7,7 +7,14 @@
     "logIn": "Log In",
     "logOut": "Log Out",
     "getStarted": "Get Started",
-    "language": "Language"
+    "language": "Language",
+    "nav": {
+      "calendar": "Calendar",
+      "tags": "Tags",
+      "search": "Search",
+      "companyFiles": "Company Files",
+      "upload": "Upload"
+    }
   },
   "auth": {
     "login": {
@@ -95,6 +102,16 @@
       "acceptWithCorrections": "Accept with corrections",
       "reject": "Reject",
       "onlyAdminCanResolve": "Only an admin or owner can resolve this."
+    },
+    "companyFiles": {
+      "heading": "Company Files"
+    },
+    "search": {
+      "heading": "Search",
+      "prompt": "Type something above to search your documents."
+    },
+    "tags": {
+      "intro": "Jump straight into Company Files, pre-filtered by category."
     },
     "documents": {
       "heading": "Documents ({{count}})",

@@ -23,7 +23,7 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (status === 'signed-in') navigate(routeHref('ops'))
+    if (status === 'signed-in') navigate(routeHref('upload'))
   }, [status])
 
   const submit = async (event: React.FormEvent) => {
@@ -35,7 +35,7 @@ export function LoginPage() {
           ? { email, company_name: companyName, fye_month: fyeMonth, fye_day: fyeDay }
           : { email },
       )
-      navigate(routeHref('ops'))
+      navigate(routeHref('upload'))
     } catch {
       // error state already surfaced by useAuth()
     } finally {

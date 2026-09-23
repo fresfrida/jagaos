@@ -1,35 +1,64 @@
+import { useEffect } from 'react'
+import { CalendarHub } from '../features/calendar/CalendarHub'
 import { CalendarPreview } from '../features/calendar/CalendarPreview'
-import { OpsConsole } from '../features/ops/OpsConsole'
+import { useAuth } from '../features/auth/AuthContext'
 import { ProductFrame } from '../features/preview/ProductFrame'
+import { TagsLanding } from '../features/tags/TagsLanding'
 import { TagsPreview } from '../features/tags/TagsPreview'
-import type { ResolvedRoute } from '../router/routes'
+import { navigate } from '../router/navigate'
+import { routeHref, type ResolvedRoute } from '../router/routes'
 import { Hero } from '../sections/Hero'
 import { HowItWorks } from '../sections/HowItWorks'
 import { StackList } from '../sections/StackList'
+import { CompanyFilesPage } from './CompanyFilesPage'
 import { FramePage } from './FramePage'
 import { GetStartedPage } from './GetStartedPage'
 import { LoginPage } from './LoginPage'
 import { NotFoundPage } from './NotFoundPage'
+import { SearchPage } from './SearchPage'
+import { UploadPage } from './UploadPage'
+
+/** /ops is superseded by /upload (2026-09-23, header/nav restructure) —
+ * kept as a redirect rather than a 404 since it's the one URL every
+ * existing bookmark/phone-home-screen shortcut points at. */
+function OpsRedirect() {
+  useEffect(() => navigate(routeHref('upload')), [])
+  return null
+}
 
 /** Maps a route to its page. Pages compose features; they hold no logic of their own. */
 export function Page({ route }: { route: ResolvedRoute }) {
+  const { status } = useAuth()
+
   switch (route) {
     case 'home':
       return <Hero />
     case 'calendar':
+      // Same URL for everyone (2026-09-23, header/nav restructure) — a
+      // signed-in visitor gets the real Calendar hub (dates/obligations/
+      // gap analysis); everyone else keeps seeing the existing mock-data
+      // marketing preview, unchanged.
       return (
         <FramePage route="calendar">
-          <ProductFrame>
-            <CalendarPreview />
-          </ProductFrame>
+          {status === 'signed-in' ? (
+            <CalendarHub />
+          ) : (
+            <ProductFrame>
+              <CalendarPreview />
+            </ProductFrame>
+          )}
         </FramePage>
       )
     case 'tags':
       return (
         <FramePage route="tags">
-          <ProductFrame>
-            <TagsPreview />
-          </ProductFrame>
+          {status === 'signed-in' ? (
+            <TagsLanding />
+          ) : (
+            <ProductFrame>
+              <TagsPreview />
+            </ProductFrame>
+          )}
         </FramePage>
       )
     case 'how-it-works':
@@ -49,9 +78,23 @@ export function Page({ route }: { route: ResolvedRoute }) {
     case 'login':
       return <LoginPage />
     case 'ops':
+      return <OpsRedirect />
+    case 'upload':
       return (
-        <FramePage route="ops">
-          <OpsConsole />
+        <FramePage route="upload">
+          <UploadPage />
+        </FramePage>
+      )
+    case 'company-files':
+      return (
+        <FramePage route="company-files">
+          <CompanyFilesPage />
+        </FramePage>
+      )
+    case 'search':
+      return (
+        <FramePage route="search">
+          <SearchPage />
         </FramePage>
       )
     case 'not-found':

@@ -15,8 +15,9 @@ import { authHeaders } from '../auth/authApi'
 
 // 2026-09-22 (DECISIONS #42): fixed taxonomy, supersedes the tag table —
 // "only upgrade to a real tags table if users later need to invent their
-// own." Shared here so the bucket-filter chips and the bucket dropdown
-// editor in OpsConsole.tsx both read from one list, not two copies.
+// own." Shared here so the Company Files page's bucket-filter chips, the
+// Tags landing page's six buttons, and the bucket dropdown editors in
+// DocumentCard/ReviewQueueCard all read from one list, not several copies.
 export const BUCKETS = [
   'Receivables', 'Expenses', 'Statutory', 'Operations', 'Memory Lane', 'Miscellaneous',
 ] as const
