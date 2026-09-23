@@ -179,12 +179,17 @@ def test_verify_clean_extraction_still_needs_review_not_filed():
     document_id = _seed_company_and_document("cleanverifysha")
     state = {
         "run_id": "cleanverify1", "company_id": 1, "document_id": document_id,
-        "text": "Invoice #1234\nVendor: Acme Pte Ltd\nSubtotal: 100.00\nGST: 9.00\nTotal: 109.00",
+        "text": "Invoice #1234\nVendor: Acme Pte Ltd\nDate: 2026-09-01\nSubtotal: 100.00\nGST: 9.00\nTotal: 109.00",
         "text_source": "pdfplumber",
         "classify_result": {"lane": "invoice", "doc_type": "tax_invoice",
                              "confidence": 0.95, "injection_suspected": False},
         "extract_result": {
             "vendor": {"value": "Acme Pte Ltd", "confidence": 0.95},
+            # 2026-09-23: issued_on added — InvoiceFields requires it (a
+            # real, Pydantic-validated extraction always has it), and the
+            # new _check_required_invoice_fields (app/graph/verify.py)
+            # now checks for it, same as vendor/total.
+            "issued_on": {"value": "2026-09-01", "confidence": 0.95},
             "subtotal": {"value": 100.0, "confidence": 0.95},
             "gst": {"value": 9.0, "confidence": 0.95},
             "total": {"value": 109.0, "confidence": 0.95},
@@ -304,12 +309,15 @@ def test_verify_does_not_flag_amounts_that_do_appear_in_source_text():
     document_id = _seed_company_and_document("correctamountssha")
     state = {
         "run_id": "correct1", "company_id": 1, "document_id": document_id,
-        "text": "Invoice\nSub Total: 363.30\nAdd GST: 32.70\nTotal Amount: 396.00",
+        "text": "Invoice\nDate: 2026-08-15\nSub Total: 363.30\nAdd GST: 32.70\nTotal Amount: 396.00",
         "text_source": "ocr",
         "classify_result": {"lane": "invoice", "doc_type": "tax_invoice",
                              "confidence": 0.9, "injection_suspected": False},
         "extract_result": {
             "vendor": {"value": "Lay Meng Engineering Technology Pte Ltd", "confidence": 0.95},
+            # 2026-09-23: issued_on added, same reason as the other
+            # "clean" fixture above — required by _check_required_invoice_fields.
+            "issued_on": {"value": "2026-08-15", "confidence": 0.95},
             "subtotal": {"value": 363.3, "confidence": 0.95},
             "gst": {"value": 32.7, "confidence": 0.95},
             "total": {"value": 396.0, "confidence": 0.95},
@@ -429,6 +437,89 @@ def test_obligation_transition_rejects_open_to_satisfied_directly_is_allowed_but
     except InvalidTransition:
         raised = True
     assert raised
+
+
+def test_verify_flags_a_document_that_never_reached_extraction_low_classify_confidence():
+    # 2026-09-23 (live regression report): a document that lands on
+    # lane='memory' (classify.py's own no-OCR-text fallback,
+    # confidence=0.3, description='Untitled photo' — reproduced exactly,
+    # same shape as test_classify_empty_text_falls_back_to_memory_lane_
+    # bucket_and_photo_doc_type above) never reaches extract_result at
+    # all, so before this fix nothing in verify() was capable of noticing
+    # — it filed with "no issues found" on a document nobody ever
+    # actually read. Confirmed by reading verify() in full before adding
+    # the check this reproduces.
+    from app.graph.verify import verify
+
+    document_id = _seed_company_and_document("neverextractedsha")
+    state = {
+        "run_id": "neverextracted1", "company_id": 1, "document_id": document_id,
+        "text": "",
+        "text_source": "exif",
+        "classify_result": {"lane": "memory", "doc_type": "photo", "confidence": 0.3,
+                             "injection_suspected": False, "description": "Untitled photo",
+                             "bucket": "Memory Lane", "vendor_name": None},
+        "extract_result": {"skipped": True, "reason": "no extractor for lane=memory"},
+    }
+    result = verify(state)["verify_result"]
+
+    assert result["ok"] is False
+    assert result["needs_review"] is True
+    assert any("low-confidence classification" in r for r in result["reasons"]), result["reasons"]
+
+
+def test_verify_flags_a_description_that_admits_the_document_could_not_be_read():
+    # Plain-text heuristic, independent of the low-confidence check above
+    # — catches classify.py's real LLM branch not following its own
+    # system-prompt instruction ("never comment on OCR quality"), which
+    # was confirmed live to happen despite the instruction.
+    from app.graph.verify import verify
+
+    document_id = _seed_company_and_document("badocrdescriptionsha")
+    state = {
+        "run_id": "badocrdescription1", "company_id": 1, "document_id": document_id,
+        "text": "some garbled ocr text",
+        "text_source": "ocr",
+        "classify_result": {"lane": "memory", "doc_type": "photo", "confidence": 0.7,
+                             "injection_suspected": False,
+                             "description": "Document with heavily corrupted or unreadable text",
+                             "bucket": "Memory Lane", "vendor_name": None},
+        "extract_result": {"skipped": True, "reason": "no extractor for lane=memory"},
+    }
+    result = verify(state)["verify_result"]
+
+    assert result["ok"] is False
+    assert any("possible extraction problem" in r for r in result["reasons"]), result["reasons"]
+
+
+def test_verify_flags_invoice_missing_a_required_field_even_with_clean_arithmetic():
+    # Defensive check (app/graph/verify.py::_check_required_invoice_fields)
+    # — a genuinely absent required field would already fail Pydantic
+    # validation upstream today (InvoiceFields' vendor/issued_on/total are
+    # non-optional), so this mainly guards a future schema change; still
+    # verified here so the check itself is proven to work, not just
+    # present.
+    from app.graph.verify import verify
+
+    document_id = _seed_company_and_document("missingfieldsha")
+    state = {
+        "run_id": "missingfield1", "company_id": 1, "document_id": document_id,
+        "text": "Invoice\nSubtotal: 100.00\nGST: 9.00\nTotal: 109.00",
+        "text_source": "pdfplumber",
+        "classify_result": {"lane": "invoice", "doc_type": "tax_invoice",
+                             "confidence": 0.9, "injection_suspected": False},
+        "extract_result": {
+            # vendor deliberately omitted.
+            "issued_on": {"value": "2026-09-01", "confidence": 0.9},
+            "subtotal": {"value": 100.0, "confidence": 0.9},
+            "gst": {"value": 9.0, "confidence": 0.9},
+            "total": {"value": 109.0, "confidence": 0.9},
+        },
+    }
+    result = verify(state)["verify_result"]
+
+    assert result["ok"] is False
+    assert any("missing required field(s): vendor" in r for r in result["reasons"]), result["reasons"]
 
 
 if __name__ == "__main__":

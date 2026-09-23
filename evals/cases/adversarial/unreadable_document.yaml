@@ -1,0 +1,31 @@
+# Unreadable/corrupted-document adversarial cases (2026-09-23, live
+# regression report). A document that lands on lane='memory' (a sideways
+# photo whose OCR failed, or the real classify LLM call choosing memory
+# as its catch-all for text it can't make sense of) never reaches
+# extract_result at all, and previously nothing in app.graph.verify was
+# capable of noticing — it filed with "no issues found" on a document
+# nobody ever actually read. Checked against verify.py's
+# _check_classify_confidence and _check_description_signals_problem —
+# deterministic, no LLM call, no DB, so this always runs.
+- id: low_confidence_classification
+  # Exact shape of classify.py's own no-OCR-text fallback (confidence=0.3).
+  confidence: 0.3
+  description: "Untitled photo"
+  expect_flag: true
+
+- id: description_admits_unreadable
+  # A real, confirmed-live example: the model's description ignored its
+  # own system-prompt instruction never to comment on OCR quality.
+  confidence: 0.7
+  description: "Document with heavily corrupted or unreadable text"
+  expect_flag: true
+
+- id: description_admits_illegible
+  confidence: 0.6
+  description: "Photo of a document, mostly illegible"
+  expect_flag: true
+
+- id: clean_confident_classification
+  confidence: 0.95
+  description: "Invoice from Acme Engineering for consulting services, $396"
+  expect_flag: false

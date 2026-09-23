@@ -99,7 +99,7 @@
       "lastResult": "Last upload result:",
       "classifiedAs": "classified as {{lane}} / {{docType}} ({{confidence}}% confident)",
       "injectionSuspected": "injection suspected",
-      "reviewLabel": "Review: {{question}}",
+      "reviewShortLabel": "Needs review — see below.",
       "quarantinedMessage": "Quarantined by the injection guardrail — obligation table untouched.",
       "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
     },
@@ -197,7 +197,8 @@
     "pictureToggle": {
       "label": "This is a picture, not a document",
       "alreadyMarked": "(already marked)",
-      "reducesAccuracy": "Reduces the accuracy of data detected from this file."
+      "reducesAccuracy": "Reduces the accuracy of data detected from this file.",
+      "docTypeLocked": "Doc type is fixed to Photo while this is marked a picture."
     },
     "docType": {
       "legacySuffix": "{{value}} (legacy)",

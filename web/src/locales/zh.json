@@ -99,7 +99,7 @@
       "lastResult": "最近上传结果：",
       "classifiedAs": "分类为 {{lane}} / {{docType}}（置信度 {{confidence}}%）",
       "injectionSuspected": "疑似注入攻击",
-      "reviewLabel": "审核：{{question}}",
+      "reviewShortLabel": "需要审核 — 详见下方。",
       "quarantinedMessage": "已被注入防护机制隔离 — 义务表未受影响。",
       "rejectedPromptSuffix": "已拒绝并删除。要上传替换文件吗？"
     },
@@ -197,7 +197,8 @@
     "pictureToggle": {
       "label": "这是照片，不是文件",
       "alreadyMarked": "（已标记）",
-      "reducesAccuracy": "会降低此文件数据检测的准确性。"
+      "reducesAccuracy": "会降低此文件数据检测的准确性。",
+      "docTypeLocked": "标记为照片时，文件类型固定为「照片」。"
     },
     "docType": {
       "legacySuffix": "{{value}}（旧版）",

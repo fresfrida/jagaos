@@ -266,7 +266,18 @@ export function DocumentCard({
             />
           </div>
           <div className="sm:col-span-3">
-            <DocTypeField lane={doc.lane} value={docType} disabled={false} onChange={setDocType} className={FIELD_CLASS} />
+            {/* Locked whenever the picture toggle is checked (2026-09-23,
+               live regression report) — a real, confirmed contradiction:
+               this pill picker had zero relationship to the picture
+               toggle, so a reviewer could freely select "Invoice" on a
+               document already marked/being marked as a picture, with
+               nothing preventing or even flagging it. Server-side,
+               is_picture=true already deterministically overrides
+               doc_type to 'photo' on save (DocumentEditRequest's
+               docstring) — disabling the field here just makes the UI
+               stop lying about there being a real choice. */}
+            <DocTypeField lane={doc.lane} value={docType} disabled={isPictureToggle} onChange={setDocType} className={FIELD_CLASS} />
+            {isPictureToggle && <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
           </div>
           <input
             value={vendorName}

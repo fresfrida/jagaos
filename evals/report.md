@@ -1,6 +1,6 @@
 # Eval report
 
-Run at 2026-09-21T15:34:26.007664+00:00
+Run at 2026-09-23T11:07:22.594464+00:00
 
 ## Adversarial — injection guardrail (app.guards.injection.scan)
 
@@ -22,8 +22,17 @@ Run at 2026-09-21T15:34:26.007664+00:00
 | gst_wrong_rate | PASS | ['GST 7.00 is not ~9% of subtotal 100.00 (expected ~9.00)'] |
 | gst_total_mismatch | PASS | ['subtotal + GST (109.00) != total (110.50)'] |
 
+## Adversarial — unreadable/corrupted documents (app.graph.verify._check_classify_confidence / _check_description_signals_problem)
+
+| Case | Result | Detail |
+|---|---|---|
+| low_confidence_classification | PASS | ['low-confidence classification (30%) — the document type/description may not be reliable, please check'] |
+| description_admits_unreadable | PASS | ['description signals a possible extraction problem ("unreadable") — please check this document was read correctly'] |
+| description_admits_illegible | PASS | ['description signals a possible extraction problem ("illegible") — please check this document was read correctly'] |
+| clean_confident_classification | PASS | [] |
+
 ## Golden path
 
 **Skipped** — needs ~15 labelled real documents and `LLM_GATEWAY_API_KEY` set. See `evals/cases/golden/README.md`. Not faked as a pass or a score.
 
-## Scorecard: 10/10 adversarial checks passed
+## Scorecard: 14/14 adversarial checks passed

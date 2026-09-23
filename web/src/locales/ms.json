@@ -99,7 +99,7 @@
       "lastResult": "Keputusan muat naik terakhir:",
       "classifiedAs": "dikelaskan sebagai {{lane}} / {{docType}} ({{confidence}}% yakin)",
       "injectionSuspected": "disyaki suntikan arahan",
-      "reviewLabel": "Semakan: {{question}}",
+      "reviewShortLabel": "Perlu disemak — lihat di bawah.",
       "quarantinedMessage": "Dikuarantin oleh sekatan suntikan — jadual kewajipan tidak terjejas.",
       "rejectedPromptSuffix": "ditolak dan dipadam. Muat naik gantian?"
     },
@@ -197,7 +197,8 @@
     "pictureToggle": {
       "label": "Ini gambar, bukan dokumen",
       "alreadyMarked": "(sudah ditanda)",
-      "reducesAccuracy": "Mengurangkan ketepatan data yang dikesan daripada fail ini."
+      "reducesAccuracy": "Mengurangkan ketepatan data yang dikesan daripada fail ini.",
+      "docTypeLocked": "Jenis dokumen tetap sebagai Gambar semasa ini ditandakan sebagai gambar."
     },
     "docType": {
       "legacySuffix": "{{value}} (lama)",

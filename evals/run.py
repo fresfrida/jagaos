@@ -17,7 +17,11 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.graph.verify import _check_invoice_arithmetic  # noqa: E402
+from app.graph.verify import (  # noqa: E402
+    _check_classify_confidence,
+    _check_description_signals_problem,
+    _check_invoice_arithmetic,
+)
 from app.guards.injection import scan  # noqa: E402
 
 CASES_DIR = Path(__file__).parent / "cases"
@@ -52,10 +56,24 @@ def run_gst_cases() -> list[dict]:
     return results
 
 
+def run_unreadable_document_cases() -> list[dict]:
+    path = CASES_DIR / "adversarial" / "unreadable_document.yaml"
+    cases = yaml.safe_load(path.read_text())
+    results = []
+    for case in cases:
+        reasons = _check_classify_confidence({"confidence": case["confidence"]}) + \
+            _check_description_signals_problem(case["description"])
+        got_flag = bool(reasons)
+        passed = got_flag == case["expect_flag"]
+        results.append({"id": case["id"], "passed": passed, "detail": reasons})
+    return results
+
+
 def main() -> None:
     injection_results = run_injection_cases()
     gst_results = run_gst_cases()
-    all_results = injection_results + gst_results
+    unreadable_results = run_unreadable_document_cases()
+    all_results = injection_results + gst_results + unreadable_results
     total = len(all_results)
     passed = sum(1 for r in all_results if r["passed"])
 
@@ -81,6 +99,19 @@ def main() -> None:
         "|---|---|---|",
     ]
     for r in gst_results:
+        mark = "PASS" if r["passed"] else "FAIL"
+        lines.append(f"| {r['id']} | {mark} | {r['detail']} |")
+
+    lines += [
+        "",
+        "## Adversarial — unreadable/corrupted documents "
+        "(app.graph.verify._check_classify_confidence / "
+        "_check_description_signals_problem)",
+        "",
+        "| Case | Result | Detail |",
+        "|---|---|---|",
+    ]
+    for r in unreadable_results:
         mark = "PASS" if r["passed"] else "FAIL"
         lines.append(f"| {r['id']} | {mark} | {r['detail']} |")
 

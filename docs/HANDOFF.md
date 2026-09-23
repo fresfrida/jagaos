@@ -22,7 +22,7 @@ This repo currently holds:
 - **`vision/`** — isolated image-captioning service (own venv, `Salesforce/blip-image-captioning-base`), 2026-09-23, DECISIONS #55. Deliberately separate from `app/` — see "Backend status" below.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
-- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way.
+- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way. **Exception, 2026-09-23 (DECISIONS #65)**: that round's regression fixes were built, tested, and verified but deliberately left uncommitted in the working tree on an explicit one-off instruction — wait for a go-ahead before committing/pushing that specific round. If you're picking this repo back up and `git status` shows uncommitted changes, check DECISIONS #65 before assuming that's stray work to discard.
 
 ## Backend status (2026-09-21)
 
@@ -1061,7 +1061,136 @@ frontend half on push per the standing convention, but **Lightsail needs
 an explicit redeploy to pick up the backend change, not done here**
 pending a separate go-ahead.
 
+**A real live-mobile-testing regression report, root-cause chain traced
+and fixed — built, tested, and verified, but deliberately NOT committed
+or pushed this round on an explicit one-off instruction to wait for a
+go-ahead first (2026-09-23, DECISIONS #65).** All four items were
+investigated against the actual current code before any change (matching
+the report's own file:line references), and one item needed real
+empirical testing, not just a code read, to actually confirm.
+
+**(1) Marketing footer inside the signed-in app** — `App.tsx` rendered
+the full marketing `<Footer/>` (tagline, Product/Solutions/Resources/
+Company columns with links like "Founders"/"Status" that don't
+correspond to anything in the product, social icons) on every signed-in
+page, confirmed live; it also has zero i18n wiring, which is what
+actually surfaced it (untranslated footer text under a fully-translated
+page). **Resolved as a real product decision, not a translation gap: the
+footer is now removed from the signed-in app entirely** (gated on
+`status !== 'signed-in'` instead of `route !== 'home'`) — the same call
+the landing page (DECISIONS #64) already made, for the same reason.
+Verified footer still renders correctly on every signed-out page
+(`/login`, `/stack`).
+
+**(2) EXIF-rotation OCR fix, confirmed real and severe via an actual
+empirical test, not just a code read** — `app/extract/ocr.py` opened
+images with plain `PIL.Image.open()` and fed them straight to Tesseract,
+with no `ImageOps.exif_transpose()` call anywhere; a portrait phone photo
+commonly stores landscape pixels plus a rotation flag, which PIL does
+*not* auto-apply the way a browser does. Built a synthetic portrait
+invoice photo (landscape-stored pixels + a genuine EXIF Orientation=6
+tag) and ran it through the real OCR function before/after the fix:
+**unfixed, 44 chars of unusable garbage; fixed, 126 chars of the real
+invoice text** (vendor, invoice number, date, amounts), matching a
+control image almost exactly. **Then re-verified end to end against the
+real LLM gateway** (a real, small cost — ~$0.019, the same "one targeted
+live call" precedent this project's history already establishes
+repeatedly, e.g. DECISIONS #42/#48/#56): uploaded the same synthetic
+sideways image through the actual running backend — classified as a real
+invoice (95% confidence, a genuine `sonnet4.5` call, not the memory-lane
+fallback), extracted a full clean field set (vendor "Lay Meng Engineering
+Pte Ltd", date 2026-09-20, amount $546.00), filed as "clean extraction."
+**Caveat stated plainly, not glossed over**: this fix mainly protects
+upload paths that bypass the frontend's own normalization —
+`web/src/lib/imageNormalize.ts`'s own docstring already states
+`createImageBitmap()` applies EXIF-orientation correction by default in
+every shipping browser, so a real photo uploaded through the actual web
+UI should already arrive upright. If the live regression persists for a
+*web-uploaded* photo after this fix, the more likely explanation is the
+separate, already-known, already-deferred gap this same file's own
+history flags (no deskew/crop/quality preprocessing at all,
+`docs/KANBAN.md` Backlog) — not EXIF rotation. New test: `tests/test_ocr.py`
+(skips gracefully if Tesseract isn't installed on the machine running the
+suite).
+
+**classify.py's system-prompt-adherence gap was deliberately left alone**
+— the report's own screenshot showed the model commenting on OCR quality
+despite its system prompt explicitly forbidding it. Without a way to test
+a prompt change against the real model without spending real gateway
+calls on unverified guesses, item (3) below's new deterministic backstop
+was judged the safer, actually-testable fix instead.
+
+**(2c) The picture-toggle/doc-type contradiction — confirmed a real,
+structural bug**: `DocTypeField`'s pill picker (`opsShared.tsx`) had zero
+relationship to the picture toggle — a reviewer could pill-select
+"Invoice" on a `lane='memory'` document with nothing preventing or
+flagging it, in both `ReviewQueueCard.tsx` and `DocumentCard.tsx`.
+**Resolved: the doc-type picker now locks (disabled, all pills greyed
+out except the already-selected "Photo", with a small explanatory note)
+whenever the picture toggle is checked** — chosen over the alternative
+(unchecking the picture toggle when a doc-type pill is picked) because
+it's consistent with the toggle's own already-shipped, one-directional
+design (DECISIONS #52: once marked memory, there's no reclassify-back-out
+path), not a second, contradictory direction of control. Server-side,
+`is_picture=true` already deterministically overrides `doc_type` to
+`'photo'` on save (`DocumentEditRequest`'s docstring) — this just stops
+the UI from implying a choice that was never real.
+
+**(3) Review was structurally incapable of flagging a document that was
+never actually read** — confirmed by reading `verify()` in full: a
+document on `lane='memory'` never reaches `extract_result` (extract.py
+only runs for invoice/statutory lanes), so none of the invoice-specific
+checks ever ran, and nothing else in the function looked at
+`classify_result`'s own confidence or description text. Three new
+deterministic checks added to `app/graph/verify.py`: `_check_classify_confidence`
+(catches classify.py's own confidence=0.3 no-OCR-text fallback — the
+exact mechanism a sideways/unreadable photo falls into),
+`_check_description_signals_problem` (a plain-text heuristic catching the
+system-prompt-adherence slip above after the fact — "unreadable"/
+"corrupted"/"unclear"/"illegible"/etc.), and `_check_required_invoice_fields`
+(defensive — `InvoiceFields`' vendor/issued_on/total are already
+non-optional Provenance fields today, so this mainly guards a future
+schema change). **Broke two pre-existing tests on first run**
+(`test_verify_clean_extraction_still_needs_review_not_filed`,
+`test_verify_does_not_flag_amounts_that_do_appear_in_source_text`) — both
+used minimal hand-written `extract_result` fixtures missing `issued_on`,
+which a real Pydantic-validated extraction always has; fixed by
+completing the fixtures to match the real schema shape, not by weakening
+the new check. Three new unit tests
+(`tests/test_rules_smoke.py`) plus a new eval case
+(`evals/cases/adversarial/unreadable_document.yaml`, 4 cases, wired into
+`evals/run.py` alongside the existing injection/GST adversarial suites —
+the exact pattern the report asked to follow).
+
+**(4) The review message was shown twice for one upload** —
+`UploadPage.tsx`'s "Last upload result" banner repeated
+`ReviewQueueCard.tsx`'s full question text immediately above the same
+card now showing it again in the Needs Review list, confirmed live.
+**Resolved: the review card owns the message**; the banner now shows a
+short pointer ("Needs review — see below.") instead of the full text —
+chosen over dropping the banner line entirely, since a reviewer still
+gets immediate feedback that something happened without re-reading the
+same sentence twice.
+
+Verified live: `pytest tests/` 45/45, `python evals/run.py` 14/14
+adversarial (including the 4 new unreadable-document cases),
+`npm run typecheck`/`npm run build` clean (`dist/manifest.webmanifest`
+confirmed present — this repo has no separate PWA-specific check, and no
+`lint` script exists yet, both pre-existing tracked gaps,
+`docs/KANBAN.md` Backlog), zero browser console errors. Playwright at
+375px confirmed: zero `<footer>` elements on `/upload` (signed-in) vs. 1
+on `/login` and `/stack` (signed-out); a real UI upload of the sideways
+test photo showing the banner's short message with no duplication below
+it; a picture-lane review card's doc-type pills genuinely disabled with
+"Photo" pre-selected and the explanatory note visible. Screenshots:
+`docs/screenshots/regression-footer-removed-signed-in.png`,
+`regression-no-duplicate-review-message.png`,
+`regression-doctype-locked-to-photo.png`.
+
 **Known gaps, in the order they'll bite:**
+- **DECISIONS #65's regression-fix round is sitting uncommitted, waiting for an explicit go-ahead** — see the "GitHub" bullet at the top of this file. Until pushed (and Lightsail redeployed, since `app/extract/ocr.py`/`app/graph/verify.py` changed), the live app still has the footer-in-signed-in-app, no-EXIF-correction, no-field-completeness-check, doc-type-contradiction, and duplicate-review-message bugs this round fixed.
+- **The EXIF-rotation fix's real-world impact on the *specific* live-mobile regression that prompted it is unconfirmed** — verified with a synthetic test image + a real gateway call, not the original reported photo. The frontend should already prevent pure-rotation cases for a real web upload (`imageNormalize.ts`'s own docstring); if the symptom persists after this deploys, the already-tracked deskew/crop/quality gap (below) is the more likely cause, not rotation.
+- Server-side OCR preprocessing beyond EXIF-rotation (`app/extract/ocr.py` still does no deskew/crop/contrast correction) — a photo taken at an angle, not a discrete 90°/180°/270° rotation, is still unaddressed; narrowed, not closed, by DECISIONS #65.
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
 - `evals/cases/golden/` is empty — needs ~15 labelled real documents (see `evals/cases/golden/README.md`)

@@ -95,6 +95,66 @@ def _check_amounts_in_text(fields: dict, text: str) -> list[str]:
     ]
 
 
+# 2026-09-23 (live regression report): none of the checks above notice
+# when a document was simply never read at all — a document that lands
+# on lane='memory' (classify.py's own confidence-0.3 "no OCR text"
+# fallback, or the real LLM call choosing memory as its catch-all for
+# text it can't make sense of) never reaches extract_result, so none of
+# the invoice-specific checks above ever run, and there was structurally
+# nothing else in this function capable of flagging it — confirmed by
+# reading verify() in full before adding these. Three new, independent
+# checks, each producing a reasons entry the same way the existing ones
+# do (no new plumbing).
+_DESCRIPTION_PROBLEM_WORDS = (
+    "unreadable", "corrupted", "unclear", "illegible", "cannot be read",
+    "not legible", "hard to read", "poor quality", "unrecognizable",
+)
+
+
+def _check_classify_confidence(classify: dict, floor: float = CONFIDENCE_FLOOR) -> list[str]:
+    """Catches classify.py's own deterministic no-OCR-text fallback
+    (confidence=0.3, description='Untitled photo') — the exact mechanism
+    a sideways/unreadable photo falls into. `classify_result['confidence']`
+    was never checked anywhere in this file before this; only extract's
+    per-field confidences were (_low_confidence_fields below)."""
+    confidence = classify.get("confidence")
+    if confidence is not None and confidence < floor:
+        return [f"low-confidence classification ({confidence:.0%}) — the document type/description may not be reliable, please check"]
+    return []
+
+
+def _check_description_signals_problem(description: str | None) -> list[str]:
+    """Plain-text heuristic, not a re-run of the LLM: classify.py's own
+    system prompt explicitly instructs the model never to comment on OCR
+    quality in its description ("a description like 'invoice with
+    incomplete or corrupted text' is wrong") — confirmed live that the
+    model doesn't always follow this. Rather than trying to out-prompt-
+    engineer a live model this repo can't test without a real gateway
+    call, this catches the cases where it still happens, deterministically,
+    after the fact — the same "never silently trust the model" posture
+    the injection/arithmetic checks above already take."""
+    if not description:
+        return []
+    lowered = description.lower()
+    hit = next((w for w in _DESCRIPTION_PROBLEM_WORDS if w in lowered), None)
+    if hit:
+        return [f"description signals a possible extraction problem (\"{hit}\") — please check this document was read correctly"]
+    return []
+
+
+def _check_required_invoice_fields(fields: dict) -> list[str]:
+    """Defensive: InvoiceFields' vendor/issued_on/total are non-optional
+    Provenance fields today, so a genuinely absent value would already
+    fail Pydantic validation and route through the existing
+    extract.get("error") check above — this mainly guards against a
+    future schema change or an unexpected `_provenance_value` shape, at
+    near-zero cost to add now rather than after it's needed."""
+    missing = [name for name in ("vendor", "issued_on", "total") if not fields.get(name) or fields[name].get("value") is None]
+    if missing:
+        return [f"missing required field(s): {', '.join(missing)}"]
+    return []
+
+
 def verify(state: PipelineState) -> PipelineState:
     document_id = state["document_id"]
     classify = state.get("classify_result", {})
@@ -142,10 +202,18 @@ def verify(state: PipelineState) -> PipelineState:
     if classify.get("lane") == "invoice" and extract and not extract.get("skipped") and not extract.get("error"):
         reasons.extend(_check_invoice_arithmetic(extract))
         reasons.extend(_check_amounts_in_text(extract, text))
+        reasons.extend(_check_required_invoice_fields(extract))
 
     low_conf = _low_confidence_fields(extract) if extract else []
     if low_conf:
         reasons.append(f"low-confidence fields: {', '.join(low_conf)}")
+
+    # Unconditional, unlike the block above — these two catch a document
+    # that never reached extract_result at all (lane='memory'), which is
+    # exactly the "renders like a generic picture, nothing extracted"
+    # regression this was added for (2026-09-23).
+    reasons.extend(_check_classify_confidence(classify))
+    reasons.extend(_check_description_signals_problem(classify.get("description")))
 
     # 2026-09-22 (DECISIONS #40): no document is ever filed without an
     # explicit human confirmation, even a clean one — the only fully-

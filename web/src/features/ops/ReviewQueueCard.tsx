@@ -353,13 +353,17 @@ export function ReviewQueueCard({
             </label>
             <label className="text-[12px] text-muted sm:col-span-3">
               {t('ops.review.document.docTypeLabel')}
+              {/* Locked whenever the picture toggle is checked (2026-09-23,
+                 live regression report — same fix, same reasoning, as
+                 DocumentCard.tsx's identical two-independent-controls bug). */}
               <DocTypeField
                 lane={item.document_lane}
                 value={docType}
-                disabled={!canResolve}
+                disabled={!canResolve || isPictureToggle}
                 onChange={setDocType}
                 className={`mt-1 ${FIELD_CLASS}`}
               />
+              {isPictureToggle && <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
             </label>
             <label className="text-[12px] text-muted">
               {t('ops.review.document.vendorNameLabel')}

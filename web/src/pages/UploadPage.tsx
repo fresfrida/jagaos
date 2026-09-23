@@ -180,8 +180,15 @@ function UploadReviewContent() {
                   )}
                 </p>
               )}
+              {/* 2026-09-23 (live regression report): this used to repeat
+                 the full review question text — the same text
+                 ReviewQueueCard.tsx then renders again immediately below
+                 for the same document, now sitting in the Needs Review
+                 list. Confirmed live: shown twice for one upload. The
+                 review card owns the message; this banner now gives a
+                 short pointer to it instead of duplicating it. */}
               {lastUpload.status === 'needs_review' && lastUpload.review?.question && (
-                <p className="mt-1 text-amber-800">{t('ops.upload.reviewLabel', { question: lastUpload.review.question })}</p>
+                <p className="mt-1 text-amber-800">{t('ops.upload.reviewShortLabel')}</p>
               )}
               {lastUpload.status === 'quarantined' && (
                 <p className="mt-1 text-red-700">{t('ops.upload.quarantinedMessage')}</p>

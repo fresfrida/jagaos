@@ -43,8 +43,24 @@ function AppContent({ route }: { route: ResolvedRoute }) {
           <Page route={route} />
         </motion.div>
       </main>
-      {/* The landing page is hero-only: no footer, no scroll. */}
-      {route !== 'home' && <Footer />}
+      {/* 2026-09-23 (live regression report): the marketing footer
+         (tagline, Product/Solutions/Resources/Company columns, social
+         icons) was rendering on every signed-in app page too — confirmed
+         live, and it has zero i18n wiring (config/site.ts's
+         FOOTER_COLUMNS/FOOTER_TAGLINE), which is what actually surfaced
+         it (untranslated footer text sitting under a fully-translated
+         page). Real product decision, not just a translation gap: this
+         footer's own content (marketing-page links like "Founders"/
+         "Status") doesn't belong on a dashboard page — resolved as
+         "remove from the signed-in app entirely," the same way the
+         landing page (DECISIONS #64) already suppresses it, rather than
+         translating marketing chrome that shouldn't be there. Gated on
+         session status, not the route: was `route !== 'home'` (every
+         non-landing route, including all six signed-in pages); now
+         `status !== 'signed-in'` (every logged-out page, landing
+         included, since a signed-in visitor never actually renders
+         `home` — DECISIONS #64's HomeRedirect fires first). */}
+      {status !== 'signed-in' && <Footer />}
       {showBottomNav && <BottomNav current={route} />}
     </MotionConfig>
   )
