@@ -1,6 +1,11 @@
 {
   "app": {
-    "skipToContent": "跳至内容"
+    "skipToContent": "跳至内容",
+    "notFound": {
+      "title": "找不到页面",
+      "description": "该链接与任何页面都不匹配。",
+      "backToHome": "返回首页"
+    }
   },
   "header": {
     "primaryNav": "主导航",
@@ -180,7 +185,34 @@
       "reducesAccuracy": "会降低此文件数据检测的准确性。"
     },
     "docType": {
-      "legacySuffix": "{{value}}（旧版）"
+      "legacySuffix": "{{value}}（旧版）",
+      "invoice": "发票",
+      "receipt": "收据",
+      "po": "采购单",
+      "quotation": "报价单",
+      "deliveryOrder": "送货单",
+      "contract": "合同",
+      "photo": "照片",
+      "other": "其他"
+    },
+    "bucket": {
+      "receivables": "应收账款",
+      "expenses": "支出",
+      "statutory": "法定文件",
+      "operations": "运营",
+      "memoryLane": "回忆录",
+      "miscellaneous": "其他"
+    },
+    "role": {
+      "owner": "所有者",
+      "admin": "管理员",
+      "user": "用户",
+      "viewer": "查看者"
+    },
+    "risk": {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
     }
   }
 }

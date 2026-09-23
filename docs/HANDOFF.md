@@ -861,6 +861,99 @@ backend change. Screenshots: `docs/screenshots/mobile-header-before.png`,
 `calendar-month-grid-before.png`, `calendar-month-grid-after.png`,
 `calendar-day-detail.png`.
 
+**A second live 375px bug report the same day (BM + EN), six Calendar
+findings plus a real BM/Tamil i18n audit of the signed-in app's bucket/
+doc_type/role/risk display values (2026-09-23, DECISIONS #63).** All six
+Calendar items came pre-checked with file:line references from the
+reporting session; every one was re-verified live at 375px against the
+actual current code before any change — three items turned out to need
+different handling than a literal read of the report would suggest.
+
+Fixed: **(1)** the count-badge overlapped the date number on a day cell —
+root cause confirmed by reproducing and reading the box model, not just
+theorized: the badge `<span>` used `flex` (block-level), and a block box
+with no explicit width defaults to the *full width* of its non-flex
+parent, so it stretched edge-to-edge over the number (`min-w-4` only
+floors the width, doesn't cap it) — `MonthGrid.tsx`'s day button is now
+`flex flex-col items-start`, fixing every day cell, not just the
+selected/ringed one the report screenshotted. **(2)** the selected-day
+heading always read in English — `lib/dates.ts`'s `formatShortDate`
+hardcoded `'en-GB'`; `MonthGrid.tsx` had already solved this for its own
+chrome with a private locale map, moved into `lib/dates.ts` as the one
+shared spot instead of a second copy (`formatShortDate`'s new `locale`
+param defaults to `'en-GB'`, so its other two callers — the deliberately
+unlocalized marketing preview, DECISIONS #57 — are unaffected). **(3)**
+`DocumentTypeIcon` now distinguishes image/PDF/spreadsheet/generic-
+document (confirmed live against the real DB that only PDF/JPEG occur
+today, but `app/graph/ingest.py` has no server-side type allowlist, so
+this is deliberately defensive); the report's second ask here — show the
+filename too — was in real, named tension with `formatDocumentLabel()`
+(written earlier the same day specifically to stop a raw-filename bug,
+DECISIONS #62). **Resolved, not silently picked**: the primary label is
+unchanged (`formatDocumentLabel()`'s contract holds for any other
+caller), the filename is added as small muted secondary text underneath
+in `DateGroupRow` — filename-as-supporting-detail, not a reopening of the
+original bug. **(5)** `OpsStatusBar.tsx`'s "company · email · role" row,
+which resolves async from `/api/auth/me`, now reserves its height with a
+skeleton while `status === 'loading'` instead of leaving a blank gap —
+confirmed the mechanism by reading (`AuthContext.tsx`), but a local timed-
+reload test couldn't reproduce a visible gap, since this repo's backend
+answers in single-digit milliseconds on localhost; the real gap scales
+with the real cross-origin hop to Lightsail (DECISIONS #32), which is
+exactly what would produce two differently-timed screenshots from a real
+phone. **(6)** day-detail rows are real `<button>`s now, opening the same
+`DocumentViewerModal` Company Files/Search already use
+(`DocumentResultsList.tsx`'s `viewingDocument`-state pattern, reused, not
+rebuilt), with a trailing chevron as the tap affordance.
+
+**(4) verified live, not reproduced — no code change**: `DatesView.tsx`'s
+empty-state logic (no-selection hint, "no documents on this day", the
+`noDate` section under the `document` basis) was already correct,
+confirmed via a DOM dump (not just a screenshot, which can visually read
+as blank against white) — matches the reporting session's own hedge that
+this might already be fixed.
+
+**i18n audit (7/8)**: new `bucketLabel`/`docTypeLabel`/`roleLabel`/
+`riskLabel` accessors plus a shared `BucketField` (mirrors the existing
+`DocTypeField`) in `opsShared.tsx` — same "translate display, never the
+stored/DB/API value" rule `StatusPill` already established, each falling
+back to the raw value for anything unmapped. Fixed every site on the
+report's own list (`OpsStatusBar.tsx`, `Header.tsx`'s `UserMenu`,
+`DatesView.tsx`, `DocumentCard.tsx`, `CalendarHub.tsx`'s `ob.risk`,
+`DocTypeField`'s pill text) plus three more found by grepping every real-
+app page: `CompanyFilesPage.tsx`'s bucket-filter chips, `TagsLanding.tsx`'s
+six bucket buttons (only the *displayed* text — the `?bucket=` query
+value stays the raw English constant), and `pages/NotFoundPage.tsx` (a
+real page reachable signed-in and signed-out, zero i18n wiring, not
+actually a marketing-preview page despite living next to some in the
+file tree). **Found, not fixed**: `DocumentCard.tsx`'s header fallback
+still shows raw `doc.lane` — no existing key infrastructure for that
+vocabulary, and it's only the last-resort label when both `description`
+and `doc_type` are empty (`docs/KANBAN.md` Backlog). **Scope tension,
+flagged rather than resolved unilaterally**: the report's own phrasing
+("audit ALL pages in BM and Tamil") reads as including the logged-out
+marketing pages, which DECISIONS #57 already explicitly and repeatedly
+deprioritized (`docs/KANBAN.md` Backlog) — re-audited here (still
+untranslated, confirmed by grep) but not translated, since reversing an
+explicit prior priority call isn't a decision to make silently mid-bugfix.
+
+Verified live end to end (Playwright, real login, 375px, EN + BM +
+partial Tamil, zero console errors before and after): the badge-overlap
+fix screenshotted directly (before/after crops); the BM heading renders
+via a real `ms-MY` `Intl` call, not a hardcoded string; a tapped row
+opens the real viewer (the first verification attempt used too broad a
+selector and clicked a `MonthGrid` button instead — caught and fixed
+before trusting the result); bucket/role/risk translations confirmed on
+Company Files (list badges and the edit-form pills), the Tags landing
+page, and the Calendar hub, in BM. `npm run typecheck`/`npm run build`
+both clean throughout. No backend change. Screenshots:
+`docs/screenshots/calendar-badge-overlap-before.png`,
+`calendar-badge-overlap-after.png`, `calendar-day-heading-localized-bm.png`,
+`calendar-tappable-row-viewer.png`, `calendar-empty-no-selection.png`,
+`calendar-empty-zero-docs.png`, `calendar-icons-image-vs-pdf.png`,
+`company-files-bucket-chips-bm.png`, `company-files-edit-pills-bm.png`,
+`tags-landing-bm.png`.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -873,7 +966,8 @@ backend change. Screenshots: `docs/screenshots/mobile-header-before.png`,
 - **`document.sha256` is UNIQUE globally, not per-company** — found live 2026-09-22 seeding a second test company; a byte-identical file can never be uploaded to two different companies. `docs/KANBAN.md` backlog; needs a table rebuild in SQLite, not a one-line fix.
 - **`jaga-vision`'s `MemoryMax=2.5G` cap (DECISIONS #55, #58) is unverified — genuinely untestable on macOS (no systemd/cgroups), not just untested.** The whole "isolated service can't take down the box" design depends on this actually firing. `deploy/README.md` has the exact live-box verification procedure. **`jaga-vision` is deployed and generating correct captions as of 2026-09-23** (DECISIONS #56 — confirmed live, not the same thing as this cap being confirmed) — deployment happening doesn't by itself confirm `MemoryMax` fires; that must still be checked before trusting the isolation in front of anyone. **DECISIONS #58 revised what the cap needs to cover** (a real measured ~390MB resident baseline, not the ~2GB #55 assumed) but the code change itself hasn't reached the box yet — see the entry above.
 - **`vision/app.py`'s resident-model change (DECISIONS #58) has not been deployed to the live Lightsail box** — the code is committed locally but `jaga-vision` on the box is still running the old per-request-load version until it's deployed and restarted, which needs an explicit go-ahead first (same box, same rule as the original DECISIONS #55 build). Until then, the box's captions still pay the ~20s load cost on every single request, not just the first after a restart.
-- **Four new UI strings from the mobile-first fix (DECISIONS #62) were translated by the assistant, not a human** — `header.accountMenu`, `ops.dates.prevMonth`/`nextMonth`/`selectADay`/`noneOnDay` in `zh.json`/`ms.json`/`ta.json`. Everything else in those three files is now a real, human-provided translation (DECISIONS #61, supersedes #57's English-value stubs) — just not these four yet. `docs/KANBAN.md` Backlog has the follow-up.
+- **Some UI strings in `zh.json`/`ms.json`/`ta.json` were translated by the assistant, not a human** — DECISIONS #62's four (`header.accountMenu`, `ops.dates.prevMonth`/`nextMonth`/`selectADay`/`noneOnDay`) plus DECISIONS #63's longer list (`ops.bucket.*`, `ops.docType.*` beyond the original `legacySuffix`, `ops.role.*`, `ops.risk.*`, `app.notFound.*`). Everything else in those three files is a real, human-provided translation (DECISIONS #61, supersedes #57's English-value stubs) — just not these yet. `docs/KANBAN.md` Backlog has the follow-up.
+- **`DocumentCard.tsx`'s header fallback shows raw `doc.lane` untranslated** (found during DECISIONS #63's i18n audit, not fixed) — no existing key infrastructure for that vocabulary; low priority, it's only the last-resort label when both `description` and `doc_type` are empty.
 
 ## Auth (added 2026-09-22, DECISIONS #28-31)
 
@@ -956,7 +1050,7 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Tap-to-talk voice captioning (Web Speech API, 2026-09-23, DECISIONS #52) | `hooks/useSpeechCaption.ts` |
 | i18n bootstrap (i18next instance, language persistence) + locale files — all four real (EN, and ZH/TA/MS since DECISIONS #61 superseded #57's English-value stubs; four strings within ZH/TA/MS from DECISIONS #62 are assistant- not human-translated, `docs/KANBAN.md` Backlog) | `i18n.ts`, `locales/{en,zh,ta,ms}.json` |
 | The real logged-in app's shared data layer (documents/expectations/obligations/reviewItems + backend health) and status bar, used by every page below (2026-09-23, DECISIONS #59) | `features/ops/useOpsData.ts`, `features/ops/OpsStatusBar.tsx` |
-| Shared field/status components (`DocTypeField`, `PillPicker`, `VoiceCaptionButton`, `PictureToggleField`, `StatusPill` — no badge for `filed`/`processed`, DECISIONS #60 — blob-URL fetch hook) and the API client (`BUCKETS`/`DOC_TYPES`, all `/api/documents`\|`/api/search`\|etc. calls) | `features/ops/opsShared.tsx`, `features/ops/opsApi.ts` |
+| Shared field/status components (`DocTypeField`, `BucketField`, `PillPicker`, `VoiceCaptionButton`, `PictureToggleField`, `StatusPill` — no badge for `filed`/`processed`, DECISIONS #60 — blob-URL fetch hook), translated-label accessors for enum display values (`bucketLabel`/`docTypeLabel`/`roleLabel`/`riskLabel`, DECISIONS #63 — translate display only, never the stored value), `formatDocumentLabel`/`DocumentTypeIcon` (DECISIONS #62-63), and the API client (`BUCKETS`/`DOC_TYPES`, all `/api/documents`\|`/api/search`\|etc. calls) | `features/ops/opsShared.tsx`, `features/ops/opsApi.ts` |
 | Shared destructive-action confirmation modal ("Delete X? This can't be undone.", 2026-09-23, DECISIONS #60) | `components/ui/ConfirmDialog.tsx` |
 | Mobile-only bottom nav (Calendar/Tags/Upload-center/Search/Company Files) + the compact account-menu dropdown inside the top bar (2026-09-23, DECISIONS #62) | `sections/BottomNav.tsx`, `sections/Header.tsx` (`UserMenu`) |
 | Upload a document + the review queue — `/upload` | `pages/UploadPage.tsx`, `features/ops/ReviewQueueCard.tsx` |

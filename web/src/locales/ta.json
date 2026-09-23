@@ -1,6 +1,11 @@
 {
   "app": {
-    "skipToContent": "உள்ளடக்கத்திற்குச் செல்"
+    "skipToContent": "உள்ளடக்கத்திற்குச் செல்",
+    "notFound": {
+      "title": "பக்கம் கிடைக்கவில்லை",
+      "description": "அந்த இணைப்பு எந்தப் பக்கத்துடனும் பொருந்தவில்லை.",
+      "backToHome": "முகப்புக்குத் திரும்பு"
+    }
   },
   "header": {
     "primaryNav": "முதன்மை வழிசெலுத்தல்",
@@ -180,7 +185,34 @@
       "reducesAccuracy": "இந்தக் கோப்பிலிருந்து கண்டறியப்படும் தரவின் துல்லியத்தைக் குறைக்கும்."
     },
     "docType": {
-      "legacySuffix": "{{value}} (பழையது)"
+      "legacySuffix": "{{value}} (பழையது)",
+      "invoice": "விலைப்பட்டியல்",
+      "receipt": "ரசீது",
+      "po": "கொள்முதல் ஆணை",
+      "quotation": "மேற்கோள்",
+      "deliveryOrder": "விநியோக ஆணை",
+      "contract": "ஒப்பந்தம்",
+      "photo": "புகைப்படம்",
+      "other": "பிற"
+    },
+    "bucket": {
+      "receivables": "பெறத்தக்கவை",
+      "expenses": "செலவுகள்",
+      "statutory": "சட்டப்பூர்வ",
+      "operations": "செயல்பாடுகள்",
+      "memoryLane": "நினைவுப் பாதை",
+      "miscellaneous": "இதர"
+    },
+    "role": {
+      "owner": "உரிமையாளர்",
+      "admin": "நிர்வாகி",
+      "user": "பயனர்",
+      "viewer": "பார்வையாளர்"
+    },
+    "risk": {
+      "high": "அதிக",
+      "medium": "நடுத்தர",
+      "low": "குறைந்த"
     }
   }
 }

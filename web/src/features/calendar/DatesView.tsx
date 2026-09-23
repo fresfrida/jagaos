@@ -20,16 +20,29 @@
  * meaningful label. Now a real month grid (`MonthGrid.tsx`, weeks as
  * rows, a compact count per day) with the tapped day's entries listed
  * below it, each row using the new shared `formatDocumentLabel` (vendor —
- * doc type, falling back to description, then doc type alone) plus a
- * small file-type icon — never the filename. The upload/document toggle
+ * doc type, falling back to description, then doc type alone) as its
+ * primary label, plus a small file-type icon. The upload/document toggle
  * keeps its existing behavior, just now sits above the grid instead of
- * above a flat list. */
+ * above a flat list.
+ *
+ * **Second live 375px bug report, same day (DECISIONS #63)**: rows are
+ * now real buttons opening the same `DocumentViewerModal` Company Files/
+ * Search already use, instead of a dead `<div>`; the row also shows the
+ * filename as small secondary text under the primary label (a live ask
+ * for "filename + vendor... when available" — resolved as filename-as-
+ * supporting-detail, not a return to filename-as-primary, see
+ * `DateGroupRow`'s own docstring); the selected-day heading is now
+ * locale-aware (`formatShortDate(day, localeFor(i18n.language))`) instead
+ * of hardcoded `en-GB`; and the bucket badge is translated
+ * (`bucketLabel`). */
 
+import { ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
-import { formatShortDate, startOfMonth, toIsoDate } from '../../lib/dates'
-import { DocumentTypeIcon, StatusPill, formatDocumentLabel } from '../ops/opsShared'
+import { formatShortDate, localeFor, startOfMonth, toIsoDate } from '../../lib/dates'
+import { DocumentViewerModal } from '../ops/DocumentCard'
+import { DocumentTypeIcon, StatusPill, bucketLabel, formatDocumentLabel } from '../ops/opsShared'
 import type { DocumentRow } from '../ops/opsApi'
 import { MonthGrid } from './MonthGrid'
 
@@ -43,23 +56,45 @@ const DATE_BASIS_OPTIONS: { id: DateBasis; labelKey: string }[] = [
   { id: 'document', labelKey: 'ops.dates.documentDate' },
 ]
 
-function DateGroupRow({ doc }: { doc: DocumentRow }) {
+// 2026-09-23 (live 375px bug report): two fixes to the row itself.
+// (1) It was a plain, non-interactive <div> — now a real <button> opening
+// the same DocumentViewerModal Company Files/Search already use (via
+// DocumentResultsList.tsx's identical viewingDocument-state pattern
+// below), with a trailing chevron as the tap affordance. (2) The report
+// also asked to show the filename alongside vendor/source "when
+// available" — in real tension with formatDocumentLabel()'s whole reason
+// for existing (DECISIONS #62: stop the raw-truncated-filename bug). This
+// keeps formatDocumentLabel() as the primary label (that fix stays
+// intact, and the function's contract is unchanged for any other caller)
+// and adds the filename as small muted *secondary* text underneath — my
+// reading of "show filename + vendor... when available" as filename-as-
+// supporting-detail, not filename-as-primary-label again.
+function DateGroupRow({ doc, onView }: { doc: DocumentRow; onView: () => void }) {
   const { t } = useTranslation()
   return (
-    <div className="flex items-center gap-2 rounded-control border border-line bg-white px-3 py-2 text-[13px]">
+    <button
+      type="button"
+      onClick={onView}
+      className="flex w-full items-center gap-2 rounded-control border border-line bg-white px-3 py-2 text-left text-[13px] transition-colors hover:border-ink/40"
+    >
       <DocumentTypeIcon mediaType={doc.media_type} />
-      <span className="min-w-0 flex-1 truncate text-ink">{formatDocumentLabel(doc) || t('ops.documents.noCaptionYet')}</span>
-      {doc.bucket && <Badge tone="neutral">{doc.bucket}</Badge>}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-ink">{formatDocumentLabel(doc) || t('ops.documents.noCaptionYet')}</span>
+        <span className="block truncate text-[11px] text-muted">{doc.filename}</span>
+      </span>
+      {doc.bucket && <Badge tone="neutral">{bucketLabel(t, doc.bucket)}</Badge>}
       <StatusPill status={doc.status} />
-    </div>
+      <ChevronRight size={14} className="shrink-0 text-muted" aria-hidden="true" />
+    </button>
   )
 }
 
 export function DatesView({ documents }: { documents: DocumentRow[] }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [basis, setBasis] = useState<DateBasis>('upload')
   const [month, setMonth] = useState(() => startOfMonth(toIsoDate(new Date())))
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [viewingDocument, setViewingDocument] = useState<DocumentRow | null>(null)
 
   const { byDay, noDate } = useMemo(() => {
     const map = new Map<string, DocumentRow[]>()
@@ -111,13 +146,13 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
             {selectedDay ? (
               <>
                 <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">
-                  {formatShortDate(selectedDay)} ({selectedDocs.length})
+                  {formatShortDate(selectedDay, localeFor(i18n.language))} ({selectedDocs.length})
                 </h3>
                 {selectedDocs.length === 0 ? (
                   <p className="rounded-card border border-line bg-white p-4 text-[13px] text-muted">{t('ops.dates.noneOnDay')}</p>
                 ) : (
                   <div className="space-y-1">
-                    {selectedDocs.map((doc) => <DateGroupRow key={doc.id} doc={doc} />)}
+                    {selectedDocs.map((doc) => <DateGroupRow key={doc.id} doc={doc} onView={() => setViewingDocument(doc)} />)}
                   </div>
                 )}
               </>
@@ -132,11 +167,20 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
                 {t('ops.dates.noDocumentDate', { count: noDate.length })}
               </h3>
               <div className="space-y-1">
-                {noDate.map((doc) => <DateGroupRow key={doc.id} doc={doc} />)}
+                {noDate.map((doc) => <DateGroupRow key={doc.id} doc={doc} onView={() => setViewingDocument(doc)} />)}
               </div>
             </section>
           )}
         </div>
+      )}
+
+      {viewingDocument && (
+        <DocumentViewerModal
+          documentId={viewingDocument.id}
+          filename={viewingDocument.filename}
+          mediaType={viewingDocument.media_type}
+          onClose={() => setViewingDocument(null)}
+        />
       )}
     </div>
   )

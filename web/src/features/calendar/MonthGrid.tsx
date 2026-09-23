@@ -13,17 +13,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../../components/ui/Button'
 import { cn } from '../../lib/cn'
-import { addMonths, daysInMonth, parseIsoDate, startOfMonth, toIsoDate } from '../../lib/dates'
+import { addMonths, daysInMonth, localeFor, parseIsoDate, startOfMonth, toIsoDate } from '../../lib/dates'
 import type { DocumentRow } from '../ops/opsApi'
-
-// i18n codes (web/src/i18n.ts) -> a BCP-47 tag Intl can format weekday/month
-// names in, so the grid's calendar chrome (not document content) follows
-// the language switcher without needing its own translation keys.
-const INTL_LOCALE: Record<string, string> = { en: 'en-GB', zh: 'zh-SG', ta: 'ta-SG', ms: 'ms-MY' }
-
-function localeFor(language: string): string {
-  return INTL_LOCALE[language] ?? 'en-GB'
-}
 
 function weekdayLabels(locale: string): string[] {
   const monday = new Date(2024, 0, 1) // a known Monday
@@ -92,7 +83,17 @@ export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onM
               aria-current={isToday ? 'date' : undefined}
               aria-pressed={isSelected}
               className={cn(
-                'min-h-[44px] border-b border-r border-line p-1 text-left transition-colors hover:bg-canvas sm:min-h-[56px]',
+                // flex flex-col items-start (2026-09-23, live 375px bug report):
+                // the date number and count badge are two `display:flex` spans
+                // (block-level, since `flex` — not `inline-flex`); with no
+                // explicit vertical layout on their shared parent, a block box
+                // with no explicit width defaults to filling the *entire*
+                // available width of its non-flex containing block, so the
+                // count badge stretched edge-to-edge and visually overlapped
+                // the date number at narrow cell widths, worst on the
+                // ring-highlighted selected cell. items-start here sizes each
+                // flex item to its own content instead of stretching it.
+                'flex min-h-[44px] flex-col items-start gap-1 border-b border-r border-line p-1 text-left transition-colors hover:bg-canvas sm:min-h-[56px]',
                 isSelected && 'bg-canvas ring-1 ring-inset ring-ink',
               )}
             >
@@ -100,7 +101,7 @@ export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onM
                 {Number(day.slice(8))}
               </span>
               {count > 0 && (
-                <span className="mt-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-sage px-1 font-mono text-[9px] font-medium text-white">
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-sage px-1 font-mono text-[9px] font-medium text-white">
                   {count}
                 </span>
               )}

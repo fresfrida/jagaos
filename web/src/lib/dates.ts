@@ -15,8 +15,25 @@ export function addDays(iso: string, days: number): string {
   return toIsoDate(new Date(parseIsoDate(iso).getTime() + days * MS_PER_DAY))
 }
 
-export function formatShortDate(iso: string): string {
-  return parseIsoDate(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+// i18n codes (web/src/i18n.ts) -> a BCP-47 tag Intl can format dates in
+// (2026-09-23, live BM bug report: Calendar's selected-day heading always
+// read in English regardless of the language switcher, since it called
+// formatShortDate with no locale). MonthGrid.tsx had its own private copy
+// of this same map for its month/weekday chrome — moved here as the one
+// shared spot so both callers, and formatShortDate's other callers, stay
+// in sync instead of drifting.
+const INTL_LOCALE: Record<string, string> = { en: 'en-GB', zh: 'zh-SG', ta: 'ta-SG', ms: 'ms-MY' }
+
+export function localeFor(language: string): string {
+  return INTL_LOCALE[language] ?? 'en-GB'
+}
+
+/** `locale` defaults to 'en-GB' so existing callers that don't pass one
+ * (the logged-out marketing preview's `EventDetails.tsx`/`MemoryCard.tsx`,
+ * deliberately not localized — DECISIONS #57) keep their exact prior
+ * output; the real Calendar page passes `localeFor(i18n.language)`. */
+export function formatShortDate(iso: string, locale: string = 'en-GB'): string {
+  return parseIsoDate(iso).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export function formatWeekday(iso: string, style: 'short' | 'long' = 'short'): string {

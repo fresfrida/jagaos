@@ -13,7 +13,7 @@ import { RequireSession } from '../features/auth/RequireSession'
 import { roleAtLeast } from '../features/auth/authApi'
 import { DocumentResultsList } from '../features/ops/DocumentResultsList'
 import { OpsStatusBar } from '../features/ops/OpsStatusBar'
-import { VENDOR_NAMES_DATALIST_ID } from '../features/ops/opsShared'
+import { VENDOR_NAMES_DATALIST_ID, bucketLabel } from '../features/ops/opsShared'
 import { BUCKETS, type Bucket } from '../features/ops/opsApi'
 import { useOpsData } from '../features/ops/useOpsData'
 
@@ -66,7 +66,7 @@ function CompanyFilesContent() {
               onClick={() => setActiveBucketFilter(active ? null : b)}
               className={`rounded-md px-2 py-0.5 font-mono text-[11px] transition-colors ${active ? 'bg-ink text-white' : 'bg-canvas text-muted hover:text-ink'}`}
             >
-              {b} ({bucketCounts[b]})
+              {bucketLabel(t, b)} ({bucketCounts[b]})
             </button>
           )
         })}

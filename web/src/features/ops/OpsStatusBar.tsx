@@ -9,10 +9,11 @@
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
 import { useAuth } from '../auth/AuthContext'
+import { roleLabel } from './opsShared'
 
 export function OpsStatusBar({ apiUp }: { apiUp?: boolean | null }) {
   const { t } = useTranslation()
-  const { company, user, role } = useAuth()
+  const { status, company, user, role } = useAuth()
 
   return (
     <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
@@ -24,9 +25,23 @@ export function OpsStatusBar({ apiUp }: { apiUp?: boolean | null }) {
           {apiUp === false && t('ops.backend.unreachable')}
         </span>
       )}
+      {/* 2026-09-23 (live bug report): `company`/`user` resolve async from
+         `/api/auth/me` (AuthContext.tsx), so this whole row was previously
+         just absent — no reserved space — until that resolves. Confirmed
+         as a real (if usually sub-second on a fast connection) paint-
+         before-data-loads gap, not an i18n bug: this component has no
+         language-conditional code, one screenshot in the report just
+         caught a fresher reload than the other. A skeleton reserves the
+         row's height instead of a layout jump once the real content pops
+         in — chosen over "accept the blank state" because the gap scales
+         with real network latency (this repo's backend is a separate
+         cross-origin host, DECISIONS #32), not just localhost. */}
+      {status === 'loading' && (
+        <span className="h-4 w-56 animate-pulse rounded bg-canvas" aria-hidden="true" />
+      )}
       {company && user && (
         <span>
-          {company.name} · {user.email} · <Badge mono>{role}</Badge>
+          {company.name} · {user.email} · <Badge mono>{roleLabel(t, role ?? '')}</Badge>
         </span>
       )}
     </div>

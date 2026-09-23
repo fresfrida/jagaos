@@ -11,16 +11,18 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import {
+  BucketField,
   FIELD_CLASS,
   PictureToggleField,
-  PillPicker,
   StatusPill,
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
+  bucketLabel,
+  docTypeLabel,
   useDocumentBlobUrl,
 } from './opsShared'
-import { BUCKETS, opsApi, type Bucket, type DocumentRow } from './opsApi'
+import { opsApi, type Bucket, type DocumentRow } from './opsApi'
 
 /** "2026-09-23", the same slice-to-day convention DatesView already uses
  * for its section headers (features/calendar/DatesView.tsx) — kept
@@ -213,11 +215,11 @@ export function DocumentCard({
               ) : isPendingCaption ? (
                 <span className="italic text-muted">{t('ops.documents.noCaptionYet')}</span>
               ) : (
-                <span className="text-muted">{doc.lane ?? '—'} / {doc.doc_type ?? '—'}</span>
+                <span className="text-muted">{doc.lane ?? '—'} / {doc.doc_type ? docTypeLabel(t, doc.doc_type) : '—'}</span>
               )}
             </p>
             {doc.description && (
-              <p className="mt-0.5 break-words text-[12px] text-muted">{doc.lane ?? '—'} / {doc.doc_type ?? '—'}</p>
+              <p className="mt-0.5 break-words text-[12px] text-muted">{doc.lane ?? '—'} / {doc.doc_type ? docTypeLabel(t, doc.doc_type) : '—'}</p>
             )}
             {/* 2026-09-23, live user feedback: both dates already exist in
                the API response but neither was ever shown on this card —
@@ -234,7 +236,7 @@ export function DocumentCard({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <StatusPill status={doc.status} />
-          {doc.bucket && <Badge tone="neutral">{doc.bucket}</Badge>}
+          {doc.bucket && <Badge tone="neutral">{bucketLabel(t, doc.bucket)}</Badge>}
         </div>
       </div>
 
@@ -256,8 +258,7 @@ export function DocumentCard({
             {isPictureLane && <VoiceCaptionButton onCaption={setDescription} disabled={false} />}
           </div>
           <div className="sm:col-span-3">
-            <PillPicker
-              options={BUCKETS}
+            <BucketField
               value={bucket}
               disabled={false}
               onChange={setBucket}

@@ -1,6 +1,11 @@
 {
   "app": {
-    "skipToContent": "Langkau ke kandungan"
+    "skipToContent": "Langkau ke kandungan",
+    "notFound": {
+      "title": "Halaman tidak dijumpai",
+      "description": "Pautan itu tidak sepadan dengan mana-mana halaman.",
+      "backToHome": "Kembali ke laman utama"
+    }
   },
   "header": {
     "primaryNav": "Navigasi Utama",
@@ -180,7 +185,34 @@
       "reducesAccuracy": "Mengurangkan ketepatan data yang dikesan daripada fail ini."
     },
     "docType": {
-      "legacySuffix": "{{value}} (lama)"
+      "legacySuffix": "{{value}} (lama)",
+      "invoice": "Invois",
+      "receipt": "Resit",
+      "po": "Pesanan Belian",
+      "quotation": "Sebut Harga",
+      "deliveryOrder": "Pesanan Penghantaran",
+      "contract": "Kontrak",
+      "photo": "Gambar",
+      "other": "Lain-lain"
+    },
+    "bucket": {
+      "receivables": "Akaun Belum Terima",
+      "expenses": "Perbelanjaan",
+      "statutory": "Berkanun",
+      "operations": "Operasi",
+      "memoryLane": "Lorong Kenangan",
+      "miscellaneous": "Pelbagai"
+    },
+    "role": {
+      "owner": "Pemilik",
+      "admin": "Pentadbir",
+      "user": "Pengguna",
+      "viewer": "Pelihat"
+    },
+    "risk": {
+      "high": "tinggi",
+      "medium": "sederhana",
+      "low": "rendah"
     }
   }
 }

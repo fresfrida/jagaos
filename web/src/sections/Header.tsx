@@ -6,6 +6,7 @@ import { Container } from '../components/ui/Container'
 import { ButtonLink } from '../components/ui/ButtonLink'
 import { Logo } from '../components/ui/Logo'
 import { useAuth } from '../features/auth/AuthContext'
+import { roleLabel } from '../features/ops/opsShared'
 import { useScrolled } from '../hooks/useScrolled'
 import { cn } from '../lib/cn'
 import { SUPPORTED_LANGUAGES, setLanguage, type LanguageCode } from '../i18n'
@@ -81,7 +82,7 @@ function UserMenu() {
           <div className="border-b border-line px-3 pb-2">
             {company && <p className="truncate text-[13px] font-medium text-ink">{company.name}</p>}
             <p className="truncate text-[12px] text-muted">{user.email}</p>
-            {role && <Badge mono className="mt-1">{role}</Badge>}
+            {role && <Badge mono className="mt-1">{roleLabel(t, role)}</Badge>}
           </div>
           <button
             role="menuitem"

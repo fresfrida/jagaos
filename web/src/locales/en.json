@@ -1,6 +1,11 @@
 {
   "app": {
-    "skipToContent": "Skip to content"
+    "skipToContent": "Skip to content",
+    "notFound": {
+      "title": "Page not found",
+      "description": "That link does not match a page.",
+      "backToHome": "Back to home"
+    }
   },
   "header": {
     "primaryNav": "Primary",
@@ -180,7 +185,34 @@
       "reducesAccuracy": "Reduces the accuracy of data detected from this file."
     },
     "docType": {
-      "legacySuffix": "{{value}} (legacy)"
+      "legacySuffix": "{{value}} (legacy)",
+      "invoice": "Invoice",
+      "receipt": "Receipt",
+      "po": "Purchase order",
+      "quotation": "Quotation",
+      "deliveryOrder": "Delivery order",
+      "contract": "Contract",
+      "photo": "Photo",
+      "other": "Other"
+    },
+    "bucket": {
+      "receivables": "Receivables",
+      "expenses": "Expenses",
+      "statutory": "Statutory",
+      "operations": "Operations",
+      "memoryLane": "Memory Lane",
+      "miscellaneous": "Miscellaneous"
+    },
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "user": "User",
+      "viewer": "Viewer"
+    },
+    "risk": {
+      "high": "high",
+      "medium": "medium",
+      "low": "low"
     }
   }
 }

@@ -5,11 +5,79 @@
  * doesn't have to import the whole review-card/document-card machinery
  * along with it. Content moved verbatim; nothing here changed behavior. */
 
-import { FileText, Image as ImageIcon, Mic, MicOff } from 'lucide-react'
+import type { TFunction } from 'i18next'
+import { File, FileSpreadsheet, FileText, Image as ImageIcon, Mic, MicOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSpeechCaption } from '../../hooks/useSpeechCaption'
-import { DOC_TYPES, opsApi, type DocumentRow } from './opsApi'
+import { BUCKETS, DOC_TYPES, opsApi, type DocumentRow } from './opsApi'
+
+// 2026-09-23 (live BM/Tamil i18n audit): BUCKETS/DOC_TYPES are the literal
+// DB/API values (bucket filtering, derive_expectations.py's doc_type slug
+// matching) — never translate the stored value, only its *display* text,
+// same pattern StatusPill below already established for status codes.
+// Falls back to the raw value for anything unmapped, so an unmapped value
+// never disappears from the UI rather than throwing or rendering blank.
+const BUCKET_LABEL_KEY: Record<string, string> = {
+  Receivables: 'ops.bucket.receivables',
+  Expenses: 'ops.bucket.expenses',
+  Statutory: 'ops.bucket.statutory',
+  Operations: 'ops.bucket.operations',
+  'Memory Lane': 'ops.bucket.memoryLane',
+  Miscellaneous: 'ops.bucket.miscellaneous',
+}
+
+export function bucketLabel(t: TFunction, bucket: string): string {
+  const key = BUCKET_LABEL_KEY[bucket]
+  return key ? t(key) : bucket
+}
+
+const DOC_TYPE_LABEL_KEY: Record<string, string> = {
+  invoice: 'ops.docType.invoice',
+  receipt: 'ops.docType.receipt',
+  PO: 'ops.docType.po',
+  quotation: 'ops.docType.quotation',
+  delivery_order: 'ops.docType.deliveryOrder',
+  contract: 'ops.docType.contract',
+  photo: 'ops.docType.photo',
+  other: 'ops.docType.other',
+}
+
+export function docTypeLabel(t: TFunction, docType: string): string {
+  const key = DOC_TYPE_LABEL_KEY[docType]
+  return key ? t(key) : docType
+}
+
+// Authoritative list: web/src/features/auth/authApi.ts's Role type / app/
+// auth.py's Role Literal — lowercase on the wire, displayed uppercase via
+// Badge's own `mono` CSS (text-transform), not via the translated string's
+// casing, so a translation can be any case without fighting that class.
+const ROLE_LABEL_KEY: Record<string, string> = {
+  owner: 'ops.role.owner',
+  admin: 'ops.role.admin',
+  user: 'ops.role.user',
+  viewer: 'ops.role.viewer',
+}
+
+export function roleLabel(t: TFunction, role: string): string {
+  const key = ROLE_LABEL_KEY[role]
+  return key ? t(key) : role
+}
+
+// app/rules/statutory.py's Obligation.risk is a plain `str`, not a fixed
+// Literal — only "high" is actually produced by any rule today (confirmed
+// by grep), "medium"/"low" are here defensively for whenever a rule adds
+// them, same "never disappears" fallback as the others above.
+const RISK_LABEL_KEY: Record<string, string> = {
+  high: 'ops.risk.high',
+  medium: 'ops.risk.medium',
+  low: 'ops.risk.low',
+}
+
+export function riskLabel(t: TFunction, risk: string): string {
+  const key = RISK_LABEL_KEY[risk]
+  return key ? t(key) : risk
+}
 
 /** "Vendor — doc_type", falling back to the description, then doc_type
  * alone, never a raw filename (2026-09-23, Calendar month-grid fix — a
@@ -29,13 +97,35 @@ export function formatDocumentLabel(doc: Pick<DocumentRow, 'vendor_name' | 'doc_
   return ''
 }
 
-/** Small inline file-type icon — image vs. everything else (PDF today),
- * distinguished the same way `DocumentThumbnail` below already does
- * (`media_type.startsWith('image/')`) but without fetching the file's
- * bytes, for compact rows where a full thumbnail fetch per entry isn't
- * warranted (2026-09-23, Calendar month-grid fix). */
+// The real upload flow only ever produces two values today — confirmed
+// against the live local DB (`SELECT DISTINCT media_type FROM document`):
+// 'application/pdf' and 'image/jpeg' — because `UploadPage.tsx`'s file
+// input is `accept="application/pdf,image/*"`. But `app/graph/ingest.py`
+// derives `media_type` from `mimetypes.guess_type(filename)` with no
+// server-side allowlist, so a document uploaded directly against the API
+// (curl/Swagger, bypassing the frontend's `accept` restriction) could
+// carry any type Python's `mimetypes` module recognizes — this map is
+// deliberately defensive beyond what the UI currently allows in.
+const SPREADSHEET_MEDIA_TYPES = new Set([
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
+])
+
+/** Small inline file-type icon (2026-09-23, live 375px bug report asked
+ * for more than the original image-vs-everything-else split): image,
+ * PDF (`FileText` — same meaning `DocumentThumbnail` below already uses
+ * for "generic PDF icon", kept consistent rather than introducing a
+ * second PDF icon), spreadsheet, and a generic-document fallback (`File`)
+ * for anything else, including types this map doesn't specifically know. */
 export function DocumentTypeIcon({ mediaType }: { mediaType: string }) {
-  const Icon = mediaType.startsWith('image/') ? ImageIcon : FileText
+  const Icon = mediaType.startsWith('image/')
+    ? ImageIcon
+    : mediaType === 'application/pdf'
+      ? FileText
+      : SPREADSHEET_MEDIA_TYPES.has(mediaType)
+        ? FileSpreadsheet
+        : File
   return <Icon size={14} className="shrink-0 text-muted" aria-hidden="true" />
 }
 
@@ -178,6 +268,11 @@ export function DocTypeField({
     return <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={className} />
   }
   const isLegacyValue = value !== '' && !(DOC_TYPES as readonly string[]).includes(value)
+  // Pill *text* is translated (docTypeLabel); the *value* passed to
+  // onChange/saved is always the raw DOC_TYPES string underneath — same
+  // "translate display only, never the stored value" rule as bucketLabel.
+  const labels: Record<string, string> = Object.fromEntries(DOC_TYPES.map((dt) => [dt, docTypeLabel(t, dt)]))
+  if (isLegacyValue) labels[value] = t('ops.docType.legacySuffix', { value })
   return (
     <div className="mt-1">
       <PillPicker
@@ -186,9 +281,41 @@ export function DocTypeField({
         disabled={disabled}
         onChange={onChange}
         clearLabel="—"
-        labels={isLegacyValue ? { [value]: t('ops.docType.legacySuffix', { value }) } : undefined}
+        labels={labels}
       />
     </div>
+  )
+}
+
+/** Bucket as a translated button group over the fixed `BUCKETS` taxonomy
+ * (2026-09-23, live BM/Tamil i18n audit — `DocumentCard.tsx` and
+ * `ReviewQueueCard.tsx` each rendered `<PillPicker options={BUCKETS}>`
+ * directly, so the pill *text* was always the raw English value even in
+ * BM/Tamil). Mirrors `DocTypeField`'s shape/translate-display-only rule so
+ * both call sites read from one place instead of building their own
+ * `labels` map. */
+export function BucketField({
+  value,
+  disabled,
+  onChange,
+  clearLabel,
+}: {
+  value: string
+  disabled: boolean
+  onChange: (value: string) => void
+  clearLabel?: string
+}) {
+  const { t } = useTranslation()
+  const labels: Record<string, string> = Object.fromEntries(BUCKETS.map((b) => [b, bucketLabel(t, b)]))
+  return (
+    <PillPicker
+      options={BUCKETS}
+      value={value}
+      disabled={disabled}
+      onChange={onChange}
+      clearLabel={clearLabel}
+      labels={labels}
+    />
   )
 }
 

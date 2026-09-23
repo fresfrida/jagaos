@@ -11,16 +11,16 @@ import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { ApiError } from '../../lib/apiClient'
 import {
+  BucketField,
   FIELD_CLASS,
   PictureToggleField,
-  PillPicker,
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
   formatConfidence,
   useDocumentBlobUrl,
 } from './opsShared'
-import { BUCKETS, opsApi, type Bucket, type ReviewItem } from './opsApi'
+import { opsApi, type Bucket, type ReviewItem } from './opsApi'
 
 /** One field from a review_item.proposed_json blob — matches
  * app/models.py's Provenance[T], or a bare bool for injection_suspected. */
@@ -343,8 +343,7 @@ export function ReviewQueueCard({
             <label className="text-[12px] text-muted sm:col-span-3">
               {t('ops.review.document.bucketLabel')}
               <div className="mt-1">
-                <PillPicker
-                  options={BUCKETS}
+                <BucketField
                   value={bucket}
                   disabled={!canResolve}
                   onChange={setBucket}

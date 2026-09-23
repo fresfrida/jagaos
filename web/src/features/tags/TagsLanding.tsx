@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from '../../router/Link'
 import { routeHref } from '../../router/routes'
 import { BUCKETS } from '../ops/opsApi'
+import { bucketLabel } from '../ops/opsShared'
 
 export function TagsLanding() {
   const { t } = useTranslation()
@@ -25,7 +26,7 @@ export function TagsLanding() {
             href={`${routeHref('company-files')}?${new URLSearchParams({ bucket })}`}
             className="rounded-card border border-line bg-white p-5 text-sm font-medium text-ink transition-colors hover:border-ink/40"
           >
-            {bucket}
+            {bucketLabel(t, bucket)}
           </Link>
         ))}
       </div>

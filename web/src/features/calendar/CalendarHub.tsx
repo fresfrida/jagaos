@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
 import { Card } from '../../components/ui/Card'
 import { OpsStatusBar } from '../ops/OpsStatusBar'
-import { StatusPill } from '../ops/opsShared'
+import { StatusPill, riskLabel } from '../ops/opsShared'
 import { useOpsData } from '../ops/useOpsData'
 import { DatesView } from './DatesView'
 
@@ -51,7 +51,7 @@ export function CalendarHub() {
                     <tr key={ob.id} className="border-b border-line last:border-0 align-top">
                       <td className="px-4 py-2.5 text-ink">
                         {ob.label}
-                        <Badge tone="neutral" className="ml-2">{ob.risk}</Badge>
+                        <Badge tone="neutral" className="ml-2">{riskLabel(t, ob.risk)}</Badge>
                       </td>
                       <td className="px-4 py-2.5 text-muted">{ob.due_on}</td>
                       <td className="px-4 py-2.5"><StatusPill status={ob.status} /></td>
