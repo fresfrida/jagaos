@@ -492,14 +492,23 @@ function ReviewQueueCard({
           )}
         </div>
       ) : canResolve ? (
-        <div className="mt-4 flex gap-2">
-          <Button size="sm" onClick={() => void resolve('confirm')} disabled={busy} icon={<Check size={14} />}>
-            Accept{Object.keys(edits).some((n) => edits[n] !== originalValue(n)) ? ' with corrections' : ' as-is'}
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => void resolve('reject')} disabled={busy} icon={<X size={14} />}>
-            Reject
-          </Button>
-          {busy && <Loader2 size={16} className="animate-spin self-center text-muted" />}
+        <div className="mt-4">
+          {/* Repeats the same flagged reason shown at the top of the card
+             (2026-09-23) — on a long card (preview image + Document +
+             Extracted fields), a reviewer scrolling to these buttons can
+             lose sight of why this document needs scrutiny before
+             clicking. Routine "no issues found" confirms have nothing to
+             repeat, so this stays gated on !isRoutine like the top copy. */}
+          {!isRoutine && <p className="mb-2 text-[13px] text-amber-800">{item.question}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => void resolve('confirm')} disabled={busy} icon={<Check size={14} />}>
+              Accept{Object.keys(edits).some((n) => edits[n] !== originalValue(n)) ? ' with corrections' : ' as-is'}
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => void resolve('reject')} disabled={busy} icon={<X size={14} />}>
+              Reject
+            </Button>
+            {busy && <Loader2 size={16} className="animate-spin self-center text-muted" />}
+          </div>
         </div>
       ) : (
         <p className="mt-4 text-[12px] text-muted">Only an admin or owner can resolve this.</p>

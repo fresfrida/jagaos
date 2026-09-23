@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-09-22. Read this first when resuming.
+Last updated: 2026-09-23. Read this first when resuming.
 
 **Priority as of 2026-09-22 (DECISIONS #28): the product is testing agents
 IN the app.** Backend pipeline work (classify/extract/verify/etc.) and
@@ -392,6 +392,26 @@ Typecheck/build clean; no backend change, so the backend suite wasn't
 re-run. Screenshots: `docs/screenshots/ops-review-card-decluttered.png`,
 `ops-review-card-filename-title-focused.png`,
 `ops-document-card-edit-decluttered.png`.
+
+**A flagged review's warning is now repeated above Accept/Reject
+(2026-09-23, DECISIONS #51).** `ReviewQueueCard`'s reason/warning text
+(`item.question`, e.g. "GST 33.0 is not ~9% of subtotal 440.0...") only
+ever rendered once, near the top of the card, above the source-document
+preview and the Document/Extracted-fields groups — on a long card, a
+reviewer scrolling down to Accept/Reject could lose the warning off-screen
+and click without ever seeing why the document was flagged. This matters
+more than a typical cosmetic gap: `verify.py`'s GST-arithmetic and
+hallucination-guard checks (DECISIONS #33, #48) both deliberately still
+route to human judgment instead of auto-rejecting, so that safety model
+only holds if the warning is actually seen before the click. Fixed by
+repeating the same text, same `text-amber-800` styling, immediately above
+the Accept/Reject buttons — gated on the same `isRoutine` check the card
+already used, so a routine "no issues found" confirm (nothing to repeat)
+is untouched. No sticky/pinned header, just a second static copy.
+Verified live (real login as `owner@try-demo.test`, a real already-seeded
+flagged GST-mismatch item and a real routine item, not mocks); typecheck +
+build clean; backend suite 33/33 (no backend change). Screenshot:
+`docs/screenshots/ops-review-card-repeated-warning.png`.
 
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
