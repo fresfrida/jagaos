@@ -1,0 +1,159 @@
+{
+  "app": {
+    "skipToContent": "Skip to content"
+  },
+  "header": {
+    "primaryNav": "Primary",
+    "logIn": "Log In",
+    "logOut": "Log Out",
+    "getStarted": "Get Started",
+    "language": "Language"
+  },
+  "auth": {
+    "login": {
+      "title": "Log in",
+      "subtitle": "No password yet — enter your email to continue.",
+      "emailLabel": "Email",
+      "newCompanyCheckbox": "I'm setting up a new company",
+      "companyNameLabel": "Company name",
+      "fyeMonthLabel": "FYE month",
+      "fyeDayLabel": "FYE day",
+      "continueButton": "Continue",
+      "createCompanyButton": "Create company & continue"
+    }
+  },
+  "common": {
+    "buttons": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "clear": "Clear",
+      "close": "Close"
+    }
+  },
+  "ops": {
+    "status": {
+      "filed": "filed",
+      "processed": "processed",
+      "needsReview": "needs review",
+      "quarantined": "quarantined",
+      "missing": "missing",
+      "satisfied": "satisfied",
+      "open": "open",
+      "archived": "archived"
+    },
+    "backend": {
+      "checking": "Checking backend…",
+      "reachable": "Backend reachable",
+      "unreachable": "Backend unreachable — start it with `uvicorn app.main:app --reload` in app/"
+    },
+    "session": {
+      "checking": "Checking your session…",
+      "redirecting": "Redirecting to log in…"
+    },
+    "tabs": {
+      "ariaLabel": "Ops sections",
+      "review": "Upload & Review",
+      "documents": "Documents",
+      "dates": "Dates",
+      "gaps": "Gap Analysis",
+      "obligations": "Obligations"
+    },
+    "upload": {
+      "pictureQuestion": "Is this a picture, not a document?",
+      "yes": "Yes",
+      "no": "No",
+      "pictureWarning": "Choosing yes reduces the accuracy of data detected from this file — select no for invoices, forms, and other documents.",
+      "clickToUpload": "Click to upload a PDF or image",
+      "uploading": "Uploading…",
+      "viewerCantUpload": "Viewers can't upload documents — ask an admin or owner.",
+      "uploadReplacement": "Upload a replacement",
+      "lastResult": "Last upload result:",
+      "classifiedAs": "classified as {{lane}} / {{docType}} ({{confidence}}% confident)",
+      "injectionSuspected": "injection suspected",
+      "reviewLabel": "Review: {{question}}",
+      "quarantinedMessage": "Quarantined by the injection guardrail — obligation table untouched.",
+      "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
+    },
+    "review": {
+      "needsReview": "Needs review ({{count}})",
+      "document": {
+        "heading": "Document",
+        "filenameLabel": "Filename",
+        "descriptionLabel": "Description",
+        "descriptionPendingPlaceholder": "No caption yet — tap the mic or type one",
+        "bucketLabel": "Bucket",
+        "docTypeLabel": "Doc type",
+        "vendorNameLabel": "Vendor name"
+      },
+      "extractedFieldsHeading": "Extracted fields",
+      "expiredMessage": "This document can no longer be reviewed automatically.",
+      "archiveButton": "Archive",
+      "archiveOrReupload": "or re-upload the document to try reviewing it again.",
+      "onlyAdminCanArchive": "Only an admin or owner can archive this — or re-upload the document to try reviewing it again.",
+      "acceptAsIs": "Accept as-is",
+      "acceptWithCorrections": "Accept with corrections",
+      "reject": "Reject",
+      "onlyAdminCanResolve": "Only an admin or owner can resolve this."
+    },
+    "documents": {
+      "heading": "Documents ({{count}})",
+      "searchPlaceholder": "Search documents…",
+      "noMatch": "No documents match that search.",
+      "noneUploaded": "No documents uploaded yet.",
+      "noCaptionYet": "No caption yet",
+      "filenamePlaceholder": "Filename",
+      "descriptionPlaceholder": "Description",
+      "vendorNamePlaceholder": "Vendor name",
+      "noBucketOption": "No bucket",
+      "view": "View",
+      "trace": "Trace",
+      "edit": "Edit",
+      "archive": "Archive",
+      "traceHeading": "Trace — document #{{documentId}} · total ${{cost}}",
+      "traceTable": {
+        "node": "Node",
+        "model": "Model",
+        "tokens": "Tokens in/out",
+        "cost": "Cost",
+        "decision": "Decision"
+      }
+    },
+    "dates": {
+      "uploadDate": "Upload date",
+      "documentDate": "Document date",
+      "noDocumentDate": "No document date ({{count}})",
+      "noneUploaded": "No documents uploaded yet."
+    },
+    "gaps": {
+      "heading": "Gap analysis — {{satisfied}} of {{total}} held",
+      "empty": "No expectations yet — upload a statutory document that reads as a company event (incorporation, corp sec change)."
+    },
+    "obligations": {
+      "heading": "Obligations ({{count}})",
+      "empty": "No obligations derived yet."
+    },
+    "documentViewer": {
+      "loadFailed": "Couldn't load the source file.",
+      "loading": "Loading source…",
+      "closePreview": "Close preview",
+      "previewLabel": "Preview: {{filename}}"
+    },
+    "documentPreview": {
+      "loadFailed": "Couldn't load the source file.",
+      "loading": "Loading source…",
+      "openSourcePdf": "Open source PDF"
+    },
+    "voiceCaption": {
+      "stopRecording": "Stop recording caption",
+      "recordCaption": "Record a caption by voice"
+    },
+    "pictureToggle": {
+      "label": "This is a picture, not a document",
+      "alreadyMarked": "(already marked)",
+      "reducesAccuracy": "Reduces the accuracy of data detected from this file."
+    },
+    "docType": {
+      "legacySuffix": "{{value}} (legacy)"
+    }
+  }
+}

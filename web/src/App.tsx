@@ -1,4 +1,5 @@
 import { MotionConfig, motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { AuthProvider } from './features/auth/AuthContext'
 import { Page } from './pages/Page'
 import { useRoute } from './router/useRoute'
@@ -9,6 +10,7 @@ import { Header } from './sections/Header'
 export default function App() {
   const route = useRoute()
   useRouteEffects(route)
+  const { t } = useTranslation()
 
   return (
     <AuthProvider>
@@ -22,7 +24,7 @@ export default function App() {
           }}
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-control focus:bg-ink focus:px-4 focus:py-2 focus:text-white"
         >
-          Skip to content
+          {t('app.skipToContent')}
         </a>
         <Header current={route} />
         {/* min-h keeps the footer below the fold while a page mounts, so it never jumps. */}

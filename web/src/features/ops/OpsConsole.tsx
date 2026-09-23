@@ -1,5 +1,6 @@
 import { Archive, Check, FileText, Loader2, Mic, MicOff, ShieldAlert, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -103,17 +104,18 @@ function DocumentPreview({
   mediaType: string
   filename: string
 }) {
+  const { t } = useTranslation()
   const { blobUrl, failed } = useDocumentBlobUrl(documentId)
 
-  if (failed) return <p className="mt-3 text-[12px] text-muted">Couldn't load the source file.</p>
-  if (!blobUrl) return <p className="mt-3 text-[12px] text-muted">Loading source…</p>
+  if (failed) return <p className="mt-3 text-[12px] text-muted">{t('ops.documentPreview.loadFailed')}</p>
+  if (!blobUrl) return <p className="mt-3 text-[12px] text-muted">{t('ops.documentPreview.loading')}</p>
 
   if (mediaType === 'application/pdf') {
     return (
       <div className="mt-3">
         <embed src={blobUrl} type="application/pdf" className="h-64 w-full rounded-control border border-line" />
         <a href={blobUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[12px] text-muted underline hover:text-ink">
-          Open source PDF
+          {t('ops.documentPreview.openSourcePdf')}
         </a>
       </div>
     )
@@ -170,6 +172,7 @@ function DocumentViewerModal({
   mediaType: string
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const { blobUrl, failed } = useDocumentBlobUrl(documentId)
 
   useEffect(() => {
@@ -186,7 +189,7 @@ function DocumentViewerModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={`Preview: ${filename}`}
+      aria-label={t('ops.documentViewer.previewLabel', { filename })}
     >
       <div
         className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-card bg-white shadow-xl"
@@ -197,14 +200,14 @@ function DocumentViewerModal({
           <button
             onClick={onClose}
             className="shrink-0 rounded-control p-1 text-muted hover:bg-canvas hover:text-ink"
-            aria-label="Close preview"
+            aria-label={t('ops.documentViewer.closePreview')}
           >
             <X size={18} />
           </button>
         </div>
         <div className="flex-1 overflow-auto p-4">
-          {failed && <p className="text-[13px] text-red-700">Couldn't load the source file.</p>}
-          {!failed && !blobUrl && <p className="text-[13px] text-muted">Loading source…</p>}
+          {failed && <p className="text-[13px] text-red-700">{t('ops.documentViewer.loadFailed')}</p>}
+          {!failed && !blobUrl && <p className="text-[13px] text-muted">{t('ops.documentViewer.loading')}</p>}
           {blobUrl && mediaType === 'application/pdf' && (
             <embed src={blobUrl} type="application/pdf" className="h-[70vh] w-full rounded-control border border-line" />
           )}
@@ -247,6 +250,7 @@ function DocTypeField({
   onChange: (value: string) => void
   className: string
 }) {
+  const { t } = useTranslation()
   if (lane === 'statutory') {
     return <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={className} />
   }
@@ -254,7 +258,7 @@ function DocTypeField({
   return (
     <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={className}>
       <option value="">—</option>
-      {isLegacyValue && <option value={value}>{value} (legacy)</option>}
+      {isLegacyValue && <option value={value}>{t('ops.docType.legacySuffix', { value })}</option>}
       {DOC_TYPES.map((dt) => (
         <option key={dt} value={dt}>{dt}</option>
       ))}
@@ -270,6 +274,7 @@ function DocTypeField({
  * browser has no Web Speech API — the caller's existing plain text input
  * is already the fallback (no separate fallback UI needed). */
 function VoiceCaptionButton({ onCaption, disabled }: { onCaption: (text: string) => void; disabled: boolean }) {
+  const { t } = useTranslation()
   const { supported, listening, start, stop } = useSpeechCaption(onCaption)
   if (!supported) return null
   return (
@@ -277,8 +282,8 @@ function VoiceCaptionButton({ onCaption, disabled }: { onCaption: (text: string)
       type="button"
       disabled={disabled}
       onClick={() => (listening ? stop() : start())}
-      aria-label={listening ? 'Stop recording caption' : 'Record a caption by voice'}
-      title={listening ? 'Stop recording' : 'Record a caption by voice'}
+      aria-label={listening ? t('ops.voiceCaption.stopRecording') : t('ops.voiceCaption.recordCaption')}
+      title={listening ? t('ops.voiceCaption.stopRecording') : t('ops.voiceCaption.recordCaption')}
       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-line disabled:text-muted disabled:opacity-60 ${listening ? 'border-red-300 bg-red-50 text-red-600' : 'text-muted hover:border-ink/40 hover:text-ink'}`}
     >
       {listening ? <MicOff size={14} /> : <Mic size={14} />}
@@ -305,6 +310,7 @@ function PictureToggleField({
   disabled: boolean
   onChange: (checked: boolean) => void
 }) {
+  const { t } = useTranslation()
   return (
     <label className="flex flex-col gap-1 text-[12px] text-muted sm:col-span-3">
       <span className="flex items-center gap-2">
@@ -314,11 +320,11 @@ function PictureToggleField({
           disabled={disabled || locked}
           onChange={(e) => onChange(e.target.checked)}
         />
-        This is a picture, not a document
-        {locked && <span className="text-[11px] text-muted">(already marked)</span>}
+        {t('ops.pictureToggle.label')}
+        {locked && <span className="text-[11px] text-muted">{t('ops.pictureToggle.alreadyMarked')}</span>}
       </span>
       {checked && !locked && (
-        <span className="text-[11px] text-muted">Reduces the accuracy of data detected from this file.</span>
+        <span className="text-[11px] text-muted">{t('ops.pictureToggle.reducesAccuracy')}</span>
       )}
     </label>
   )
@@ -347,6 +353,7 @@ function ReviewQueueCard({
   // reused.
   onPoll: () => void
 }) {
+  const { t } = useTranslation()
   const proposed = parseProposed(item.proposed_json)
   const fieldNames = Object.keys(proposed).filter((k) => k !== 'injection_suspected' && isProvenance(proposed[k]))
   // 2026-09-22 (DECISIONS #40): every document now needs review, even a
@@ -522,10 +529,10 @@ function ReviewQueueCard({
          undifferentiated stack of same-weight labels. */}
       {!expired && (
         <div className="mt-4">
-          <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">Document</h3>
+          <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">{t('ops.review.document.heading')}</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="text-[12px] text-muted sm:col-span-3">
-              Filename
+              {t('ops.review.document.filenameLabel')}
               <input
                 value={filename}
                 disabled={!canResolve}
@@ -534,12 +541,12 @@ function ReviewQueueCard({
               />
             </label>
             <label className="text-[12px] text-muted sm:col-span-3">
-              Description
+              {t('ops.review.document.descriptionLabel')}
               <div className="mt-1 flex items-center gap-2">
                 <input
                   value={description}
                   disabled={!canResolve}
-                  placeholder={isPendingCaption ? 'No caption yet — tap the mic or type one' : undefined}
+                  placeholder={isPendingCaption ? t('ops.review.document.descriptionPendingPlaceholder') : undefined}
                   onChange={(e) => setDescription(e.target.value)}
                   className="block h-9 w-full flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
                 />
@@ -556,7 +563,7 @@ function ReviewQueueCard({
               </div>
             </label>
             <label className="text-[12px] text-muted">
-              Bucket
+              {t('ops.review.document.bucketLabel')}
               <select
                 value={bucket}
                 disabled={!canResolve}
@@ -570,7 +577,7 @@ function ReviewQueueCard({
               </select>
             </label>
             <label className="text-[12px] text-muted">
-              Doc type
+              {t('ops.review.document.docTypeLabel')}
               <DocTypeField
                 lane={item.document_lane}
                 value={docType}
@@ -580,7 +587,7 @@ function ReviewQueueCard({
               />
             </label>
             <label className="text-[12px] text-muted">
-              Vendor name
+              {t('ops.review.document.vendorNameLabel')}
               <input
                 value={vendorName}
                 disabled={!canResolve}
@@ -602,7 +609,7 @@ function ReviewQueueCard({
 
       {!expired && fieldNames.length > 0 && (
         <div className="mt-4 border-t border-line pt-4">
-          <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">Extracted fields</h3>
+          <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">{t('ops.review.extractedFieldsHeading')}</h3>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {fieldNames.map((name) => {
               const field = proposed[name]
@@ -632,17 +639,17 @@ function ReviewQueueCard({
 
       {expired ? (
         <div className="mt-4">
-          <p className="text-[13px] text-red-700">This document can no longer be reviewed automatically.</p>
+          <p className="text-[13px] text-red-700">{t('ops.review.expiredMessage')}</p>
           {canResolve ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Button size="sm" variant="secondary" onClick={() => void archiveExpired()} disabled={busy} icon={<Archive size={14} />}>
-                Archive
+                {t('ops.review.archiveButton')}
               </Button>
               {busy && <Loader2 size={16} className="animate-spin self-center text-muted" />}
-              <span className="text-[12px] text-muted">or re-upload the document to try reviewing it again.</span>
+              <span className="text-[12px] text-muted">{t('ops.review.archiveOrReupload')}</span>
             </div>
           ) : (
-            <p className="mt-2 text-[12px] text-muted">Only an admin or owner can archive this — or re-upload the document to try reviewing it again.</p>
+            <p className="mt-2 text-[12px] text-muted">{t('ops.review.onlyAdminCanArchive')}</p>
           )}
         </div>
       ) : canResolve ? (
@@ -656,16 +663,16 @@ function ReviewQueueCard({
           {!isRoutine && <p className="mb-2 text-[13px] text-amber-800">{item.question}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={() => void resolve('confirm')} disabled={busy} icon={<Check size={14} />}>
-              Accept{Object.keys(edits).some((n) => edits[n] !== originalValue(n)) ? ' with corrections' : ' as-is'}
+              {Object.keys(edits).some((n) => edits[n] !== originalValue(n)) ? t('ops.review.acceptWithCorrections') : t('ops.review.acceptAsIs')}
             </Button>
             <Button size="sm" variant="secondary" onClick={() => void resolve('reject')} disabled={busy} icon={<X size={14} />}>
-              Reject
+              {t('ops.review.reject')}
             </Button>
             {busy && <Loader2 size={16} className="animate-spin self-center text-muted" />}
           </div>
         </div>
       ) : (
-        <p className="mt-4 text-[12px] text-muted">Only an admin or owner can resolve this.</p>
+        <p className="mt-4 text-[12px] text-muted">{t('ops.review.onlyAdminCanResolve')}</p>
       )}
     </Card>
   )
@@ -693,6 +700,7 @@ function DocumentCard({
   onArchive: () => void
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [description, setDescription] = useState(doc.description ?? '')
   const [bucket, setBucket] = useState(doc.bucket ?? '')
@@ -748,7 +756,7 @@ function DocumentCard({
               {doc.description ? (
                 doc.description
               ) : isPendingCaption ? (
-                <span className="italic text-muted">No caption yet</span>
+                <span className="italic text-muted">{t('ops.documents.noCaptionYet')}</span>
               ) : (
                 <span className="text-muted">{doc.lane ?? '—'} / {doc.doc_type ?? '—'}</span>
               )}
@@ -770,14 +778,14 @@ function DocumentCard({
           <input
             value={filename}
             onChange={(e) => setFilename(e.target.value)}
-            placeholder="Filename"
+            placeholder={t('ops.documents.filenamePlaceholder')}
             className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink sm:col-span-3"
           />
           <div className="flex items-center gap-2 sm:col-span-3">
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={isPendingCaption ? 'No caption yet — tap the mic or type one' : 'Description'}
+              placeholder={isPendingCaption ? t('ops.review.document.descriptionPendingPlaceholder') : t('ops.documents.descriptionPlaceholder')}
               className="block h-9 w-full flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
             />
             {isPictureLane && <VoiceCaptionButton onCaption={setDescription} disabled={false} />}
@@ -787,7 +795,7 @@ function DocumentCard({
             onChange={(e) => setBucket(e.target.value)}
             className="block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink"
           >
-            <option value="">No bucket</option>
+            <option value="">{t('ops.documents.noBucketOption')}</option>
             {BUCKETS.map((b) => (
               <option key={b} value={b}>{b}</option>
             ))}
@@ -796,7 +804,7 @@ function DocumentCard({
           <input
             value={vendorName}
             onChange={(e) => setVendorName(e.target.value)}
-            placeholder="Vendor name"
+            placeholder={t('ops.documents.vendorNamePlaceholder')}
             list={VENDOR_NAMES_DATALIST_ID}
             className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
           />
@@ -808,22 +816,22 @@ function DocumentCard({
           />
           {error && <p className="text-[12px] text-red-700 sm:col-span-3">{error}</p>}
           <div className="flex gap-2 sm:col-span-3">
-            <Button size="sm" onClick={() => void save()} disabled={busy}>Save</Button>
-            <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
+            <Button size="sm" onClick={() => void save()} disabled={busy}>{t('common.buttons.save')}</Button>
+            <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>{t('common.buttons.cancel')}</Button>
           </div>
         </div>
       )}
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
         <button onClick={onView} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink">
-          View
+          {t('ops.documents.view')}
         </button>
         <button onClick={onTrace} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink">
-          Trace
+          {t('ops.documents.trace')}
         </button>
         {canEdit && !editing && (
           <button onClick={() => setEditing(true)} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink">
-            Edit
+            {t('ops.documents.edit')}
           </button>
         )}
         {/* No doc.status !== 'archived' guard needed (2026-09-23, DECISIONS
@@ -831,7 +839,7 @@ function DocumentCard({
            at all anymore, so every doc rendered here is guaranteed live. */}
         {canArchive && (
           <button onClick={onArchive} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-red-700">
-            Archive
+            {t('ops.documents.archive')}
           </button>
         )}
       </div>
@@ -850,10 +858,27 @@ const STATUS_TONE: Record<string, string> = {
   archived: 'text-muted bg-canvas',
 }
 
+// Maps a raw status code (as returned by the backend, e.g. "needs_review")
+// to its translation key under ops.status.* — falls back to the raw code
+// for any status this map doesn't know about, so an unmapped backend value
+// never disappears from the UI.
+const STATUS_LABEL_KEY: Record<string, string> = {
+  filed: 'ops.status.filed',
+  processed: 'ops.status.processed',
+  needs_review: 'ops.status.needsReview',
+  quarantined: 'ops.status.quarantined',
+  missing: 'ops.status.missing',
+  satisfied: 'ops.status.satisfied',
+  open: 'ops.status.open',
+  archived: 'ops.status.archived',
+}
+
 function StatusPill({ status }: { status: string }) {
+  const { t } = useTranslation()
+  const labelKey = STATUS_LABEL_KEY[status]
   return (
     <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-mono uppercase tracking-wide ${STATUS_TONE[status] ?? 'bg-canvas text-muted'}`}>
-      {status}
+      {labelKey ? t(labelKey) : status}
     </span>
   )
 }
@@ -863,9 +888,9 @@ type DateBasis = 'upload' | 'document'
 // Amendment 2 (2026-09-22, DECISIONS #43): these exact two labels, not
 // "Received"/"Occurred" or any other wording — the toggle control itself
 // (tabs here) was left "your call".
-const DATE_BASIS_OPTIONS: { id: DateBasis; label: string }[] = [
-  { id: 'upload', label: 'Upload date' },
-  { id: 'document', label: 'Document date' },
+const DATE_BASIS_OPTIONS: { id: DateBasis; labelKey: string }[] = [
+  { id: 'upload', labelKey: 'ops.dates.uploadDate' },
+  { id: 'document', labelKey: 'ops.dates.documentDate' },
 ]
 
 function DateGroupRow({ doc }: { doc: DocumentRow }) {
@@ -890,6 +915,7 @@ function DateGroupRow({ doc }: { doc: DocumentRow }) {
  * grouped/sorted list, deliberately no week/day grid or drag-and-drop —
  * "your call" on how minimal to keep this, and this is all it needs. */
 function DatesView({ documents }: { documents: DocumentRow[] }) {
+  const { t } = useTranslation()
   const [basis, setBasis] = useState<DateBasis>('upload')
 
   const { sortedDays, noDate } = useMemo(() => {
@@ -923,14 +949,14 @@ function DatesView({ documents }: { documents: DocumentRow[] }) {
               onClick={() => setBasis(opt.id)}
               className={`rounded-md px-3 py-1.5 text-[13px] transition-colors ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
             >
-              {opt.label}
+              {t(opt.labelKey)}
             </button>
           )
         })}
       </div>
 
       {documents.length === 0 ? (
-        <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">No documents uploaded yet.</p>
+        <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">{t('ops.dates.noneUploaded')}</p>
       ) : (
         <div className="space-y-6">
           {sortedDays.map(([day, docs]) => (
@@ -945,7 +971,7 @@ function DatesView({ documents }: { documents: DocumentRow[] }) {
           {basis === 'document' && noDate.length > 0 && (
             <section>
               <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">
-                No document date ({noDate.length})
+                {t('ops.dates.noDocumentDate', { count: noDate.length })}
               </h3>
               <div className="space-y-1">
                 {noDate.map((doc) => <DateGroupRow key={doc.id} doc={doc} />)}
@@ -963,12 +989,12 @@ function DatesView({ documents }: { documents: DocumentRow[] }) {
  * CSS-hidden panels: an inactive tab's rows cost nothing while inactive. */
 type OpsTab = 'review' | 'documents' | 'dates' | 'gaps' | 'obligations'
 
-const OPS_TABS: { id: OpsTab; label: string }[] = [
-  { id: 'review', label: 'Upload & Review' },
-  { id: 'documents', label: 'Documents' },
-  { id: 'dates', label: 'Dates' },
-  { id: 'gaps', label: 'Gap Analysis' },
-  { id: 'obligations', label: 'Obligations' },
+const OPS_TABS: { id: OpsTab; labelKey: string }[] = [
+  { id: 'review', labelKey: 'ops.tabs.review' },
+  { id: 'documents', labelKey: 'ops.tabs.documents' },
+  { id: 'dates', labelKey: 'ops.tabs.dates' },
+  { id: 'gaps', labelKey: 'ops.tabs.gaps' },
+  { id: 'obligations', labelKey: 'ops.tabs.obligations' },
 ]
 
 /** The logged-in app: add a document, watch the agent process it, confirm
@@ -979,6 +1005,7 @@ const OPS_TABS: { id: OpsTab; label: string }[] = [
  * the backend rejects the write either way (app/auth.py's require_role);
  * this only avoids offering a control that would 403. */
 export function OpsConsole() {
+  const { t } = useTranslation()
   const { status, user, company, role } = useAuth()
   const [apiUp, setApiUp] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
@@ -1101,7 +1128,7 @@ export function OpsConsole() {
   if (status === 'loading') {
     return (
       <div className="flex items-center gap-2 py-16 text-sm text-muted">
-        <Loader2 size={16} className="animate-spin" /> Checking your session…
+        <Loader2 size={16} className="animate-spin" /> {t('ops.session.checking')}
       </div>
     )
   }
@@ -1109,7 +1136,7 @@ export function OpsConsole() {
   if (status === 'signed-out') {
     // useEffect above is already redirecting to /login; this is what
     // renders for the one tick before that navigation completes.
-    return <p className="py-16 text-sm text-muted">Redirecting to log in…</p>
+    return <p className="py-16 text-sm text-muted">{t('ops.session.redirecting')}</p>
   }
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
@@ -1145,9 +1172,9 @@ export function OpsConsole() {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
         <span className="inline-flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${apiUp ? 'bg-sage' : 'bg-red-500'}`} aria-hidden="true" />
-          {apiUp === null && 'Checking backend…'}
-          {apiUp === true && 'Backend reachable'}
-          {apiUp === false && 'Backend unreachable — start it with `uvicorn app.main:app --reload` in app/'}
+          {apiUp === null && t('ops.backend.checking')}
+          {apiUp === true && t('ops.backend.reachable')}
+          {apiUp === false && t('ops.backend.unreachable')}
         </span>
         {company && user && (
           <span>
@@ -1162,7 +1189,7 @@ export function OpsConsole() {
         </div>
       )}
 
-      <div role="tablist" aria-label="Ops sections" className="flex flex-wrap gap-0.5 border-b border-line">
+      <div role="tablist" aria-label={t('ops.tabs.ariaLabel')} className="flex flex-wrap gap-0.5 border-b border-line">
         {OPS_TABS.map((tab) => {
           const active = activeTab === tab.id
           const badge = tab.id === 'review' && reviewItems.length > 0 ? ` (${reviewItems.length})` : ''
@@ -1179,7 +1206,7 @@ export function OpsConsole() {
               // nudged its neighbour; only background/color changes here).
               className={`rounded-md px-3 py-2 text-sm transition-colors ${active ? 'bg-canvas text-ink' : 'text-muted hover:text-ink'}`}
             >
-              {tab.label}
+              {t(tab.labelKey)}
               {badge}
             </button>
           )
@@ -1200,7 +1227,7 @@ export function OpsConsole() {
                    consistent look at a control this prominent. Default No
                    — the common case is still a real document. */}
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-[13px] text-ink">Is this a picture, not a document?</span>
+                  <span className="text-[13px] text-ink">{t('ops.upload.pictureQuestion')}</span>
                   <div className="flex gap-0.5 rounded-control border border-line p-0.5">
                     {([false, true] as const).map((val) => {
                       const active = isPictureUpload === val
@@ -1211,7 +1238,7 @@ export function OpsConsole() {
                           onClick={() => setIsPictureUpload(val)}
                           className={`rounded-md px-3 py-1 text-[13px] transition-colors ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
                         >
-                          {val ? 'Yes' : 'No'}
+                          {val ? t('ops.upload.yes') : t('ops.upload.no')}
                         </button>
                       )
                     })}
@@ -1219,7 +1246,7 @@ export function OpsConsole() {
                 </div>
                 {isPictureUpload && (
                   <p className="mt-1.5 text-[12px] text-muted">
-                    Choosing yes reduces the accuracy of data detected from this file — select no for invoices, forms, and other documents.
+                    {t('ops.upload.pictureWarning')}
                   </p>
                 )}
               </div>
@@ -1228,7 +1255,7 @@ export function OpsConsole() {
             {canUpload ? (
               <label className="flex h-24 cursor-pointer items-center justify-center gap-2 rounded-card border border-dashed border-line text-sm text-muted hover:border-ink/40">
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                {busy ? 'Uploading…' : 'Click to upload a PDF or image'}
+                {busy ? t('ops.upload.uploading') : t('ops.upload.clickToUpload')}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1244,7 +1271,7 @@ export function OpsConsole() {
               </label>
             ) : (
               <p className="flex h-24 items-center justify-center rounded-card border border-dashed border-line text-sm text-muted">
-                Viewers can't upload documents — ask an admin or owner.
+                {t('ops.upload.viewerCantUpload')}
               </p>
             )}
 
@@ -1256,7 +1283,7 @@ export function OpsConsole() {
             {justRejectedFilename && canUpload && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-canvas p-4 text-[13px]">
                 <p className="text-ink">
-                  <span className="font-medium">{justRejectedFilename}</span> rejected and archived. Upload a replacement?
+                  <span className="font-medium">{justRejectedFilename}</span> {t('ops.upload.rejectedPromptSuffix')}
                 </p>
                 <Button
                   size="sm"
@@ -1266,7 +1293,7 @@ export function OpsConsole() {
                     fileInputRef.current?.click()
                   }}
                 >
-                  Upload a replacement
+                  {t('ops.upload.uploadReplacement')}
                 </Button>
               </div>
             )}
@@ -1274,7 +1301,7 @@ export function OpsConsole() {
             {lastUpload && (
               <div className="mt-4 rounded-card border border-line bg-canvas p-4 text-[13px]">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-ink">Last upload result:</span>
+                  <span className="font-medium text-ink">{t('ops.upload.lastResult')}</span>
                   {!isRoutineUpload && <StatusPill status={lastUpload.status} />}
                 </div>
                 {lastUpload.classify && (
@@ -1283,19 +1310,23 @@ export function OpsConsole() {
                        invoice"), not extraction accuracy — scoping the label
                        to document-type detection so it doesn't read as a
                        blanket trust score on the extracted fields (2026-09-22). */}
-                    classified as {lastUpload.classify.lane} / {lastUpload.classify.doc_type} ({(lastUpload.classify.confidence * 100).toFixed(0)}% confident)
+                    {t('ops.upload.classifiedAs', {
+                      lane: lastUpload.classify.lane,
+                      docType: lastUpload.classify.doc_type,
+                      confidence: (lastUpload.classify.confidence * 100).toFixed(0),
+                    })}
                     {lastUpload.classify.injection_suspected && (
                       <span className="ml-2 inline-flex items-center gap-1 text-red-700">
-                        <ShieldAlert size={12} /> injection suspected
+                        <ShieldAlert size={12} /> {t('ops.upload.injectionSuspected')}
                       </span>
                     )}
                   </p>
                 )}
                 {lastUpload.status === 'needs_review' && lastUpload.review?.question && (
-                  <p className="mt-1 text-amber-800">Review: {lastUpload.review.question}</p>
+                  <p className="mt-1 text-amber-800">{t('ops.upload.reviewLabel', { question: lastUpload.review.question })}</p>
                 )}
                 {lastUpload.status === 'quarantined' && (
-                  <p className="mt-1 text-red-700">Quarantined by the injection guardrail — obligation table untouched.</p>
+                  <p className="mt-1 text-red-700">{t('ops.upload.quarantinedMessage')}</p>
                 )}
               </div>
             )}
@@ -1304,7 +1335,7 @@ export function OpsConsole() {
           {reviewItems.length > 0 && (
             <section>
               <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-amber-800">
-                Needs review ({reviewItems.length})
+                {t('ops.review.needsReview', { count: reviewItems.length })}
               </h2>
               <div className="space-y-3">
                 {reviewItems.map((item) => (
@@ -1335,7 +1366,7 @@ export function OpsConsole() {
                logic needed. */}
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-[11px] font-mono uppercase tracking-wide text-muted">
-                Documents ({visibleDocuments.length})
+                {t('ops.documents.heading', { count: visibleDocuments.length })}
               </h2>
             </div>
 
@@ -1358,7 +1389,7 @@ export function OpsConsole() {
                   setSearchQuery(e.target.value)
                   if (!e.target.value.trim()) setSearchResults(null)
                 }}
-                placeholder="Search documents…"
+                placeholder={t('ops.documents.searchPlaceholder')}
                 className="h-9 flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
               />
               {searchResults !== null && (
@@ -1371,7 +1402,7 @@ export function OpsConsole() {
                     setSearchResults(null)
                   }}
                 >
-                  Clear
+                  {t('common.buttons.clear')}
                 </Button>
               )}
             </form>
@@ -1398,7 +1429,7 @@ export function OpsConsole() {
 
             {visibleDocuments.length === 0 ? (
               <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">
-                {searchResults !== null ? 'No documents match that search.' : 'No documents uploaded yet.'}
+                {searchResults !== null ? t('ops.documents.noMatch') : t('ops.documents.noneUploaded')}
               </p>
             ) : (
               <div className="space-y-2">
@@ -1421,17 +1452,17 @@ export function OpsConsole() {
           {trace && (
             <section>
               <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">
-                Trace — document #{trace.documentId} · total ${trace.report.total_cost_usd.toFixed(4)}
+                {t('ops.documents.traceHeading', { documentId: trace.documentId, cost: trace.report.total_cost_usd.toFixed(4) })}
               </h2>
               <Card className="overflow-hidden p-0" interactive={false}>
                 <table className="w-full text-left text-[12px]">
                   <thead className="bg-canvas text-muted">
                     <tr>
-                      <th className="px-4 py-2 font-normal">Node</th>
-                      <th className="px-4 py-2 font-normal">Model</th>
-                      <th className="px-4 py-2 font-normal">Tokens in/out</th>
-                      <th className="px-4 py-2 font-normal">Cost</th>
-                      <th className="px-4 py-2 font-normal">Decision</th>
+                      <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.node')}</th>
+                      <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.model')}</th>
+                      <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.tokens')}</th>
+                      <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.cost')}</th>
+                      <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.decision')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1466,11 +1497,11 @@ export function OpsConsole() {
         <div role="tabpanel" id="ops-panel-gaps" aria-labelledby="ops-tab-gaps">
           <section>
             <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">
-              Gap analysis — {expectations.filter((e) => e.status === 'satisfied').length} of {expectations.length} held
+              {t('ops.gaps.heading', { satisfied: expectations.filter((e) => e.status === 'satisfied').length, total: expectations.length })}
             </h2>
             <Card className="overflow-hidden p-0" interactive={false}>
               {expectations.length === 0 ? (
-                <p className="p-6 text-sm text-muted">No expectations yet — upload a statutory document that reads as a company event (incorporation, corp sec change).</p>
+                <p className="p-6 text-sm text-muted">{t('ops.gaps.empty')}</p>
               ) : (
                 <table className="w-full text-left text-[13px]">
                   <tbody>
@@ -1492,11 +1523,11 @@ export function OpsConsole() {
         <div role="tabpanel" id="ops-panel-obligations" aria-labelledby="ops-tab-obligations">
           <section>
             <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">
-              Obligations ({obligations.length})
+              {t('ops.obligations.heading', { count: obligations.length })}
             </h2>
             <Card className="overflow-hidden p-0" interactive={false}>
               {obligations.length === 0 ? (
-                <p className="p-6 text-sm text-muted">No obligations derived yet.</p>
+                <p className="p-6 text-sm text-muted">{t('ops.obligations.empty')}</p>
               ) : (
                 <table className="w-full text-left text-[13px]">
                   <tbody>

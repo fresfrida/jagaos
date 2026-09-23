@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Container } from '../components/ui/Container'
@@ -12,6 +13,7 @@ import { routeHref } from '../router/routes'
  * this form for a "check your email" step later without touching anything
  * downstream. */
 export function LoginPage() {
+  const { t } = useTranslation()
   const { status, login, error } = useAuth()
   const [email, setEmail] = useState('')
   const [isNewCompany, setIsNewCompany] = useState(false)
@@ -44,14 +46,14 @@ export function LoginPage() {
   return (
     <Container className="flex min-h-[calc(100svh-65px)] items-center justify-center py-16">
       <Card className="w-full max-w-sm p-6" interactive={false}>
-        <h1 className="text-xl font-semibold text-ink">Log in</h1>
+        <h1 className="text-xl font-semibold text-ink">{t('auth.login.title')}</h1>
         <p className="mt-1 text-[13px] text-muted">
-          No password yet — enter your email to continue.
+          {t('auth.login.subtitle')}
         </p>
 
         <form onSubmit={(e) => void submit(e)} className="mt-5 space-y-4">
           <label className="block text-[13px] text-muted">
-            Email
+            {t('auth.login.emailLabel')}
             <input
               type="email"
               required
@@ -67,13 +69,13 @@ export function LoginPage() {
               checked={isNewCompany}
               onChange={(e) => setIsNewCompany(e.target.checked)}
             />
-            I'm setting up a new company
+            {t('auth.login.newCompanyCheckbox')}
           </label>
 
           {isNewCompany && (
             <div className="space-y-3 border-l-2 border-line pl-3">
               <label className="block text-[13px] text-muted">
-                Company name
+                {t('auth.login.companyNameLabel')}
                 <input
                   required
                   value={companyName}
@@ -83,7 +85,7 @@ export function LoginPage() {
               </label>
               <div className="flex gap-3">
                 <label className="text-[13px] text-muted">
-                  FYE month
+                  {t('auth.login.fyeMonthLabel')}
                   <input
                     type="number" min={1} max={12} value={fyeMonth}
                     onChange={(e) => setFyeMonth(Number(e.target.value))}
@@ -91,7 +93,7 @@ export function LoginPage() {
                   />
                 </label>
                 <label className="text-[13px] text-muted">
-                  FYE day
+                  {t('auth.login.fyeDayLabel')}
                   <input
                     type="number" min={1} max={31} value={fyeDay}
                     onChange={(e) => setFyeDay(Number(e.target.value))}
@@ -110,7 +112,7 @@ export function LoginPage() {
 
           <Button type="submit" disabled={busy} className="w-full justify-center">
             {busy ? <Loader2 size={14} className="animate-spin" /> : null}
-            {isNewCompany ? 'Create company & continue' : 'Continue'}
+            {isNewCompany ? t('auth.login.createCompanyButton') : t('auth.login.continueButton')}
           </Button>
         </form>
       </Card>
