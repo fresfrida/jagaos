@@ -7,12 +7,14 @@ smallest slice of PLATFORM.md's model that makes that true, with a simpler
 4-role set (owner/admin/user/viewer) than PLATFORM.md's original six.
 """
 
+import os
 import tempfile
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from langgraph.errors import InvalidUpdateError
@@ -241,9 +243,53 @@ def create_company(
         return {"id": cur.lastrowid, "name": name}
 
 
+# 2026-09-23 (DECISIONS #55): jaga-vision is a separate, isolated systemd
+# service (deploy/jaga-vision.service, vision/app.py) — heavy ML deps
+# (torch/transformers) stay fully out of this backend's own venv/process,
+# per the box's 4GB RAM budget already measured (Salesforce/blip-image-
+# captioning-base peaks ~2GB RSS while loaded). Never hardcoded: config
+# rule (CLAUDE.md's "Standing architecture rule") requires every endpoint
+# come from env, even a same-box, localhost-only one.
+CAPTION_SERVICE_URL = os.environ.get("JAGA_VISION_URL", "http://127.0.0.1:8100/caption")
+# ~20s model load + up to ~2s inference, measured — generous headroom
+# above that, not a tight budget racing the real number.
+CAPTION_TIMEOUT_SECONDS = 40.0
+
+
+def _caption_document_background(document_id: int, stored_path: str) -> None:
+    """Runs strictly after the upload response is already sent (FastAPI
+    BackgroundTasks, scheduled from upload_document below) — the ~20s
+    model-load budget must never block the upload request itself. Fire-
+    and-forget: on any failure (service down, timeout, corrupt image),
+    document.description simply stays in its existing NULL "pending
+    caption" state (DECISIONS #52) — the voice-caption UI already covers
+    that gracefully, so no new error surface is needed here. Only fills
+    description if it's STILL NULL by the time this finishes (`AND
+    description IS NULL`), so a human who already typed or spoke a
+    caption in the meantime is never overwritten by a slower, now-stale
+    background result — a caption from this local model is a proposal,
+    same as everything else an automated node in this pipeline ever
+    writes, not a locked-in value."""
+    try:
+        resp = httpx.post(CAPTION_SERVICE_URL, json={"path": stored_path}, timeout=CAPTION_TIMEOUT_SECONDS)
+        resp.raise_for_status()
+        caption = resp.json()["caption"]
+    except Exception as e:  # noqa: BLE001 - fire-and-forget by design, see docstring
+        print(f"jaga-vision captioning failed for document {document_id}: {e}")
+        return
+
+    with get_conn(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE document SET description = ? WHERE id = ? AND description IS NULL",
+            (caption, document_id),
+        )
+    reindex_document_search(document_id, DB_PATH)
+
+
 @app.post("/api/documents")
 async def upload_document(
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
+    background_tasks: BackgroundTasks,
     file: UploadFile, source_channel: str = "web", is_picture: bool = False,
 ) -> dict:
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
@@ -284,6 +330,27 @@ async def upload_document(
     if doc_status == "quarantined":
         return {"document_id": document_id, "status": "quarantined",
                 "verify": result.get("verify_result")}
+
+    # 2026-09-23 (DECISIONS #55): kick off local-model captioning for a
+    # picture-lane upload — scheduled, not awaited, so this request
+    # returns before the caption call is even guaranteed to have started,
+    # let alone the ~20s+ it can take. Only for is_picture uploads: that's
+    # the only path that leaves description NULL (DECISIONS #52); a
+    # quarantined document (returned above already) never reaches here.
+    if is_picture:
+        with get_conn(DB_PATH) as conn:
+            stored_path = conn.execute(
+                "SELECT stored_path FROM document WHERE id = ?", (document_id,)
+            ).fetchone()["stored_path"]
+        # Caught live while verifying locally, not assumed: app/graph/
+        # ingest.py's DOCS_PATH is a relative path ("./data/docs"), stored
+        # in the DB as-is — meaningless to jaga-vision, a separate process
+        # with its own working directory. Resolved to absolute here, in
+        # the one process that actually knows its own correct base
+        # directory, rather than relying on jaga-vision's systemd unit
+        # happening to share jaga-api's WorkingDirectory.
+        absolute_path = str(Path(stored_path).resolve())
+        background_tasks.add_task(_caption_document_background, document_id, absolute_path)
 
     # 2026-09-22 (DECISIONS #40): no document is ever filed without an
     # explicit human confirmation — verify.py now always sets needs_review,

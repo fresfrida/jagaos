@@ -1,0 +1,13 @@
+# CPU-only torch build — much smaller download/install than the default
+# (which bundles CUDA support this box will never use, being a CPU-only
+# Lightsail instance) and simpler than pinning a specific +cpu local
+# version suffix by hand. --extra-index-url (not --index-url): the latter
+# would make pip look ONLY at PyTorch's index, which doesn't host
+# transformers/pillow/fastapi/uvicorn at all.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.9.1
+transformers==4.47.1
+pillow==11.1.0
+fastapi==0.115.6
+uvicorn[standard]==0.34.0

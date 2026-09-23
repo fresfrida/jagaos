@@ -17,8 +17,9 @@ This repo currently holds:
 - **`web/`** — the marketing landing page (mock data, logged-out) plus the real logged-in app (`/login`, `/ops`, session-backed). See "Where the main logic lives" below.
 - **`app/`** — backend, per `ARCHITECTURE.md` §9 plus a 4-role auth layer (`app/auth.py`, 2026-09-22, DECISIONS #29-31). See "Backend status" below.
 - **`evals/`** — eval runner + adversarial cases, `evals/report.md` committed (10/10 passing, no gateway key needed).
-- **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, and auth/tenant-isolation (`tests/test_auth.py`). 31/31 passing.
-- **`deploy/`** — Lightsail provisioning (Caddy, systemd, `bootstrap.sh`). Untouched.
+- **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, auth/tenant-isolation, and vision-caption async wiring (`tests/test_vision_caption.py`, mocked, no torch). 39/39 passing (most need no gateway key).
+- **`deploy/`** — Lightsail provisioning (Caddy, systemd, `bootstrap.sh`, plus `jaga-vision.service` as of 2026-09-23, DECISIONS #55 — not yet deployed).
+- **`vision/`** — isolated image-captioning service (own venv, `Salesforce/blip-image-captioning-base`), 2026-09-23, DECISIONS #55. Deliberately separate from `app/` — see "Backend status" below.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
 - **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way.
@@ -522,6 +523,73 @@ normally. Full suite 36/36. No frontend change — the UI has had no path
 to reach an archived document's id since #53's fix, so nothing there
 needed touching or re-verifying.
 
+**Local image captioning for picture-lane uploads — built and verified
+locally end to end; not yet deployed (2026-09-23, DECISIONS #55).**
+Closes the backlog gap DECISIONS #52 deliberately left open: a
+picture-toggle upload's `description` stayed `NULL` ("pending caption")
+until a human typed or spoke one. New top-level `vision/` (sibling to
+`app/`, `web/`, `deploy/` — deliberately not inside `app/`): a plain
+FastAPI service, one `POST /caption` endpoint (`{"path": "..."}` →
+`{"caption": "..."}`), running `Salesforce/blip-image-captioning-base`
+via `transformers`' `BlipProcessor`/`BlipForConditionalGeneration`, bound
+to `127.0.0.1:8100` only (no auth needed — unreachable from outside the
+box). Its own venv, own `requirements.txt` (CPU-only torch via
+`--extra-index-url https://download.pytorch.org/whl/cpu`) — torch/
+transformers never enter `app/`'s own dependency resolution, the whole
+point of the isolation on a 4GB box. **The model loads fresh on every
+request and is released after, never kept resident** — a deliberate
+decision, not a missing optimization: peak RSS while loaded is ~2GB
+(measured before this task), and captioning is async, so nothing is
+waiting on the ~20s load time; keeping it warm would trade a real
+stability risk for a latency saving nobody needs.
+
+`app/main.py::upload_document` gained `background_tasks: BackgroundTasks`
+and, only for `is_picture=True` uploads, schedules a fire-and-forget
+`_caption_document_background(document_id, absolute_path)` call after the
+pipeline runs, before the response returns. **Timed live with the real
+vision service running: 0.115-0.135s response time**, confirming the
+upload response genuinely does not wait on the ~4-20s caption call. On
+success: `UPDATE document SET description = ? WHERE id = ? AND
+description IS NULL` — verified live, not just written, that a human
+edit racing ahead of the slower background result wins, never gets
+clobbered. On failure/timeout (`httpx`, 40s budget, bare `except
+Exception`): description simply stays in its existing pending state —
+the DECISIONS #52 voice-caption UI already covers that, so no new error
+surface was added.
+
+**A real bug was found and fixed during local verification, not assumed
+away**: the first live end-to-end test produced a genuine `400 Bad
+Request` from jaga-vision — `document.stored_path` is a relative path
+(`app/graph/ingest.py`'s `DOCS_PATH`), meaningless to a second process
+with its own working directory (it resolved against `vision/`'s cwd, not
+the repo root, so the file "didn't exist"). Fixed by resolving to an
+absolute path in `app/main.py` — the process that actually knows its own
+correct base directory — before the background task ever calls out.
+Re-verified afterward: a real caption ("a blue circle with a white
+center," for a synthetic test image) landed in `document.description`
+within seconds and was findable via real `GET /api/search`.
+
+New tests, gateway-free and torch-free (the real vision call is mocked at
+the `httpx.post` boundary): `tests/test_vision_caption.py` — upload
+response succeeds even when the mocked call raises (proving no
+dependency on it), a successful mock fills the pending description, a
+non-picture upload never calls the vision service. Full backend suite
+39/39.
+
+**Explicitly NOT deployed, and three specific things are unverified until
+it is** (`docs/KANBAN.md` Backlog has the details): (1) `MemoryMax=2.5G`
+on `deploy/jaga-vision.service` — the safety mechanism the whole isolated-
+service design depends on — could not be exercised at all locally (no
+systemd/cgroups on macOS); `deploy/README.md` has an exact live-box
+verification procedure. (2) The pinned `torch==2.9.1`/
+`transformers==4.47.1` were only installed/verified on macOS + Python
+3.13, not the box's actual Ubuntu 24.04 + Python 3.12. (3) The deploy
+steps documented in `deploy/README.md` (venv creation, model
+pre-download, systemd enable) have never been run end to end against the
+real box. No screenshots — no UI change; the existing DECISIONS #52
+review-card UI already renders both the pending and captioned states with
+zero new frontend code.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -532,6 +600,7 @@ needed touching or re-verifying.
 - `app/rules/statutory.py`'s Form C-S/C due date (30 Nov) is a working approximation, flagged in its own docstring — confirm before citing a specific date in `docs/WRITEUP.md`
 - `app/llm.py`'s per-token pricing is Anthropic list pricing, not confirmed as the gateway's actual billed rate
 - **`document.sha256` is UNIQUE globally, not per-company** — found live 2026-09-22 seeding a second test company; a byte-identical file can never be uploaded to two different companies. `docs/KANBAN.md` backlog; needs a table rebuild in SQLite, not a one-line fix.
+- **`jaga-vision`'s `MemoryMax=2.5G` cap (DECISIONS #55) is unverified — genuinely untestable on macOS (no systemd/cgroups), not just untested.** The whole "isolated service can't take down the box" design depends on this actually firing. `deploy/README.md` has the exact live-box verification procedure; must be run before this service is trusted in front of anyone. Not deployed yet either.
 
 ## Auth (added 2026-09-22, DECISIONS #28-31)
 
