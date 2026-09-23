@@ -137,13 +137,6 @@ export function DocumentTypeIcon({ mediaType }: { mediaType: string }) {
 // breaks by there being one per page rather than one per app.
 export const VENDOR_NAMES_DATALIST_ID = 'ops-vendor-names'
 
-/** "confidence: 30%", not "(0.30)" — a raw decimal next to a field reads
- * like a mysterious score; the labeled percentage reads as what it is
- * (2026-09-22). The one place this renders, so every field agrees. */
-export function formatConfidence(confidence: number): string {
-  return `confidence: ${(confidence * 100).toFixed(0)}%`
-}
-
 /** Fetches a document's bytes once and exposes them as a local blob: URL,
  * with cleanup on unmount/change. <img>/<embed>/thumbnails can't carry
  * the session's bearer token, so every source view (the review card's

@@ -113,7 +113,8 @@
         "generatingCaption": "தலைப்பு உருவாக்கப்படுகிறது…",
         "bucketLabel": "வகை",
         "docTypeLabel": "ஆவண வகை",
-        "vendorNameLabel": "விற்பனையாளர் பெயர்"
+        "vendorNameLabel": "விற்பனையாளர் பெயர்",
+        "lowConfidenceFlag": "சரிபார்க்கவும்"
       },
       "extractedFieldsHeading": "பிரித்தெடுக்கப்பட்ட புலங்கள்",
       "expiredMessage": "இந்த ஆவணத்தை இனி தானாக மறுஆய்வு செய்ய முடியாது.",

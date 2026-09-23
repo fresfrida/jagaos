@@ -10,6 +10,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { formatShortDate, localeFor } from '../../lib/dates'
 import {
   BucketField,
   FIELD_CLASS,
@@ -23,13 +24,6 @@ import {
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type DocumentRow } from './opsApi'
-
-/** "2026-09-23", the same slice-to-day convention DatesView already uses
- * for its section headers (features/calendar/DatesView.tsx) — kept
- * consistent rather than introducing a second date-formatting approach. */
-function dateOnly(iso: string): string {
-  return iso.slice(0, 10)
-}
 
 /** Small preview next to each row in the Documents list (2026-09-22, doc
  * 2's preview UX pass) — a photo is often more recognizable at a glance
@@ -141,7 +135,7 @@ export function DocumentCard({
   onArchive: () => void
   onSaved: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [description, setDescription] = useState(doc.description ?? '')
   const [bucket, setBucket] = useState(doc.bucket ?? '')
@@ -225,11 +219,16 @@ export function DocumentCard({
                the API response but neither was ever shown on this card —
                same exact "Upload date"/"Document date" wording as the
                Calendar page's Dates view (ops.dates.*), not a second,
-               differently-worded copy of the same concept. */}
+               differently-worded copy of the same concept.
+               2026-09-23 (live regression report, item 8): used to just
+               slice the raw ISO string to YYYY-MM-DD — now the same
+               locale-aware formatShortDate (lib/dates.ts) the Calendar
+               page's own day heading already uses, not a second
+               date-formatting approach. */}
             <p className="mt-0.5 break-words text-[12px] text-muted">
-              {t('ops.dates.uploadDate')}: {dateOnly(doc.received_at)}
+              {t('ops.dates.uploadDate')}: {formatShortDate(doc.received_at, localeFor(i18n.language))}
               {' · '}
-              {t('ops.dates.documentDate')}: {doc.occurred_on ? dateOnly(doc.occurred_on) : t('ops.documents.noDocumentDate')}
+              {t('ops.dates.documentDate')}: {doc.occurred_on ? formatShortDate(doc.occurred_on, localeFor(i18n.language)) : t('ops.documents.noDocumentDate')}
             </p>
             {doc.vendor_name && <p className="mt-0.5 break-words text-[12px] text-muted">{doc.vendor_name}</p>}
           </div>

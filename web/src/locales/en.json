@@ -113,7 +113,8 @@
         "generatingCaption": "Generating caption…",
         "bucketLabel": "Bucket",
         "docTypeLabel": "Doc type",
-        "vendorNameLabel": "Vendor name"
+        "vendorNameLabel": "Vendor name",
+        "lowConfidenceFlag": "please check"
       },
       "extractedFieldsHeading": "Extracted fields",
       "expiredMessage": "This document can no longer be reviewed automatically.",

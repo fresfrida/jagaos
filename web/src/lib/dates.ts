@@ -1,8 +1,17 @@
 const MS_PER_DAY = 86_400_000
 
-/** Parse `YYYY-MM-DD` as a local date (avoids the UTC shift of `new Date(iso)`). */
+/** Parse `YYYY-MM-DD` as a local date (avoids the UTC shift of `new
+ * Date(iso)`). Takes just the first 10 characters (2026-09-23, live
+ * regression report item 8) — a real bug caught while wiring this into
+ * DocumentCard.tsx/CalendarHub.tsx: `document.received_at` is a full
+ * SQLite `datetime('now')` string ("2026-09-23 10:58:35", not a bare
+ * date), and splitting THAT on '-' produces a NaN day component
+ * ("23 10:58:35" isn't a number), silently rendering "Invalid Date"
+ * everywhere — caught live via a screenshot, not assumed safe. Slicing
+ * first means every caller can pass either a bare date or a full
+ * timestamp without needing to know or care which. */
 export function parseIsoDate(iso: string): Date {
-  const [y = 1970, m = 1, d = 1] = iso.split('-').map(Number)
+  const [y = 1970, m = 1, d = 1] = iso.slice(0, 10).split('-').map(Number)
   return new Date(y, m - 1, d)
 }
 

@@ -113,7 +113,8 @@
         "generatingCaption": "Menjana kapsyen…",
         "bucketLabel": "Kategori",
         "docTypeLabel": "Jenis dokumen",
-        "vendorNameLabel": "Nama pembekal"
+        "vendorNameLabel": "Nama pembekal",
+        "lowConfidenceFlag": "sila semak"
       },
       "extractedFieldsHeading": "Medan yang diekstrak",
       "expiredMessage": "Dokumen ini tidak lagi boleh disemak secara automatik.",

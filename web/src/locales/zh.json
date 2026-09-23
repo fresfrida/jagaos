@@ -113,7 +113,8 @@
         "generatingCaption": "正在生成说明…",
         "bucketLabel": "分类",
         "docTypeLabel": "文件类型",
-        "vendorNameLabel": "供应商名称"
+        "vendorNameLabel": "供应商名称",
+        "lowConfidenceFlag": "请核实"
       },
       "extractedFieldsHeading": "提取的字段",
       "expiredMessage": "此文件已无法自动审核。",

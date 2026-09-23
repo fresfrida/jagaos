@@ -6,7 +6,7 @@
  * OpsConsole's own state. */
 
 import { Loader2, ShieldAlert, Upload } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -14,6 +14,7 @@ import { useAuth } from '../features/auth/AuthContext'
 import { RequireSession } from '../features/auth/RequireSession'
 import { roleAtLeast } from '../features/auth/authApi'
 import { normalizeImageForUpload } from '../lib/imageNormalize'
+import { onTriggerUploadPicker } from '../lib/uploadTrigger'
 import { OpsStatusBar } from '../features/ops/OpsStatusBar'
 import { ReviewQueueCard } from '../features/ops/ReviewQueueCard'
 import { StatusPill, VENDOR_NAMES_DATALIST_ID } from '../features/ops/opsShared'
@@ -33,6 +34,15 @@ function UploadReviewContent() {
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
   const canResolve = role !== null && roleAtLeast(role, 'admin')
+
+  // 2026-09-23 (live regression report, item 5): the bottom nav's raised
+  // Upload button (BottomNav.tsx) now dispatches this instead of
+  // navigating when already on this page — opens the same file picker
+  // the page's own dropzone uses, rather than being a dead tap.
+  useEffect(() => {
+    if (!canUpload) return
+    return onTriggerUploadPicker(() => fileInputRef.current?.click())
+  }, [canUpload])
   // 2026-09-22 (DECISIONS #47): same routine-vs-flagged distinction
   // ReviewQueueCard already makes (isRoutine, DECISIONS #40) — a clean
   // upload's badge shouldn't read as "something's wrong" here either.

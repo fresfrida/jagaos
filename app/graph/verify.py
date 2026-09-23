@@ -6,6 +6,7 @@ app/guards/injection.py ran independently in classify/extract."""
 
 import json
 from decimal import Decimal
+from pathlib import Path
 
 from app.db import DB_PATH, get_conn
 from app.graph.state import PipelineState
@@ -15,6 +16,35 @@ from app.models import VerifyResult
 CONFIDENCE_FLOOR = 0.6
 GST_RATE = Decimal("0.09")
 GST_TOLERANCE = Decimal("0.02")  # 2% tolerance for rounding
+IMPLAUSIBLE_ZERO_TOLERANCE = Decimal("0.005")  # treat as "exactly 0" for float noise
+
+# 2026-09-23 (live regression report, items 1/2/6): the exact literal
+# reasons[] string when the source file itself is missing — kept short
+# and stable (not the full user-facing sentence) so the frontend can
+# exact-match on it the same way it already does for "clean extraction"
+# (ReviewQueueCard.tsx's isRoutine). A missing file overrides every other
+# check's result rather than joining them (see verify() below) — nothing
+# else in this function is meaningful to report if there's no file to
+# check it against, and this is what makes "file missing" and "no issues
+# found" structurally unable to coexist, not just unlikely to.
+FILE_MISSING_REASON = "the source file is missing from storage"
+
+
+def _check_file_exists(document_id: int, db_path: str = DB_PATH) -> list[str]:
+    """A stored_path that doesn't exist on disk anymore (2026-09-23, live
+    regression report items 1/2/6) — confirmed live that a review card
+    could show "no issues found" for a document whose file was gone,
+    because nothing in this pipeline had ever checked "does the file
+    still exist" as its own condition. Returns FILE_MISSING_REASON alone
+    (not appended to other reasons) so verify() can treat it as an
+    override, not just one more item in a joined list."""
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT stored_path FROM document WHERE id = ?", (document_id,)
+        ).fetchone()
+    if row is not None and not Path(row["stored_path"]).exists():
+        return [FILE_MISSING_REASON]
+    return []
 
 
 def _check_invoice_arithmetic(fields: dict) -> list[str]:
@@ -25,6 +55,15 @@ def _check_invoice_arithmetic(fields: dict) -> list[str]:
         total = Decimal(str(fields["total"]["value"]))
     except (KeyError, TypeError):
         return ["missing subtotal/gst/total — cannot verify arithmetic"]
+
+    # 2026-09-23 (live regression report, item 4): all-zero amounts pass
+    # _check_required_invoice_fields (added last round) as "present" —
+    # 0 is not None — but a genuine SGD invoice with subtotal=GST=total=0
+    # is implausible; this is almost certainly a read failure, not a real
+    # zero-total invoice. Checked here, alongside the existing arithmetic
+    # check, since it needs the same three parsed Decimal values.
+    if subtotal <= IMPLAUSIBLE_ZERO_TOLERANCE and gst <= IMPLAUSIBLE_ZERO_TOLERANCE and total <= IMPLAUSIBLE_ZERO_TOLERANCE:
+        reasons.append("subtotal/GST/total are all zero — this looks like a failed read, not a real zero-value invoice")
 
     expected_gst = (subtotal * GST_RATE).quantize(Decimal("0.01"))
     if abs(gst - expected_gst) > (expected_gst * GST_TOLERANCE + Decimal("0.05")):
@@ -215,6 +254,17 @@ def verify(state: PipelineState) -> PipelineState:
     reasons.extend(_check_classify_confidence(classify))
     reasons.extend(_check_description_signals_problem(classify.get("description")))
 
+    # 2026-09-23 (live regression report, items 1/2/6): checked last and
+    # deliberately OVERRIDES `reasons` rather than extending it — a
+    # missing file makes every other signal above moot (there's nothing
+    # left to check arithmetic, amounts, or confidence against), and this
+    # override is what makes "file missing" and "no issues found"
+    # structurally unable to coexist, not just unlikely to given the
+    # checks above happen not to fire.
+    file_missing = _check_file_exists(document_id)
+    if file_missing:
+        reasons = file_missing
+
     # 2026-09-22 (DECISIONS #40): no document is ever filed without an
     # explicit human confirmation, even a clean one — the only fully-
     # automatic path left is the hard injection_hits quarantine above.
@@ -225,7 +275,15 @@ def verify(state: PipelineState) -> PipelineState:
     # not a re-entry burden.
     needs_review = True
     ok = not bool(reasons)
-    if reasons:
+    if file_missing:
+        # Distinct headline (2026-09-23), not folded into the generic
+        # "Please confirm: " phrasing — ReviewQueueCard.tsx exact-matches
+        # review_item.reason against FILE_MISSING_REASON (mirrors the
+        # existing isRoutine === 'clean extraction' pattern) to give this
+        # its own, more severe visual treatment instead of the routine
+        # amber "please confirm" styling.
+        question = "File missing — delete or re-upload this document."
+    elif reasons:
         question = "Please confirm: " + "; ".join(reasons)
     else:
         question = "No issues found. Please confirm the extracted fields below are correct before filing."

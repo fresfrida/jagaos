@@ -12,13 +12,14 @@
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
 import { Card } from '../../components/ui/Card'
+import { formatShortDate, localeFor } from '../../lib/dates'
 import { OpsStatusBar } from '../ops/OpsStatusBar'
 import { StatusPill, riskLabel } from '../ops/opsShared'
 import { useOpsData } from '../ops/useOpsData'
 import { DatesView } from './DatesView'
 
 export function CalendarHub() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { documents, expectations, obligations, apiUp, error } = useOpsData()
 
   return (
@@ -53,7 +54,9 @@ export function CalendarHub() {
                         {ob.label}
                         <Badge tone="neutral" className="ml-2">{riskLabel(t, ob.risk)}</Badge>
                       </td>
-                      <td className="px-4 py-2.5 text-muted">{ob.due_on}</td>
+                      {/* 2026-09-23 (live regression report, item 8):
+                         used to render the raw ISO string. */}
+                      <td className="px-4 py-2.5 text-muted">{formatShortDate(ob.due_on, localeFor(i18n.language))}</td>
                       <td className="px-4 py-2.5"><StatusPill status={ob.status} /></td>
                       <td className="max-w-xs px-4 py-2.5 text-[12px] text-muted">{ob.citation}</td>
                     </tr>

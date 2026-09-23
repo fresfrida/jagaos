@@ -55,11 +55,26 @@ def test_injection_scan_clean_invoice_text_has_no_hits():
     assert scan(text) == []
 
 
-def _seed_company_and_document(sha: str) -> int:
+def _seed_company_and_document(sha: str, file_exists: bool = True) -> int:
     # verify() (unlike the functions above) takes no db_path parameter — it
     # always writes through app.db.DB_PATH, bound at import time — so these
     # two tests use the shared conftest.py test database (get_conn() with
     # no path override) instead of this file's _fresh_db() pattern.
+    #
+    # 2026-09-23: stored_path used to be the literal string '/tmp/x' for
+    # every call site — harmless until verify.py gained a real
+    # _check_file_exists check (live regression report, items 1/2/6),
+    # at which point every test using this helper would fail or pass
+    # based on pure machine-state accident (whether a stray /tmp/x file
+    # happened to already exist from an earlier run — confirmed one did
+    # on this machine, which would have hidden a real failure on a clean
+    # one). Now writes a real, unique, guaranteed-fresh empty file per
+    # call so "the file exists" is actually true, not incidental.
+    # file_exists=False (only test_verify_flags_a_missing_source_file
+    # below uses this) points at a path that's guaranteed never created.
+    stored_path = tempfile.mktemp(suffix=".pdf")
+    if file_exists:
+        Path(stored_path).write_bytes(b"%PDF-1.4 test")
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO company (id, name, fye_month, fye_day) VALUES (1, 'X', 12, 31)"
@@ -67,7 +82,8 @@ def _seed_company_and_document(sha: str) -> int:
         cur = conn.execute(
             "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
             "stored_path, source_channel, status) VALUES "
-            f"(1, '{sha}', 'x.pdf', 'application/pdf', 1, '/tmp/x', 'web', 'received')"
+            "(1, ?, 'x.pdf', 'application/pdf', 1, ?, 'web', 'received')",
+            (sha, stored_path),
         )
         return cur.lastrowid
 
@@ -520,6 +536,75 @@ def test_verify_flags_invoice_missing_a_required_field_even_with_clean_arithmeti
 
     assert result["ok"] is False
     assert any("missing required field(s): vendor" in r for r in result["reasons"]), result["reasons"]
+
+
+def test_verify_flags_a_missing_source_file_and_it_overrides_everything_else():
+    # 2026-09-23 (live regression report, items 1/2/6): confirmed live a
+    # card could show "no issues found" for a document whose file was
+    # gone — nothing in verify() ever checked file existence as its own
+    # condition. This document is otherwise perfectly clean (real
+    # arithmetic, real amounts in text) specifically to prove file_missing
+    # overrides every other signal rather than just adding to a joined
+    # list — "file missing" and "no issues found" must never coexist.
+    from app.graph.verify import FILE_MISSING_REASON, verify
+
+    document_id = _seed_company_and_document("missingfilesha", file_exists=False)
+    state = {
+        "run_id": "missingfile1", "company_id": 1, "document_id": document_id,
+        "text": "Invoice\nDate: 2026-09-01\nSubtotal: 100.00\nGST: 9.00\nTotal: 109.00",
+        "text_source": "pdfplumber",
+        "classify_result": {"lane": "invoice", "doc_type": "tax_invoice",
+                             "confidence": 0.95, "injection_suspected": False},
+        "extract_result": {
+            "vendor": {"value": "Acme Pte Ltd", "confidence": 0.95},
+            "issued_on": {"value": "2026-09-01", "confidence": 0.95},
+            "subtotal": {"value": 100.0, "confidence": 0.95},
+            "gst": {"value": 9.0, "confidence": 0.95},
+            "total": {"value": 109.0, "confidence": 0.95},
+        },
+    }
+    result = verify(state)["verify_result"]
+
+    assert result["ok"] is False
+    assert result["reasons"] == [FILE_MISSING_REASON]
+    assert result["review_question"] == "File missing — delete or re-upload this document."
+
+    with get_conn() as conn:
+        review_item = conn.execute(
+            "SELECT reason FROM review_item WHERE document_id = ? AND status = 'open'",
+            (document_id,),
+        ).fetchone()
+        # Exact match, not a substring — ReviewQueueCard.tsx's frontend
+        # check mirrors this exact string (isFileMissing).
+        assert review_item["reason"] == FILE_MISSING_REASON
+
+
+def test_verify_flags_an_all_zero_invoice_as_implausible():
+    # 2026-09-23 (live regression report, item 4): _check_required_invoice_fields
+    # (added last round) only checks for None/missing — 0 passes as
+    # "present," which a real read failure can produce just as easily as
+    # a genuinely all-zero invoice (implausible for a real SGD invoice).
+    from app.graph.verify import verify
+
+    document_id = _seed_company_and_document("zeroamountsha")
+    state = {
+        "run_id": "zeroamount1", "company_id": 1, "document_id": document_id,
+        "text": "Invoice\nDate: 2026-09-01\nSubtotal: 0.00\nGST: 0.00\nTotal: 0.00",
+        "text_source": "ocr",
+        "classify_result": {"lane": "invoice", "doc_type": "tax_invoice",
+                             "confidence": 0.8, "injection_suspected": False},
+        "extract_result": {
+            "vendor": {"value": "Acme Pte Ltd", "confidence": 0.8},
+            "issued_on": {"value": "2026-09-01", "confidence": 0.8},
+            "subtotal": {"value": 0.0, "confidence": 0.8},
+            "gst": {"value": 0.0, "confidence": 0.8},
+            "total": {"value": 0.0, "confidence": 0.8},
+        },
+    }
+    result = verify(state)["verify_result"]
+
+    assert result["ok"] is False
+    assert any("all zero" in r for r in result["reasons"]), result["reasons"]
 
 
 if __name__ == "__main__":

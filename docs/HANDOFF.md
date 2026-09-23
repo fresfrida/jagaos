@@ -22,7 +22,7 @@ This repo currently holds:
 - **`vision/`** — isolated image-captioning service (own venv, `Salesforce/blip-image-captioning-base`), 2026-09-23, DECISIONS #55. Deliberately separate from `app/` — see "Backend status" below.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
-- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way. **Exception, 2026-09-23 (DECISIONS #65)**: that round's regression fixes were built, tested, and verified but deliberately left uncommitted in the working tree on an explicit one-off instruction — wait for a go-ahead before committing/pushing that specific round. If you're picking this repo back up and `git status` shows uncommitted changes, check DECISIONS #65 before assuming that's stray work to discard.
+- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way. **Exception, 2026-09-23 (DECISIONS #65 and #66)**: both rounds' regression fixes were built, tested, and verified but deliberately left uncommitted in the working tree on an explicit one-off instruction each time — wait for a go-ahead before committing/pushing either round. If you're picking this repo back up and `git status` shows uncommitted changes, check DECISIONS #65/#66 before assuming that's stray work to discard.
 
 ## Backend status (2026-09-21)
 
@@ -1187,8 +1187,146 @@ it; a picture-lane review card's doc-type pills genuinely disabled with
 `regression-no-duplicate-review-message.png`,
 `regression-doctype-locked-to-photo.png`.
 
+**A second live-mobile regression round (11 items), arriving on top of a
+since-fixed stale Lightsail deploy — built, tested, and verified, but
+deliberately NOT committed or pushed this round either, same one-off
+wait-for-go-ahead instruction as #65 (2026-09-23, DECISIONS #66).**
+Opening context, not this round's own finding: the reporting session's
+own earlier Lightsail deploy had gone stale (a 422-line `main.py` live on
+the box vs. the real 785-line file, missing endpoints entirely including
+file-serving) — they found and fixed that themselves, verified live, and
+cleaned up 32 orphaned temp files directly on the box. Several of the
+originally-reported symptoms (items 1/2/6 below) are most plausibly
+explained by that stale deploy alone — a missing file-serving endpoint
+reads exactly like "photos vanished" — not a code bug in this repo; this
+local session has no way to reach the live box to confirm that
+attribution directly, so it's stated as the most likely read of the
+evidence, not a verified fact.
+
+**(11) Temp-upload-file leak — confirmed live, fixed.**
+`app/main.py::upload_document` wrote every upload to a
+`tempfile.NamedTemporaryFile(delete=False, ...)` and never cleaned it up
+on any path — confirmed on the live box, 32 orphaned files against 31
+real documents, a 1:1 leak on every single upload. Fixed by wrapping the
+whole handler body in `try/finally`, with `Path(tmp_path).unlink(missing_ok=True)`
+in `finally` so it fires on every exit, not just the happy path a single
+trailing line would have missed.
+
+**(1/2/6) "File missing" and "no issues found" showing at the same
+time.** Nothing in the pipeline ever checked file-existence as its own
+condition, so a review card could show a clean "no issues found" for a
+document whose file was gone. New `app/graph/verify.py::_check_file_exists`
+queries `document.stored_path` and, when the file is missing,
+**overrides** `reasons` entirely (not appends) — structurally, not just
+by chance, the two states can no longer coexist. A distinct red
+headline ("File missing — delete or re-upload this document.") renders
+in `ReviewQueueCard.tsx` via an exact-match on the new reason string.
+**A real, separate bug found and fixed while adding this**: the shared
+test fixture `_seed_company_and_document` (`tests/test_rules_smoke.py`)
+hardcoded `stored_path = '/tmp/x'` for every one of 15+ existing test
+call sites — harmless until a real file-existence check existed, at
+which point every one of those tests' pass/fail depended on whether a
+stray `/tmp/x` file happened to already exist on the machine running the
+suite (confirmed one did here, left over from an earlier session — which
+would have silently hidden a real failure on a clean CI box). Fixed to
+write a real, unique, guaranteed-fresh temp file per call.
+
+**(3) Vendor field not prefilled.** `ReviewQueueCard.tsx`'s editable
+Vendor field initialized from `document.vendor_name` (`classify.py`'s
+separate, optional, often-null guess) while the value extraction
+actually found lives in a different structure entirely,
+`extract_result.vendor` (`extract.py`'s dedicated invoice-lane field,
+with its own provenance/confidence) — the two were never reconciled.
+Fixed: the extracted value now wins when present, `document.vendor_name`
+is the fallback, not a second source assumed to already agree. Confirmed
+live on a real invoice: the field now shows the real extracted vendor
+name instead of arriving blank.
+
+**(4) Zero-amount invoices.** The existing `_check_required_invoice_fields`
+(DECISIONS #65) only checked for `None`/missing — `0` passed as
+"present." New check alongside the existing GST-arithmetic check:
+subtotal/GST/total all exactly zero (small tolerance for float noise) is
+now flagged as an implausible failed read, not silently accepted as a
+real zero-value invoice. EXIF-rotation (DECISIONS #65) re-confirmed
+unchanged by re-reading the code — re-verifying it live *on the box*
+specifically is out of this local session's reach. Date/year: agreed
+with the reporting session's own conclusion — no code-level year-parsing
+bug found (`issued_on` is a raw LLM string, never routed through
+fragile date-format code); not touched.
+
+**(5) Dead upload button.** The bottom-nav's raised center Upload FAB
+(`BottomNav.tsx`) was a plain `<Link>`, so tapping it while already on
+`/upload` did nothing next to the page's own working dropzone.
+**Resolved: wired to trigger the file picker directly** when already on
+that route, chosen over just de-emphasizing it — a plain `window`
+`CustomEvent` (new `lib/uploadTrigger.ts`), not a new React Context,
+since this is a single fire-and-forget signal between two components
+with no shared parent worth threading state through.
+
+**(7) Golden-path eval cases — not actioned, flagged back.**
+`evals/cases/golden/` needs real labelled documents; the ones referenced
+aren't accessible from this local session (not present in this repo, no
+live-Lightsail access from here), and this project's own established
+privacy policy (`WINNING.md`) deliberately keeps the team's real
+corporate documents out of the repo in favor of the synthetic demo
+corpus. Populating this needs the user to either supply the specific
+files directly or confirm they're fine overriding that policy — a
+genuine decision blocker, not something to guess at.
+
+**(8) Singapore-style dates.** `lib/dates.ts` already had a locale-aware
+`formatShortDate` (DECISIONS #63) producing exactly this shape; the gap
+was that `CalendarHub.tsx`'s raw `{ob.due_on}` and `DocumentCard.tsx`'s
+own private `dateOnly()` helper (a bare `.slice(0, 10)`) never called it.
+Wired both into the existing formatter instead of building a second one.
+**A real bug caught live while wiring this, not shipped blind**:
+`document.received_at` is a full SQLite `datetime('now')` string
+("2026-09-23 10:58:35"), not a bare date — `parseIsoDate`'s `'-'`-split
+on the full string produced a `NaN` day component, silently rendering
+"Invalid Date" everywhere, caught via a screenshot before being reported
+done. Fixed at the source (`parseIsoDate` now slices to the first 10
+characters before parsing), protecting every current and future caller,
+not just the two call sites this task touched.
+
+**(9) Confidence scores hidden from users.** The raw `(87%)` next to
+every extracted field (`formatConfidence`) is removed from what the user
+sees; the same existing `< 0.6` floor still decides which fields get a
+flag, now rendered as a short "(please check)" instead of a number — no
+badge at all above the floor. `formatConfidence` deleted entirely (zero
+remaining callers). Universal review / no auto-pass — **confirmed
+already true, not rebuilt**: `verify()`'s `needs_review = True` is
+unconditional (DECISIONS #40), the only fully-automatic path is the hard
+injection-quarantine case.
+
+**(10) Reject vs. delete — reproduced live, no visible discrepancy
+found.** Read the reject flow first and found one real code gap
+(`setBusy(false)` missing on the success path, every other exit already
+resets it) with no proof it has any visible effect — the card unmounts
+via the parent's refresh before a stale busy state could ever render.
+Reproduced live, side by side, at the network-request level: reject
+fires exactly one `POST .../resolve`, the card leaves the DOM cleanly,
+the "rejected and archived, upload a replacement?" banner (DECISIONS
+#50) appears correctly, zero console errors — the same clean shape
+delete already has. Stated plainly: could not reproduce the described
+discrepancy despite trying the reporting session's own suggested
+side-by-side comparison; fixed the `setBusy` gap anyway for correctness,
+not because a symptom was confirmed.
+
+Verified live: `pytest tests/` 47/47 (2 new tests for items 1/2/6 and 4,
+plus the fixture fix), `python evals/run.py` 14/14 adversarial
+(unchanged), `npm run typecheck`/`npm run build` clean, zero console
+errors across every flow tested, 3 real uploads through the live
+endpoint confirmed zero new orphaned temp files afterward (previously
+would have been 3). Screenshots:
+`docs/screenshots/regression2-file-missing-headline.png`,
+`regression2-reject-replacement-prompt.png`,
+`regression2-calendar-sg-dates.png`,
+`regression2-company-files-sg-dates.png`,
+`regression2-vendor-prefill-no-confidence.png`.
+
 **Known gaps, in the order they'll bite:**
-- **DECISIONS #65's regression-fix round is sitting uncommitted, waiting for an explicit go-ahead** — see the "GitHub" bullet at the top of this file. Until pushed (and Lightsail redeployed, since `app/extract/ocr.py`/`app/graph/verify.py` changed), the live app still has the footer-in-signed-in-app, no-EXIF-correction, no-field-completeness-check, doc-type-contradiction, and duplicate-review-message bugs this round fixed.
+- **DECISIONS #65 and #66's regression-fix rounds are both sitting uncommitted, waiting for an explicit go-ahead** — see the "GitHub" bullet at the top of this file. Until pushed (and Lightsail redeployed, since `app/main.py`/`app/extract/ocr.py`/`app/graph/verify.py` all changed across the two rounds), the live app still has the footer-in-signed-in-app, no-EXIF-correction, no-field-completeness-check, doc-type-contradiction, duplicate-review-message, temp-file-leak, no-file-missing-check, vendor-not-prefilled, zero-amount-not-flagged, dead-upload-button, raw-ISO-date, and visible-confidence-score issues these two rounds fixed.
+- **Golden-path eval cases (`evals/cases/golden/`) remain blocked on real data** (2026-09-23, DECISIONS #66) — this session has no access to real labelled invoices/documents, and the project's own privacy policy (`WINNING.md`) deliberately keeps real corporate documents out of the repo. Needs the user to supply specific files or explicitly waive that policy.
+- **Whether items 1/2/6's original live symptom ("file missing" + "no issues found" together, vanishing photos) is actually resolved is unconfirmed from this session** (2026-09-23, DECISIONS #66) — most plausibly it already was, by the reporting session's own Lightsail deploy fix; the new `_check_file_exists` guardrail is real defense-in-depth regardless, verified only via a unit test, not against the live box.
 - **The EXIF-rotation fix's real-world impact on the *specific* live-mobile regression that prompted it is unconfirmed** — verified with a synthetic test image + a real gateway call, not the original reported photo. The frontend should already prevent pure-rotation cases for a real web upload (`imageNormalize.ts`'s own docstring); if the symptom persists after this deploys, the already-tracked deskew/crop/quality gap (below) is the more likely cause, not rotation.
 - Server-side OCR preprocessing beyond EXIF-rotation (`app/extract/ocr.py` still does no deskew/crop/contrast correction) — a photo taken at an angle, not a discrete 90°/180°/270° rotation, is still unaddressed; narrowed, not closed, by DECISIONS #65.
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
@@ -1304,6 +1442,7 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Mobile-only bottom nav (Calendar/Tags/Upload-center/Search/Company Files, role-aware since DECISIONS #64 — `viewer` loses the center Upload button and reflows to four) + the compact account-menu dropdown inside the top bar (persistent role chip + Company Settings link, DECISIONS #62/#64) | `sections/BottomNav.tsx`, `sections/Header.tsx` (`UserMenu`, `visibleNavRoutes`) |
 | Company settings — owner-editable, admin read-only, no nav entry or route access below admin (2026-09-23, DECISIONS #64); full role × action matrix | `pages/CompanySettingsPage.tsx`, `docs/PERMISSIONS.md` |
 | Upload a document + the review queue — `/upload` | `pages/UploadPage.tsx`, `features/ops/ReviewQueueCard.tsx` |
+| Cross-tree "trigger the file picker" signal (bottom-nav FAB → the upload page's dropzone, `window.CustomEvent`, 2026-09-23, DECISIONS #66) | `lib/uploadTrigger.ts` |
 | Every document, bucket-filterable (reads `?bucket=` for deep links) — `/company-files` | `pages/CompanyFilesPage.tsx`, `features/ops/DocumentCard.tsx`, `features/ops/DocumentResultsList.tsx` |
 | Real, session-scoped full-text search — `/search` | `pages/SearchPage.tsx` |
 | Signed-in Calendar hub (dates/obligations/gap analysis merged) and Tags landing (six bucket buttons into Company Files) — same URLs as the marketing `/calendar`/`/tags`, session-branched in `Page.tsx`; Dates renders a real month grid, not a flat list (2026-09-23, DECISIONS #62) | `features/calendar/CalendarHub.tsx`, `features/calendar/DatesView.tsx`, `features/calendar/MonthGrid.tsx`, `features/tags/TagsLanding.tsx` |

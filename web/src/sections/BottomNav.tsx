@@ -19,12 +19,19 @@
  * on upload) — the remaining four items reflow into one plain even row
  * instead. Company Settings, the new owner/admin-only page, isn't a sixth
  * slot here — reachable on mobile via the account menu instead
- * (Header.tsx's UserMenu). */
+ * (Header.tsx's UserMenu).
+ *
+ * **Center button no longer a dead tap when already on /upload
+ * (2026-09-23, live regression report item 5)** — it used to be a plain
+ * <Link>, so tapping it while already on the page it navigates to did
+ * nothing, next to the page's own working dropzone. Now opens the file
+ * picker directly in that case instead (lib/uploadTrigger.ts). */
 
 import { CalendarDays, FileText, Search, Tag, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../features/auth/AuthContext'
 import { cn } from '../lib/cn'
+import { triggerUploadPicker } from '../lib/uploadTrigger'
 import { Link } from '../router/Link'
 import { NAV_LABEL_KEYS, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
 
@@ -113,16 +120,30 @@ export function BottomNav({ current }: { current: ResolvedRoute }) {
         {LEFT_ROUTES.map((id) => <NavItem key={id} id={id} active={current === id} />)}
 
         <div className="flex flex-1 flex-col items-center justify-center">
-          <Link
-            href={routeHref(CENTER_ROUTE)}
-            aria-current={uploadActive ? 'page' : undefined}
-            className={cn(
-              '-mt-5 flex h-12 w-12 items-center justify-center rounded-full border-4 border-white shadow-md transition-colors',
-              uploadActive ? 'bg-ink text-white' : 'bg-sage text-white',
-            )}
-          >
-            <Upload size={20} aria-hidden="true" />
-          </Link>
+          {/* 2026-09-23 (live regression report, item 5): this used to be
+             a plain <Link> — pure navigation, so tapping it while
+             already on /upload did nothing, next to the page's own
+             working dropzone. When already there, it now opens the file
+             picker directly instead (lib/uploadTrigger.ts's window
+             event, caught by UploadPage.tsx) rather than just navigating
+             to the page it's already on. */}
+          {uploadActive ? (
+            <button
+              type="button"
+              onClick={() => triggerUploadPicker()}
+              aria-label={t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
+              className="-mt-5 flex h-12 w-12 items-center justify-center rounded-full border-4 border-white bg-ink text-white shadow-md transition-colors"
+            >
+              <Upload size={20} aria-hidden="true" />
+            </button>
+          ) : (
+            <Link
+              href={routeHref(CENTER_ROUTE)}
+              className="-mt-5 flex h-12 w-12 items-center justify-center rounded-full border-4 border-white bg-sage text-white shadow-md transition-colors"
+            >
+              <Upload size={20} aria-hidden="true" />
+            </Link>
+          )}
           <span className={cn('mt-0.5 text-[11px] leading-none', uploadActive ? 'text-ink' : 'text-muted')}>
             {t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
           </span>

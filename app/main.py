@@ -330,85 +330,100 @@ async def upload_document(
         tmp.write(await file.read())
         tmp_path = tmp.name
 
-    ingest_state = ingest(
-        company_id=membership.company_id, source_path=tmp_path, filename=file.filename,
-        source_channel=source_channel, uploaded_by_user_id=membership.user_id,
-    )
-    if ingest_state.get("text_source") == "duplicate":
-        return {"document_id": ingest_state["document_id"], "status": "duplicate"}
+    # 2026-09-23 (live regression report, item 11): tmp_path was never
+    # removed after this — confirmed live on the Lightsail box, 32 orphaned
+    # temp files against 31 documents, a near-exact 1:1 leak on every
+    # upload, not a selective one. Safe to delete unconditionally once
+    # ingest() returns: app/graph/ingest.py's own shutil.copyfile already
+    # wrote the permanent copy into DOCS_PATH before returning, and every
+    # downstream node (classify/extract/verify, the captioning background
+    # task below) reads either the already-extracted `text` or the
+    # document's own `stored_path` from the DB — never tmp_path again.
+    # try/finally, not just a line after the pipeline call, so this also
+    # cleans up on an exception (a bad file, a pipeline error) instead of
+    # only on the success path.
+    try:
+        ingest_state = ingest(
+            company_id=membership.company_id, source_path=tmp_path, filename=file.filename,
+            source_channel=source_channel, uploaded_by_user_id=membership.user_id,
+        )
+        if ingest_state.get("text_source") == "duplicate":
+            return {"document_id": ingest_state["document_id"], "status": "duplicate"}
 
-    # 2026-09-23 (DECISIONS #52): the upload-time "is this a picture?"
-    # toggle (web/src/features/ops/OpsConsole.tsx) — set on the state dict
-    # here rather than threading a new param through ingest() itself,
-    # since ingest.py's EXIF/text extraction is unaffected by lane and
-    # already runs before this regardless (app/graph/ingest.py). Read by
-    # app/graph/classify.py to skip its LLM call entirely.
-    ingest_state["is_picture"] = is_picture
+        # 2026-09-23 (DECISIONS #52): the upload-time "is this a picture?"
+        # toggle (web/src/features/ops/OpsConsole.tsx) — set on the state dict
+        # here rather than threading a new param through ingest() itself,
+        # since ingest.py's EXIF/text extraction is unaffected by lane and
+        # already runs before this regardless (app/graph/ingest.py). Read by
+        # app/graph/classify.py to skip its LLM call entirely.
+        ingest_state["is_picture"] = is_picture
 
-    thread_id = ingest_state["run_id"]
-    result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
-    document_id = ingest_state["document_id"]
+        thread_id = ingest_state["run_id"]
+        result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
+        document_id = ingest_state["document_id"]
 
-    # Confirmed live 2026-09-21: langgraph 0.2.60's invoke() does NOT return
-    # a "__interrupt__" key the way earlier code here assumed — it just
-    # stops early with a partial state dict (no downstream keys like
-    # "events"). The pause itself is real (derive_events/obligations never
-    # ran), but detecting it from here needs a signal that doesn't depend on
-    # LangGraph's exact return shape. document.status, written unconditionally
-    # inside verify.py, is that signal.
-    with get_conn(DB_PATH) as conn:
-        doc_status = conn.execute(
-            "SELECT status FROM document WHERE id = ?", (document_id,)
-        ).fetchone()["status"]
-
-    if doc_status == "quarantined":
-        return {"document_id": document_id, "status": "quarantined",
-                "verify": result.get("verify_result")}
-
-    # 2026-09-23 (DECISIONS #55): kick off local-model captioning for a
-    # picture-lane upload — scheduled, not awaited, so this request
-    # returns before the caption call is even guaranteed to have started,
-    # let alone the ~20s+ it can take. Only for is_picture uploads: that's
-    # the only path that leaves description NULL (DECISIONS #52); a
-    # quarantined document (returned above already) never reaches here.
-    if is_picture:
+        # Confirmed live 2026-09-21: langgraph 0.2.60's invoke() does NOT return
+        # a "__interrupt__" key the way earlier code here assumed — it just
+        # stops early with a partial state dict (no downstream keys like
+        # "events"). The pause itself is real (derive_events/obligations never
+        # ran), but detecting it from here needs a signal that doesn't depend on
+        # LangGraph's exact return shape. document.status, written unconditionally
+        # inside verify.py, is that signal.
         with get_conn(DB_PATH) as conn:
-            stored_path = conn.execute(
-                "SELECT stored_path FROM document WHERE id = ?", (document_id,)
-            ).fetchone()["stored_path"]
-        # Caught live while verifying locally, not assumed: app/graph/
-        # ingest.py's DOCS_PATH is a relative path ("./data/docs"), stored
-        # in the DB as-is — meaningless to jaga-vision, a separate process
-        # with its own working directory. Resolved to absolute here, in
-        # the one process that actually knows its own correct base
-        # directory, rather than relying on jaga-vision's systemd unit
-        # happening to share jaga-api's WorkingDirectory.
-        absolute_path = str(Path(stored_path).resolve())
-        background_tasks.add_task(_caption_document_background, document_id, absolute_path)
+            doc_status = conn.execute(
+                "SELECT status FROM document WHERE id = ?", (document_id,)
+            ).fetchone()["status"]
 
-    # 2026-09-22 (DECISIONS #40): no document is ever filed without an
-    # explicit human confirmation — verify.py now always sets needs_review,
-    # so doc_status here is only ever "quarantined" (above) or
-    # "needs_review". There is no third, auto-filed "processed" case left
-    # to return; a branch for one would be dead code.
-    with get_conn(DB_PATH) as conn:
-        review_item = conn.execute(
-            "SELECT id, reason, question FROM review_item WHERE document_id = ? "
-            "AND status = 'open' ORDER BY id DESC LIMIT 1",
-            (document_id,),
-        ).fetchone()
-    return {
-        "document_id": document_id,
-        "status": "needs_review",
-        "thread_id": thread_id,
-        "review_item_id": review_item["id"] if review_item else None,
-        # reason (added 2026-09-22, DECISIONS #47) lets the upload banner
-        # apply the same routine-vs-flagged distinction ReviewQueueCard
-        # already makes ('clean extraction' — verify.py — vs a real
-        # reason) instead of showing an amber NEEDS_REVIEW pill for every
-        # upload, clean ones included.
-        "review": {"reason": review_item["reason"], "question": review_item["question"]} if review_item else None,
-    }
+        if doc_status == "quarantined":
+            return {"document_id": document_id, "status": "quarantined",
+                    "verify": result.get("verify_result")}
+
+        # 2026-09-23 (DECISIONS #55): kick off local-model captioning for a
+        # picture-lane upload — scheduled, not awaited, so this request
+        # returns before the caption call is even guaranteed to have started,
+        # let alone the ~20s+ it can take. Only for is_picture uploads: that's
+        # the only path that leaves description NULL (DECISIONS #52); a
+        # quarantined document (returned above already) never reaches here.
+        if is_picture:
+            with get_conn(DB_PATH) as conn:
+                stored_path = conn.execute(
+                    "SELECT stored_path FROM document WHERE id = ?", (document_id,)
+                ).fetchone()["stored_path"]
+            # Caught live while verifying locally, not assumed: app/graph/
+            # ingest.py's DOCS_PATH is a relative path ("./data/docs"), stored
+            # in the DB as-is — meaningless to jaga-vision, a separate process
+            # with its own working directory. Resolved to absolute here, in
+            # the one process that actually knows its own correct base
+            # directory, rather than relying on jaga-vision's systemd unit
+            # happening to share jaga-api's WorkingDirectory.
+            absolute_path = str(Path(stored_path).resolve())
+            background_tasks.add_task(_caption_document_background, document_id, absolute_path)
+
+        # 2026-09-22 (DECISIONS #40): no document is ever filed without an
+        # explicit human confirmation — verify.py now always sets needs_review,
+        # so doc_status here is only ever "quarantined" (above) or
+        # "needs_review". There is no third, auto-filed "processed" case left
+        # to return; a branch for one would be dead code.
+        with get_conn(DB_PATH) as conn:
+            review_item = conn.execute(
+                "SELECT id, reason, question FROM review_item WHERE document_id = ? "
+                "AND status = 'open' ORDER BY id DESC LIMIT 1",
+                (document_id,),
+            ).fetchone()
+        return {
+            "document_id": document_id,
+            "status": "needs_review",
+            "thread_id": thread_id,
+            "review_item_id": review_item["id"] if review_item else None,
+            # reason (added 2026-09-22, DECISIONS #47) lets the upload banner
+            # apply the same routine-vs-flagged distinction ReviewQueueCard
+            # already makes ('clean extraction' — verify.py — vs a real
+            # reason) instead of showing an amber NEEDS_REVIEW pill for every
+            # upload, clean ones included.
+            "review": {"reason": review_item["reason"], "question": review_item["question"]} if review_item else None,
+        }
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
 
 @app.post("/api/review/{review_item_id}/resolve")

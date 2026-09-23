@@ -17,7 +17,6 @@ import {
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
-  formatConfidence,
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type ReviewItem } from './opsApi'
@@ -112,6 +111,11 @@ export function ReviewQueueCard({
   // than parsing `question` (the human-facing text) — keeps the two
   // concerns independent, so wording can change without touching this.
   const isRoutine = item.reason === 'clean extraction'
+  // 2026-09-23 (live regression report, items 1/2/6) — same exact-match
+  // pattern as isRoutine above, mirroring app/graph/verify.py's
+  // FILE_MISSING_REASON constant (kept in sync by hand, same convention
+  // 'clean extraction' already established rather than a new mechanism).
+  const isFileMissing = item.reason === 'the source file is missing from storage'
 
   const [edits, setEdits] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {}
@@ -130,7 +134,20 @@ export function ReviewQueueCard({
   const [description, setDescription] = useState(item.document_description ?? '')
   const [bucket, setBucket] = useState(item.document_bucket ?? '')
   const [docType, setDocType] = useState(item.document_doc_type ?? '')
-  const [vendorName, setVendorName] = useState(item.document_vendor_name ?? '')
+  // 2026-09-23 (live regression report, item 3): this used to initialize
+  // from document_vendor_name alone — classify.py's separate, optional,
+  // nullable counterparty guess ("leave it null if you can't tell") —
+  // never reconciled with the invoice-lane extraction's own dedicated
+  // `vendor` field (app/graph/extract.py's InvoiceFields, its own
+  // confidence, shown a few sections below in "Extracted fields").
+  // Confirmed live: extraction found a real vendor at 95% confidence, but
+  // this field still showed blank, so the reviewer had to retype a value
+  // that was already sitting right there. Extract's vendor now wins when
+  // present; document_vendor_name is the fallback, not a second source
+  // asked to agree with it.
+  const proposedVendor = proposed.vendor
+  const proposedVendorValue = isProvenance(proposedVendor) && typeof proposedVendor.value === 'string' ? proposedVendor.value : null
+  const [vendorName, setVendorName] = useState(proposedVendorValue ?? item.document_vendor_name ?? '')
   const [filename, setFilename] = useState(item.document_filename)
   // 2026-09-23 (DECISIONS #52): "picture, not a document" correction,
   // available after upload too, not just at the moment of it — grouped
@@ -243,6 +260,15 @@ export function ReviewQueueCard({
       await opsApi.resolveReview(item.id, item.thread_id, { action, corrected_fields: correctedFields })
       if (action === 'reject') onRejected(item.document_filename)
       onResolved()
+      // 2026-09-23 (live regression report, item 10): missing on this
+      // success path — every other exit from this function (both catch
+      // branches below) already resets it. Reproduced reject vs. delete
+      // live side by side and found no visible discrepancy today (this
+      // card unmounts via onResolved()'s refresh before a stale busy
+      // state could ever render) — fixed anyway for correctness and
+      // consistency with delete's own confirm-then-clear pattern, not
+      // because a symptom was confirmed.
+      setBusy(false)
     } catch (e) {
       if (e instanceof ApiError && e.status === 410) {
         // The in-memory LangGraph checkpoint is gone (server restart since
@@ -282,7 +308,16 @@ export function ReviewQueueCard({
          reviewer can see first, so it's what leads the card now — no
          separate title competing with it, and nothing else worth
          duplicating from further down. */}
-      <p className={`text-[13px] ${isRoutine ? 'text-muted' : 'text-amber-800'}`}>{item.question}</p>
+      {/* File-missing gets its own distinct, more severe headline
+         (2026-09-23, live regression report items 1/2/6) — red, not the
+         routine amber "please confirm" treatment, since there's nothing
+         left to confirm the fields against; structurally can never
+         render alongside a "no issues found"/isRoutine state, since
+         app/graph/verify.py's file_missing check overrides every other
+         reason rather than joining them. */}
+      <p className={`text-[13px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}>
+        {item.question}
+      </p>
 
       <DocumentPreview documentId={item.document_id} mediaType={item.document_media_type} filename={item.document_filename} />
 
@@ -396,10 +431,21 @@ export function ReviewQueueCard({
               return (
                 <label key={name} className="text-[12px] text-muted">
                   {name}
-                  {confidence !== null && (
-                    <span className={confidence < 0.6 ? 'ml-1 text-red-600' : 'ml-1 text-muted'}>
-                      ({formatConfidence(confidence)})
-                    </span>
+                  {/* 2026-09-23 (live regression report, item 9): the raw
+                     confidence percentage next to every field ("87%") was
+                     a debug-tool number with no obvious action for a
+                     non-technical reviewer to take on it — removed
+                     entirely. Confidence still drives which fields get
+                     this flag (unchanged: the same < 0.6 floor
+                     CONFIDENCE_FLOOR already uses server-side,
+                     app/graph/verify.py's _low_confidence_fields) and
+                     still needs a review either way (DECISIONS #40's
+                     unconditional needs_review) — just without printing
+                     the number itself. No badge at all above the floor,
+                     same "no badge = nothing wrong" convention StatusPill
+                     already established (opsShared.tsx). */}
+                  {confidence !== null && confidence < 0.6 && (
+                    <span className="ml-1 text-red-600">({t('ops.review.document.lowConfidenceFlag')})</span>
                   )}
                   <input
                     value={edits[name]}
@@ -439,7 +485,9 @@ export function ReviewQueueCard({
              lose sight of why this document needs scrutiny before
              clicking. Routine "no issues found" confirms have nothing to
              repeat, so this stays gated on !isRoutine like the top copy. */}
-          {!isRoutine && <p className="mb-2 text-[13px] text-amber-800">{item.question}</p>}
+          {!isRoutine && (
+            <p className={`mb-2 text-[13px] ${isFileMissing ? 'text-red-700' : 'text-amber-800'}`}>{item.question}</p>
+          )}
           <div className="flex gap-2">
             <Button size="sm" onClick={() => void resolve('confirm')} disabled={busy} icon={<Check size={14} />}>
               {Object.keys(edits).some((n) => edits[n] !== originalValue(n)) ? t('ops.review.acceptWithCorrections') : t('ops.review.acceptAsIs')}
