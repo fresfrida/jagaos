@@ -348,6 +348,52 @@ def test_classify_empty_text_falls_back_to_memory_lane_bucket_and_photo_doc_type
     assert doc["status"] == "proposed"
 
 
+def test_classify_is_picture_toggle_skips_llm_and_sets_memory_lane_deterministically():
+    # 2026-09-23 (DECISIONS #52): the upload-time "is this a picture, not a
+    # document?" toggle (web/src/features/ops/OpsConsole.tsx) bypasses
+    # classify()'s LLM call entirely, same as the empty-text fallback
+    # above — needs no gateway key/network access. Real (non-empty) text
+    # is deliberately used here, unlike that other test, to prove the
+    # is_picture branch is checked first and wins regardless of whether
+    # OCR text exists. Also proves no gateway call actually happened, not
+    # just that the result looks right: a real LLM call would insert a
+    # 'classify' trace row (see the else-branch in app/graph/classify.py);
+    # this asserts zero.
+    from app.graph.classify import classify
+
+    document_id = _seed_company_and_document("ispicturesha")
+    result = classify({
+        "run_id": "ispicturerun", "company_id": 1, "document_id": document_id,
+        "text": "some ocr text that would otherwise trigger a real LLM call",
+        "is_picture": True,
+    })["classify_result"]
+
+    assert result["lane"] == "memory"
+    assert result["doc_type"] == "photo"
+    assert result["bucket"] == "Memory Lane"
+    assert result["description"] is None
+    assert result["vendor_name"] is None
+
+    with get_conn() as conn:
+        doc = conn.execute(
+            "SELECT lane, doc_type, bucket, description, status FROM document WHERE id = ?",
+            (document_id,),
+        ).fetchone()
+        assert doc["lane"] == "memory"
+        assert doc["doc_type"] == "photo"
+        assert doc["bucket"] == "Memory Lane"
+        # None (pending), not "" — an explicit "no caption yet" state the
+        # frontend renders distinctly, not a guessed sentence.
+        assert doc["description"] is None
+        assert doc["status"] == "proposed"
+
+        trace_rows = conn.execute(
+            "SELECT id FROM trace WHERE document_id = ? AND node = 'classify'",
+            (document_id,),
+        ).fetchall()
+        assert trace_rows == [], "is_picture bypass must not call the gateway (no classify trace row)"
+
+
 def test_is_this_company_matches_substring_either_direction_and_rejects_unrelated():
     # DECISIONS #42's amendment: Receivables-vs-Expenses detection reuses
     # app/graph/derive_expectations.py::_slug, the same normalization

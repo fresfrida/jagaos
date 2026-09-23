@@ -10,6 +10,10 @@ class PipelineState(TypedDict, total=False):
     document_id: int
     text: str
     text_source: str  # pdfplumber | ocr | exif | none
+    # 2026-09-23: set from the upload-time "is this a picture?" toggle
+    # (app/main.py) — when true, classify.py skips its LLM call entirely
+    # and sets lane/doc_type/bucket deterministically (see its docstring).
+    is_picture: bool
 
     # suffixed _result to avoid colliding with the node names "classify" /
     # "extract" / "verify" — LangGraph forbids a node name equal to a state key

@@ -40,7 +40,10 @@ export interface ClassifyResult {
   doc_type: string
   confidence: number
   injection_suspected: boolean
-  description: string
+  // null (2026-09-23): the "is this a picture?" upload toggle skips the
+  // LLM call that would normally write this, leaving it an explicit
+  // pending-caption state rather than a guessed sentence.
+  description: string | null
   bucket: Bucket
   vendor_name: string | null
 }
@@ -163,10 +166,15 @@ function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const opsApi = {
   health: () => request<{ status: string }>('/api/health'),
 
-  uploadDocument: (file: File) => {
+  // isPicture (2026-09-23): the upload-time "is this a picture, not a
+  // document?" toggle — sent as a query param alongside source_channel
+  // (multipart body carries the file only), read by app/main.py to skip
+  // classify.py's LLM call entirely for this document.
+  uploadDocument: (file: File, isPicture: boolean) => {
     const form = new FormData()
     form.append('file', file)
-    return request<UploadResult>('/api/documents?source_channel=web', { method: 'POST', body: form })
+    const params = new URLSearchParams({ source_channel: 'web', is_picture: String(isPicture) })
+    return request<UploadResult>(`/api/documents?${params}`, { method: 'POST', body: form })
   },
 
   listDocuments: () => request<DocumentRow[]>('/api/documents'),
@@ -201,7 +209,17 @@ export const opsApi = {
 
   editDocument: (
     documentId: number,
-    body: { description?: string; bucket?: Bucket; vendor_name?: string; doc_type?: string; filename?: string },
+    body: {
+      description?: string
+      bucket?: Bucket
+      vendor_name?: string
+      doc_type?: string
+      filename?: string
+      // is_picture (2026-09-23): one-directional — true re-marks this
+      // document as a picture (lane/doc_type/bucket set deterministically
+      // server-side, app/main.py::edit_document); there's no reverse.
+      is_picture?: boolean
+    },
   ) =>
     request<{ status: string }>(`/api/documents/${documentId}`, {
       method: 'PATCH',

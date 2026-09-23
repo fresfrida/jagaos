@@ -413,6 +413,50 @@ flagged GST-mismatch item and a real routine item, not mocks); typecheck +
 build clean; backend suite 33/33 (no backend change). Screenshot:
 `docs/screenshots/ops-review-card-repeated-warning.png`.
 
+**"Is this a picture?" upload toggle replaces guessing for the memory
+lane; filename is no longer a card title anywhere (2026-09-23, DECISIONS
+#52).** The gateway this hackathon provides is confirmed text-only
+(`MDs/GAPS.md` §8, re-confirmed live this session) — it was never
+possible for `classify.py`'s LLM call to actually look at a photo and
+describe it, so guessing was replaced with asking. A prominent Yes/No
+toggle above the upload dropzone ("Is this a picture, not a document?",
+default No, a note appears only on Yes) is sent as `POST
+/api/documents?is_picture=true`; `app/graph/classify.py` checks
+`state["is_picture"]` first (before its existing empty-text fallback) and,
+when true, skips the LLM call entirely — `lane='memory'`,
+`doc_type='photo'`, `bucket='Memory Lane'` are set by fixed rule, and
+`description` is left `NULL` (an explicit "pending caption" state, not a
+guessed sentence) until a human supplies one. No `trace` row is written
+for this path, the same convention `extract.py`'s lane-skip already uses
+— which is also how a test proves no gateway call happened at all, not
+just that the result looks right
+(`tests/test_rules_smoke.py::test_classify_is_picture_toggle_skips_llm_and_sets_memory_lane_deterministically`).
+The same correction is available after upload via
+`DocumentEditRequest.is_picture` (PATCH `/api/documents/{id}`) — grouped
+with the other document-level fields, one-directional (corrects *into*
+memory lane, never back out; the checkbox locks once already set). A new
+`useSpeechCaption` hook (`web/src/hooks/useSpeechCaption.ts`, Web Speech
+API, no backend change, no new dependency) backs a mic button next to
+Description on picture-lane documents only — tap, speak, the transcript
+fills the same field a typed caption would. **Supersedes DECISIONS #49**:
+filename is no longer shown as a card title in either `ReviewQueueCard` or
+`DocumentCard` — it's a plain field in the same "Document" group as
+description/bucket/doc_type/vendor_name. `ReviewQueueCard`'s header is now
+just the flagged-reason/routine-confirm text; `DocumentCard`'s header now
+shows `description` in filename's old spot (falling back to "No caption
+yet" or `lane / doc_type`), and the old separate description-preview
+paragraph beneath it was removed as a now-literal duplicate. Full suite
+34/34, typecheck + build clean. Verified live end to end — real login,
+a real synthetic photo uploaded through the real toggle, not mocked —
+plus a regression screenshot confirming an existing non-picture flagged
+card (filename field, no mic button, picture-toggle available but
+unchecked) still works. Screenshots:
+`docs/screenshots/ops-upload-picture-toggle-no.png`,
+`ops-upload-picture-toggle-yes.png`, `ops-review-card-picture-lane.png`,
+`ops-voice-caption-control.png`, `ops-document-card-picture-collapsed.png`,
+`ops-document-card-picture-editing.png`,
+`ops-review-card-filename-decluttered.png`.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -499,6 +543,7 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Session state, login/logout, role helpers | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
 | Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
 | Client-side photo downscale before upload (2026-09-22) | `lib/imageNormalize.ts` |
+| Tap-to-talk voice captioning (Web Speech API, 2026-09-23, DECISIONS #52) | `hooks/useSpeechCaption.ts` |
 | The real logged-in app: upload, review queue, gap analysis, obligations, trace, archive, real search, an in-page document preview, date grouping — 5 tabs, not one long scroll (2026-09-22, DECISIONS #36, #37, #41-44) | `features/ops/OpsConsole.tsx`, `features/ops/opsApi.ts` |
 | Login form | `pages/LoginPage.tsx` |
 

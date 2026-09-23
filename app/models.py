@@ -133,13 +133,23 @@ class DocumentEditRequest(BaseModel):
     — the statutory lane's doc_type is free text naming the actual filing
     (app/graph/derive_expectations.py::_matches_doc_type matches it against
     fixed slugs by substring, not by an enum), so a human correcting it
-    must be able to type anything, same as the model can."""
+    must be able to type anything, same as the model can.
+
+    is_picture (2026-09-23, DECISIONS #52): the same "picture, not a
+    document" call as the upload-time toggle, correctable after the fact.
+    Deliberately one-directional — True overrides lane/doc_type/bucket to
+    memory/photo/"Memory Lane" (app/main.py::edit_document); False or
+    omitted does nothing. There's no defined "reclassify back out of
+    memory" behavior here (it would need real classification, not a
+    deterministic rule), so this only ever corrects a document *into*
+    being marked a picture, never back out."""
 
     description: str | None = None
     bucket: BucketName | None = None
     vendor_name: str | None = None
     doc_type: str | None = None
     filename: str | None = None
+    is_picture: bool | None = None
 
 
 class ReviewResolution(BaseModel):

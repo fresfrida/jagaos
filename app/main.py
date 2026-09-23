@@ -244,7 +244,7 @@ def create_company(
 @app.post("/api/documents")
 async def upload_document(
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
-    file: UploadFile, source_channel: str = "web",
+    file: UploadFile, source_channel: str = "web", is_picture: bool = False,
 ) -> dict:
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
         tmp.write(await file.read())
@@ -256,6 +256,14 @@ async def upload_document(
     )
     if ingest_state.get("text_source") == "duplicate":
         return {"document_id": ingest_state["document_id"], "status": "duplicate"}
+
+    # 2026-09-23 (DECISIONS #52): the upload-time "is this a picture?"
+    # toggle (web/src/features/ops/OpsConsole.tsx) — set on the state dict
+    # here rather than threading a new param through ingest() itself,
+    # since ingest.py's EXIF/text extraction is unaffected by lane and
+    # already runs before this regardless (app/graph/ingest.py). Read by
+    # app/graph/classify.py to skip its LLM call entirely.
+    ingest_state["is_picture"] = is_picture
 
     thread_id = ingest_state["run_id"]
     result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
@@ -469,7 +477,17 @@ def edit_document(
     resolving a review). `filename` (added 2026-09-22) is display-only:
     `stored_path`/`sha256`, the actual file on disk, are never touched —
     a phone upload named `17900624351088935047221818361392.jpg` can be
-    renamed to something a human recognizes without re-uploading."""
+    renamed to something a human recognizes without re-uploading.
+
+    `is_picture=True` (added 2026-09-23, DECISIONS #52) is the same
+    "picture, not a document" call as the upload-time toggle, made
+    available after the fact — sets lane/doc_type/bucket the same
+    deterministic way app/graph/classify.py's bypass does, overriding any
+    doc_type/bucket also sent in the same request (this call wins because
+    correcting *to* a picture is the one direction this field supports;
+    see its docstring on DocumentEditRequest for why the reverse isn't
+    handled). Only True does anything — False/omitted is a no-op; there is
+    no reclassification path back out of the memory lane here."""
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
             "SELECT company_id FROM document WHERE id = ?", (document_id,)
@@ -488,9 +506,13 @@ def edit_document(
         updates["doc_type"] = body.doc_type
     if body.filename is not None:
         updates["filename"] = body.filename
+    if body.is_picture:
+        updates["lane"] = "memory"
+        updates["doc_type"] = "photo"
+        updates["bucket"] = "Memory Lane"
 
     if updates:
-        # Column names come from a fixed set of 5 hardcoded keys above,
+        # Column names come from a fixed set of hardcoded keys above,
         # never from request data — safe to interpolate into the SET
         # clause; only the bound values (?) come from the request body.
         set_clause = ", ".join(f"{col} = ?" for col in updates)

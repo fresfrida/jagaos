@@ -11,7 +11,14 @@ bucket here is provisional for lane=invoice: classify runs before
 extraction, so it doesn't know the vendor yet, and telling Receivables
 apart from Expenses needs comparing the extracted vendor against the
 company's own name. app/graph/extract.py corrects it deterministically
-once that's known (2026-09-22, DECISIONS #42's amendment)."""
+once that's known (2026-09-22, DECISIONS #42's amendment).
+
+2026-09-23 (DECISIONS #52): when state["is_picture"] is set (the
+upload-time "is this a picture?" toggle, app/main.py), this node skips
+the LLM call entirely and sets lane/doc_type/bucket by fixed rule instead
+— the gateway this hackathon provides cannot see images at all
+(MDs/GAPS.md §8), so there was never a question for it to answer here for
+that case; the human's toggle already is the answer."""
 
 import json
 
@@ -74,7 +81,24 @@ def classify(state: PipelineState) -> PipelineState:
     text = state.get("text", "")
     regex_hits = scan(text)
 
-    if not text.strip():
+    if state.get("is_picture"):
+        # 2026-09-23: the human already answered, at upload time, the only
+        # question this node exists to answer for this document ("what
+        # kind of thing is this") — no LLM call needed, and the gateway
+        # this hackathon provides is confirmed structurally unable to see
+        # images anyway (MDs/GAPS.md §8: four formats tested, all silently
+        # dropped). description stays None (not "", not a guessed
+        # sentence) until a human supplies a caption or a future local
+        # vision model does — the frontend renders that as an explicit "no
+        # caption yet" state rather than silently looking blank. No trace
+        # row is inserted here, matching app/graph/extract.py's own
+        # no-op-skip convention (its `{"skipped": True, ...}` branch below
+        # doesn't insert one either) — this is how a test confirms no
+        # gateway call happened for this path: zero classify trace rows.
+        result = {"lane": "memory", "doc_type": "photo", "confidence": 1.0,
+                   "injection_suspected": False, "description": None,
+                   "bucket": "Memory Lane", "vendor_name": None}
+    elif not text.strip():
         # No OCR/extractable text (app/graph/ingest.py) — still needs a
         # sensible description, not an empty string a search box would
         # never surface.
@@ -129,7 +153,11 @@ def classify(state: PipelineState) -> PipelineState:
         conn.execute(
             "UPDATE document SET lane = ?, doc_type = ?, status = 'proposed', "
             "description = ?, bucket = ?, vendor_name = ? WHERE id = ?",
-            (result["lane"], result["doc_type"], result.get("description") or "",
+            # description is None only for the is_picture bypass above (an
+            # explicit "pending caption" state) — every other branch always
+            # produces a real string, so this no longer needs `or ""` to
+            # avoid storing NULL for those.
+            (result["lane"], result["doc_type"], result.get("description"),
              result["bucket"], result.get("vendor_name"), state["document_id"]),
         )
 

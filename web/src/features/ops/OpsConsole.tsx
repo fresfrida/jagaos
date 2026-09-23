@@ -1,8 +1,9 @@
-import { Archive, Check, FileText, Loader2, ShieldAlert, Upload, X } from 'lucide-react'
+import { Archive, Check, FileText, Loader2, Mic, MicOff, ShieldAlert, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
+import { useSpeechCaption } from '../../hooks/useSpeechCaption'
 import { ApiError } from '../../lib/apiClient'
 import { normalizeImageForUpload } from '../../lib/imageNormalize'
 import { roleAtLeast } from '../auth/authApi'
@@ -219,16 +220,6 @@ function DocumentViewerModal({
 const FIELD_CLASS =
   'block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted'
 
-// 2026-09-22 (DECISIONS #49): the card's identifying header, made directly
-// editable — filename now appears in exactly one place per card (the
-// title), not also as a separate "Filename" field further down the form.
-// Looks like plain text until hovered/focused (transparent border, no
-// visible box) so it doesn't read as "yet another form field" the way a
-// boxed input in a title position would; -mx-1 offsets the reserved
-// padding so the text doesn't shift sideways when the border appears.
-const FILENAME_TITLE_CLASS =
-  '-mx-1 block w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-ink outline-none hover:border-line focus:border-ink focus:bg-white disabled:hover:border-transparent'
-
 /** doc_type as a dropdown, hard-locked to DOC_TYPES — EXCEPT the statutory
  * lane, which stays free text (2026-09-22, DECISIONS #45: category fields
  * are dropdowns, name fields are free text; statutory's doc_type is a
@@ -271,6 +262,68 @@ function DocTypeField({
   )
 }
 
+/** Tap-to-talk caption button next to a picture-lane document's
+ * Description field (2026-09-23) — the gateway this hackathon provides
+ * cannot see images at all (MDs/GAPS.md §8), so a photo's description has
+ * no automatic source; speaking one is faster than typing on a phone,
+ * which is where most photos get uploaded from. Renders nothing when the
+ * browser has no Web Speech API — the caller's existing plain text input
+ * is already the fallback (no separate fallback UI needed). */
+function VoiceCaptionButton({ onCaption, disabled }: { onCaption: (text: string) => void; disabled: boolean }) {
+  const { supported, listening, start, stop } = useSpeechCaption(onCaption)
+  if (!supported) return null
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => (listening ? stop() : start())}
+      aria-label={listening ? 'Stop recording caption' : 'Record a caption by voice'}
+      title={listening ? 'Stop recording' : 'Record a caption by voice'}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-line disabled:text-muted disabled:opacity-60 ${listening ? 'border-red-300 bg-red-50 text-red-600' : 'text-muted hover:border-ink/40 hover:text-ink'}`}
+    >
+      {listening ? <MicOff size={14} /> : <Mic size={14} />}
+    </button>
+  )
+}
+
+/** "Is this a picture, not a document?" as an after-upload correction —
+ * grouped with the other document-level metadata fields (2026-09-23),
+ * not a separate special control, matching the upload-time toggle
+ * (OpsConsole's upload section below) it mirrors. One-directional by
+ * design (DocumentEditRequest's docstring, app/models.py): once `locked`
+ * (the document's saved lane is already 'memory'), there's nothing left
+ * to correct, so the checkbox is shown checked and disabled rather than
+ * implying an un-correction this doesn't support. */
+function PictureToggleField({
+  checked,
+  locked,
+  disabled,
+  onChange,
+}: {
+  checked: boolean
+  locked: boolean
+  disabled: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-[12px] text-muted sm:col-span-3">
+      <span className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled || locked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        This is a picture, not a document
+        {locked && <span className="text-[11px] text-muted">(already marked)</span>}
+      </span>
+      {checked && !locked && (
+        <span className="text-[11px] text-muted">Reduces the accuracy of data detected from this file.</span>
+      )}
+    </label>
+  )
+}
+
 function ReviewQueueCard({
   item,
   canResolve,
@@ -309,9 +362,22 @@ function ReviewQueueCard({
   const [docType, setDocType] = useState(item.document_doc_type ?? '')
   const [vendorName, setVendorName] = useState(item.document_vendor_name ?? '')
   const [filename, setFilename] = useState(item.document_filename)
+  // 2026-09-23 (DECISIONS #52): "picture, not a document" correction,
+  // available after upload too, not just at the moment of it — grouped
+  // with the fields above rather than a separate control. One-directional
+  // (see DocumentEditRequest's docstring): once the saved lane is already
+  // 'memory' there's nothing left to correct, so the checkbox locks in
+  // that state rather than pretending an un-correction is supported.
+  const [isPictureToggle, setIsPictureToggle] = useState(item.document_lane === 'memory')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expired, setExpired] = useState(false)
+  const isPictureLane = item.document_lane === 'memory'
+  // Distinguishes "no caption yet" (the is_picture upload path leaves
+  // description NULL on purpose) from "someone deliberately cleared it" —
+  // only meaningful while the field is still at its initial, unedited
+  // value, same as any placeholder.
+  const isPendingCaption = isPictureLane && item.document_description === null
 
   const originalValue = (name: string): string => {
     const field = proposed[name]
@@ -331,12 +397,20 @@ function ReviewQueueCard({
             correctedFields[name] = isNumeric ? Number(edits[name]) : edits[name]
           }
         }
-        const documentEdits: { description?: string; bucket?: Bucket; doc_type?: string; vendor_name?: string; filename?: string } = {}
+        const documentEdits: {
+          description?: string
+          bucket?: Bucket
+          doc_type?: string
+          vendor_name?: string
+          filename?: string
+          is_picture?: boolean
+        } = {}
         if (description !== (item.document_description ?? '')) documentEdits.description = description
         if (bucket && bucket !== (item.document_bucket ?? '')) documentEdits.bucket = bucket as Bucket
         if (docType !== (item.document_doc_type ?? '')) documentEdits.doc_type = docType
         if (vendorName !== (item.document_vendor_name ?? '')) documentEdits.vendor_name = vendorName
         if (filename !== item.document_filename) documentEdits.filename = filename
+        if (isPictureToggle && !isPictureLane) documentEdits.is_picture = true
         if (Object.keys(documentEdits).length > 0) {
           await opsApi.editDocument(item.document_id, documentEdits)
         }
@@ -374,18 +448,15 @@ function ReviewQueueCard({
 
   return (
     <Card className="p-5" interactive={false}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <input
-            value={filename}
-            disabled={!canResolve}
-            onChange={(e) => setFilename(e.target.value)}
-            aria-label="Filename"
-            className={FILENAME_TITLE_CLASS}
-          />
-          <p className={`mt-1 text-[13px] ${isRoutine ? 'text-muted' : 'text-amber-800'}`}>{item.question}</p>
-        </div>
-      </div>
+      {/* 2026-09-23 (DECISIONS #52): supersedes DECISIONS #49's "filename
+         as the card's editable title" — filename isn't shown prominently
+         anywhere now (it moved into the Document fields group below,
+         alongside description/bucket/doc_type/vendor_name). The reason
+         this document needs review is the single most useful thing a
+         reviewer can see first, so it's what leads the card now — no
+         separate title competing with it, and nothing else worth
+         duplicating from further down. */}
+      <p className={`text-[13px] ${isRoutine ? 'text-muted' : 'text-amber-800'}`}>{item.question}</p>
 
       <DocumentPreview documentId={item.document_id} mediaType={item.document_media_type} filename={item.document_filename} />
 
@@ -399,13 +470,35 @@ function ReviewQueueCard({
           <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">Document</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="text-[12px] text-muted sm:col-span-3">
-              Description
+              Filename
               <input
-                value={description}
+                value={filename}
                 disabled={!canResolve}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => setFilename(e.target.value)}
                 className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
               />
+            </label>
+            <label className="text-[12px] text-muted sm:col-span-3">
+              Description
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  value={description}
+                  disabled={!canResolve}
+                  placeholder={isPendingCaption ? 'No caption yet — tap the mic or type one' : undefined}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="block h-9 w-full flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+                />
+                {/* Voice caption (2026-09-23): only for picture-lane
+                   documents — a real document's description reads off
+                   printed text a person can just type; a photo has no
+                   text to read, so speaking a caption is the faster path.
+                   Renders nothing when the browser has no Web Speech API
+                   (e.g. Firefox) — this plain text input is already the
+                   fallback, no separate code path needed. */}
+                {isPictureLane && (
+                  <VoiceCaptionButton onCaption={setDescription} disabled={!canResolve} />
+                )}
+              </div>
             </label>
             <label className="text-[12px] text-muted">
               Bucket
@@ -442,6 +535,12 @@ function ReviewQueueCard({
                 className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
               />
             </label>
+            <PictureToggleField
+              checked={isPictureToggle}
+              locked={isPictureLane}
+              disabled={!canResolve}
+              onChange={setIsPictureToggle}
+            />
           </div>
         </div>
       )}
@@ -545,8 +644,14 @@ function DocumentCard({
   const [docType, setDocType] = useState(doc.doc_type ?? '')
   const [vendorName, setVendorName] = useState(doc.vendor_name ?? '')
   const [filename, setFilename] = useState(doc.filename)
+  // 2026-09-23 (DECISIONS #52): see PictureToggleField's docstring —
+  // same one-directional "correct into memory lane" control as the
+  // review card, grouped with the other editable fields here too.
+  const [isPictureToggle, setIsPictureToggle] = useState(doc.lane === 'memory')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isPictureLane = doc.lane === 'memory'
+  const isPendingCaption = isPictureLane && doc.description === null
 
   const save = async () => {
     setBusy(true)
@@ -558,6 +663,7 @@ function DocumentCard({
         doc_type: docType,
         vendor_name: vendorName,
         filename,
+        ...(isPictureToggle && !isPictureLane ? { is_picture: true } : {}),
       })
       setEditing(false)
       onSaved()
@@ -574,12 +680,27 @@ function DocumentCard({
         <div className="flex min-w-0 flex-1 gap-3">
           <DocumentThumbnail documentId={doc.id} mediaType={doc.media_type} />
           <div className="min-w-0 flex-1">
-            {editing ? (
-              <input value={filename} onChange={(e) => setFilename(e.target.value)} aria-label="Filename" className={FILENAME_TITLE_CLASS} />
-            ) : (
-              <p className="break-words text-sm font-medium text-ink">{doc.filename}</p>
+            {/* 2026-09-23 (DECISIONS #52): supersedes DECISIONS #49's
+               "filename as this card's title" — filename isn't shown
+               prominently anywhere now (it's a plain field inside the
+               edit form below, alongside description/bucket/doc_type/
+               vendor_name). Description is the one-sentence, human-
+               written-to-be-recognizable summary this app already
+               generates for every document — a better at-a-glance label
+               than a raw filename, and this is its only appearance on
+               the card, not a second copy alongside a filename-based one. */}
+            <p className="break-words text-sm font-medium text-ink">
+              {doc.description ? (
+                doc.description
+              ) : isPendingCaption ? (
+                <span className="italic text-muted">No caption yet</span>
+              ) : (
+                <span className="text-muted">{doc.lane ?? '—'} / {doc.doc_type ?? '—'}</span>
+              )}
+            </p>
+            {doc.description && (
+              <p className="mt-0.5 break-words text-[12px] text-muted">{doc.lane ?? '—'} / {doc.doc_type ?? '—'}</p>
             )}
-            <p className="mt-0.5 break-words text-[12px] text-muted">{doc.lane ?? '—'} / {doc.doc_type ?? '—'}</p>
             {doc.vendor_name && <p className="mt-0.5 break-words text-[12px] text-muted">{doc.vendor_name}</p>}
           </div>
         </div>
@@ -589,14 +710,23 @@ function DocumentCard({
         </div>
       </div>
 
-      {editing ? (
+      {editing && (
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description"
+            value={filename}
+            onChange={(e) => setFilename(e.target.value)}
+            placeholder="Filename"
             className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink sm:col-span-3"
           />
+          <div className="flex items-center gap-2 sm:col-span-3">
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={isPendingCaption ? 'No caption yet — tap the mic or type one' : 'Description'}
+              className="block h-9 w-full flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+            />
+            {isPictureLane && <VoiceCaptionButton onCaption={setDescription} disabled={false} />}
+          </div>
           <select
             value={bucket}
             onChange={(e) => setBucket(e.target.value)}
@@ -615,18 +745,18 @@ function DocumentCard({
             list={VENDOR_NAMES_DATALIST_ID}
             className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
           />
+          <PictureToggleField
+            checked={isPictureToggle}
+            locked={isPictureLane}
+            disabled={false}
+            onChange={setIsPictureToggle}
+          />
           {error && <p className="text-[12px] text-red-700 sm:col-span-3">{error}</p>}
           <div className="flex gap-2 sm:col-span-3">
             <Button size="sm" onClick={() => void save()} disabled={busy}>Save</Button>
             <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
           </div>
         </div>
-      ) : (
-        doc.description && (
-          <div className="mt-2">
-            <p className="text-[13px] text-muted">{doc.description}</p>
-          </div>
-        )
       )}
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
@@ -818,6 +948,10 @@ export function OpsConsole() {
   // In-page preview (2026-09-22, doc 2's preview UX pass) — replaces
   // openDocumentSource's window.open() new tab. null means no modal open.
   const [viewingDocument, setViewingDocument] = useState<DocumentRow | null>(null)
+  // 2026-09-23 (DECISIONS #52): the upload-time "is this a picture, not a
+  // document?" toggle — defaults to No (the common case is still a real
+  // document); reset after every upload in onUpload below.
+  const [isPictureUpload, setIsPictureUpload] = useState(false)
 
   useEffect(() => {
     opsApi
@@ -853,8 +987,12 @@ export function OpsConsole() {
     setError(null)
     try {
       const normalized = await normalizeImageForUpload(file)
-      const result = await opsApi.uploadDocument(normalized)
+      const result = await opsApi.uploadDocument(normalized, isPictureUpload)
       setLastUpload(result)
+      // 2026-09-23: back to the default (No) after every upload — the
+      // common case is still a real document, and leaving Yes stuck on
+      // would silently mis-tag the next, unrelated file.
+      setIsPictureUpload(false)
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -982,6 +1120,42 @@ export function OpsConsole() {
       {activeTab === 'review' && (
         <div role="tabpanel" id="ops-panel-review" aria-labelledby="ops-tab-review" className="space-y-8">
           <Card className="p-6" interactive={false}>
+            {canUpload && (
+              <div className="mb-4">
+                {/* 2026-09-23 (DECISIONS #52): the primary human-facing
+                   control for the memory/picture case — automatic
+                   classification among the other three lanes (statutory/
+                   invoice/important) is untouched; this only ever decides
+                   "picture, yes or no." Same pill-toggle pattern as the
+                   Dates tab's Upload date/Document date switch, for a
+                   consistent look at a control this prominent. Default No
+                   — the common case is still a real document. */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[13px] text-ink">Is this a picture, not a document?</span>
+                  <div className="flex gap-0.5 rounded-control border border-line p-0.5">
+                    {([false, true] as const).map((val) => {
+                      const active = isPictureUpload === val
+                      return (
+                        <button
+                          key={String(val)}
+                          type="button"
+                          onClick={() => setIsPictureUpload(val)}
+                          className={`rounded-md px-3 py-1 text-[13px] transition-colors ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
+                        >
+                          {val ? 'Yes' : 'No'}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                {isPictureUpload && (
+                  <p className="mt-1.5 text-[12px] text-muted">
+                    Choosing yes reduces the accuracy of data detected from this file — select no for invoices, forms, and other documents.
+                  </p>
+                )}
+              </div>
+            )}
+
             {canUpload ? (
               <label className="flex h-24 cursor-pointer items-center justify-center gap-2 rounded-card border border-dashed border-line text-sm text-muted hover:border-ink/40">
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
