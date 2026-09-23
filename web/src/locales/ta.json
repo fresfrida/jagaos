@@ -52,7 +52,7 @@
     "backend": {
       "checking": "பின்தளத்தை சரிபார்க்கிறது…",
       "reachable": "பின்தளம் அணுகக்கூடியது",
-      "unreachable": "Backend unreachable — start it with `uvicorn app.main:app --reload` in app/"
+      "unreachable": "பின்தளத்தை அணுக முடியவில்லை — app/ இல் `uvicorn app.main:app --reload` இயக்கவும்"
     },
     "session": {
       "checking": "உங்கள் அமர்வைச் சரிபார்க்கிறது…",
@@ -76,11 +76,11 @@
       "viewerCantUpload": "பார்வையாளர்கள் ஆவணங்களைப் பதிவேற்ற முடியாது — நிர்வாகி அல்லது உரிமையாளரைத் தொடர்பு கொள்ளவும்.",
       "uploadReplacement": "மாற்று ஆவணத்தைப் பதிவேற்றவும்",
       "lastResult": "சமீபத்திய பதிவேற்ற முடிவு:",
-      "classifiedAs": "classified as {{lane}} / {{docType}} ({{confidence}}% confident)",
+      "classifiedAs": "{{lane}} / {{docType}} என வகைப்படுத்தப்பட்டது ({{confidence}}% நம்பகத்தன்மை)",
       "injectionSuspected": "உள்ளீட்டு தாக்குதல் சந்தேகிக்கப்படுகிறது",
-      "reviewLabel": "Review: {{question}}",
+      "reviewLabel": "மறுஆய்வு: {{question}}",
       "quarantinedMessage": "உள்ளீட்டு பாதுகாப்பினால் தனிமைப்படுத்தப்பட்டது — கடமைகள் அட்டவணை பாதிக்கப்படவில்லை.",
-      "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
+      "rejectedPromptSuffix": "நிராகரிக்கப்பட்டு நீக்கப்பட்டது. மாற்று ஆவணத்தைப் பதிவேற்றவா?"
     },
     "review": {
       "needsReview": "மறுஆய்வு தேவை ({{count}})",
@@ -88,21 +88,21 @@
         "heading": "ஆவணம்",
         "filenameLabel": "கோப்புப் பெயர்",
         "descriptionLabel": "விளக்கம்",
-        "descriptionPendingPlaceholder": "No caption yet — tap the mic or type one",
+        "descriptionPendingPlaceholder": "இன்னும் தலைப்பு இல்லை — மைக்கைத் தட்டவும் அல்லது தட்டச்சு செய்யவும்",
         "generatingCaption": "தலைப்பு உருவாக்கப்படுகிறது…",
         "bucketLabel": "வகை",
         "docTypeLabel": "ஆவண வகை",
         "vendorNameLabel": "விற்பனையாளர் பெயர்"
       },
       "extractedFieldsHeading": "பிரித்தெடுக்கப்பட்ட புலங்கள்",
-      "expiredMessage": "This document can no longer be reviewed automatically.",
+      "expiredMessage": "இந்த ஆவணத்தை இனி தானாக மறுஆய்வு செய்ய முடியாது.",
       "acceptAsIs": "அப்படியே ஏற்றுக்கொள்",
       "acceptWithCorrections": "திருத்தங்களுடன் ஏற்றுக்கொள்",
       "reject": "நிராகரி",
-      "onlyAdminCanResolve": "Only an admin or owner can resolve this.",
+      "onlyAdminCanResolve": "நிர்வாகி அல்லது உரிமையாளர் மட்டுமே இதைத் தீர்க்க முடியும்.",
       "deleteButton": "நீக்கு",
-      "deleteOrReupload": "or re-upload the document to try reviewing it again.",
-      "onlyAdminCanDelete": "Only an admin or owner can delete this — or re-upload the document to try reviewing it again."
+      "deleteOrReupload": "அல்லது மீண்டும் மறுஆய்வு செய்ய ஆவணத்தை மீண்டும் பதிவேற்றவும்.",
+      "onlyAdminCanDelete": "நிர்வாகி அல்லது உரிமையாளர் மட்டுமே இதை நீக்க முடியும் — அல்லது மீண்டும் மறுஆய்வு செய்ய ஆவணத்தை மீண்டும் பதிவேற்றவும்."
     },
     "companyFiles": {
       "heading": "நிறுவன கோப்புகள்"
@@ -130,13 +130,13 @@
       "delete": "நீக்கு",
       "deleteConfirmMessage": "{{filename}} ஐ நீக்கவா? இதைச் செயல்தவிர்க்க முடியாது.",
       "moreActions": "மேலும் செயல்கள்",
-      "traceHeading": "Trace — document #{{documentId}} · total ${{cost}}",
+      "traceHeading": "தடமறிதல் — ஆவணம் #{{documentId}} · மொத்தம் ${{cost}}",
       "traceTable": {
-        "node": "Node",
-        "model": "Model",
-        "tokens": "Tokens in/out",
-        "cost": "Cost",
-        "decision": "Decision"
+        "node": "நோடு",
+        "model": "மாடல்",
+        "tokens": "உள்/வெளி டோக்கன்கள்",
+        "cost": "செலவு",
+        "decision": "முடிவு"
       },
       "noDocumentDate": "ஆவண தேதி இல்லை"
     },
@@ -148,21 +148,21 @@
     },
     "gaps": {
       "heading": "இடைவெளி பகுப்பாய்வு — {{total}} இல் {{satisfied}} உள்ளது",
-      "empty": "No expectations yet — upload a statutory document that reads as a company event (incorporation, corp sec change)."
+      "empty": "இன்னும் எதிர்பார்ப்புகள் இல்லை — நிறுவன நிகழ்வாக (பதிவு செய்தல், நிறுவனச் செயலாளர் மாற்றம்) கருதப்படும் ஒரு சட்டப்பூர்வ ஆவணத்தைப் பதிவேற்றவும்."
     },
     "obligations": {
       "heading": "கடமைகள் ({{count}})",
       "empty": "இன்னும் கடமைகள் எதுவும் உருவாக்கப்படவில்லை."
     },
     "documentViewer": {
-      "loadFailed": "Couldn't load the source file.",
-      "loading": "Loading source…",
+      "loadFailed": "மூலக் கோப்பை ஏற்ற முடியவில்லை.",
+      "loading": "மூலத்தை ஏற்றுகிறது…",
       "closePreview": "முன்னோட்டத்தை மூடு",
-      "previewLabel": "Preview: {{filename}}"
+      "previewLabel": "முன்னோட்டம்: {{filename}}"
     },
     "documentPreview": {
-      "loadFailed": "Couldn't load the source file.",
-      "loading": "Loading source…",
+      "loadFailed": "மூலக் கோப்பை ஏற்ற முடியவில்லை.",
+      "loading": "மூலத்தை ஏற்றுகிறது…",
       "openSourcePdf": "மூல PDF ஐத் திற"
     },
     "voiceCaption": {
@@ -172,7 +172,7 @@
     "pictureToggle": {
       "label": "இது புகைப்படம், ஆவணம் அல்ல",
       "alreadyMarked": "(ஏற்கனவே குறிக்கப்பட்டது)",
-      "reducesAccuracy": "Reduces the accuracy of data detected from this file."
+      "reducesAccuracy": "இந்தக் கோப்பிலிருந்து கண்டறியப்படும் தரவின் துல்லியத்தைக் குறைக்கும்."
     },
     "docType": {
       "legacySuffix": "{{value}} (பழையது)"

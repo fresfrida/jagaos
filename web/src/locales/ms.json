@@ -52,7 +52,7 @@
     "backend": {
       "checking": "Menyemak pelayan…",
       "reachable": "Pelayan boleh dicapai",
-      "unreachable": "Backend unreachable — start it with `uvicorn app.main:app --reload` in app/"
+      "unreachable": "Pelayan tidak dapat dicapai — mulakan dengan `uvicorn app.main:app --reload` dalam app/"
     },
     "session": {
       "checking": "Menyemak sesi anda…",
@@ -76,11 +76,11 @@
       "viewerCantUpload": "Pelihat tidak boleh memuat naik dokumen — hubungi admin atau pemilik.",
       "uploadReplacement": "Muat naik gantian",
       "lastResult": "Keputusan muat naik terakhir:",
-      "classifiedAs": "classified as {{lane}} / {{docType}} ({{confidence}}% confident)",
+      "classifiedAs": "dikelaskan sebagai {{lane}} / {{docType}} ({{confidence}}% yakin)",
       "injectionSuspected": "disyaki suntikan arahan",
-      "reviewLabel": "Review: {{question}}",
+      "reviewLabel": "Semakan: {{question}}",
       "quarantinedMessage": "Dikuarantin oleh sekatan suntikan — jadual kewajipan tidak terjejas.",
-      "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
+      "rejectedPromptSuffix": "ditolak dan dipadam. Muat naik gantian?"
     },
     "review": {
       "needsReview": "Perlu disemak ({{count}})",
@@ -88,21 +88,21 @@
         "heading": "Dokumen",
         "filenameLabel": "Nama fail",
         "descriptionLabel": "Keterangan",
-        "descriptionPendingPlaceholder": "No caption yet — tap the mic or type one",
+        "descriptionPendingPlaceholder": "Belum ada kapsyen — ketik mikrofon atau taip sendiri",
         "generatingCaption": "Menjana kapsyen…",
         "bucketLabel": "Kategori",
         "docTypeLabel": "Jenis dokumen",
         "vendorNameLabel": "Nama pembekal"
       },
       "extractedFieldsHeading": "Medan yang diekstrak",
-      "expiredMessage": "This document can no longer be reviewed automatically.",
+      "expiredMessage": "Dokumen ini tidak lagi boleh disemak secara automatik.",
       "acceptAsIs": "Terima seadanya",
       "acceptWithCorrections": "Terima dengan pembetulan",
       "reject": "Tolak",
-      "onlyAdminCanResolve": "Only an admin or owner can resolve this.",
+      "onlyAdminCanResolve": "Hanya admin atau pemilik boleh menyelesaikan ini.",
       "deleteButton": "Padam",
-      "deleteOrReupload": "or re-upload the document to try reviewing it again.",
-      "onlyAdminCanDelete": "Only an admin or owner can delete this — or re-upload the document to try reviewing it again."
+      "deleteOrReupload": "atau muat naik semula dokumen untuk cuba menyemak sekali lagi.",
+      "onlyAdminCanDelete": "Hanya admin atau pemilik boleh memadam ini — atau muat naik semula dokumen untuk cuba menyemak sekali lagi."
     },
     "companyFiles": {
       "heading": "Fail Syarikat"
@@ -130,13 +130,13 @@
       "delete": "Padam",
       "deleteConfirmMessage": "Padam {{filename}}? Ini tidak boleh dibatalkan.",
       "moreActions": "Tindakan lain",
-      "traceHeading": "Trace — document #{{documentId}} · total ${{cost}}",
+      "traceHeading": "Jejak — dokumen #{{documentId}} · jumlah ${{cost}}",
       "traceTable": {
-        "node": "Node",
+        "node": "Nod",
         "model": "Model",
-        "tokens": "Tokens in/out",
-        "cost": "Cost",
-        "decision": "Decision"
+        "tokens": "Token masuk/keluar",
+        "cost": "Kos",
+        "decision": "Keputusan"
       },
       "noDocumentDate": "Tiada tarikh dokumen"
     },
@@ -148,21 +148,21 @@
     },
     "gaps": {
       "heading": "Analisis jurang — {{satisfied}} daripada {{total}} dipegang",
-      "empty": "No expectations yet — upload a statutory document that reads as a company event (incorporation, corp sec change)."
+      "empty": "Belum ada jangkaan — muat naik dokumen berkanun yang menunjukkan peristiwa syarikat (penubuhan, pertukaran setiausaha syarikat)."
     },
     "obligations": {
       "heading": "Kewajipan ({{count}})",
       "empty": "Belum ada kewajipan dijana."
     },
     "documentViewer": {
-      "loadFailed": "Couldn't load the source file.",
-      "loading": "Loading source…",
+      "loadFailed": "Tidak dapat memuatkan fail sumber.",
+      "loading": "Memuatkan sumber…",
       "closePreview": "Tutup pratonton",
-      "previewLabel": "Preview: {{filename}}"
+      "previewLabel": "Pratonton: {{filename}}"
     },
     "documentPreview": {
-      "loadFailed": "Couldn't load the source file.",
-      "loading": "Loading source…",
+      "loadFailed": "Tidak dapat memuatkan fail sumber.",
+      "loading": "Memuatkan sumber…",
       "openSourcePdf": "Buka PDF asal"
     },
     "voiceCaption": {
@@ -172,7 +172,7 @@
     "pictureToggle": {
       "label": "Ini gambar, bukan dokumen",
       "alreadyMarked": "(sudah ditanda)",
-      "reducesAccuracy": "Reduces the accuracy of data detected from this file."
+      "reducesAccuracy": "Mengurangkan ketepatan data yang dikesan daripada fail ini."
     },
     "docType": {
       "legacySuffix": "{{value}} (lama)"

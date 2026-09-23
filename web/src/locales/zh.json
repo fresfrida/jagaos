@@ -52,7 +52,7 @@
     "backend": {
       "checking": "正在检查后端…",
       "reachable": "后端可连接",
-      "unreachable": "Backend unreachable — start it with `uvicorn app.main:app --reload` in app/"
+      "unreachable": "无法连接后端 — 请在 app/ 目录下运行 `uvicorn app.main:app --reload` 启动"
     },
     "session": {
       "checking": "正在检查您的登录状态…",
@@ -76,11 +76,11 @@
       "viewerCantUpload": "查看者无法上传文件 — 请联系管理员或所有者。",
       "uploadReplacement": "上传替换文件",
       "lastResult": "最近上传结果：",
-      "classifiedAs": "classified as {{lane}} / {{docType}} ({{confidence}}% confident)",
+      "classifiedAs": "分类为 {{lane}} / {{docType}}（置信度 {{confidence}}%）",
       "injectionSuspected": "疑似注入攻击",
-      "reviewLabel": "Review: {{question}}",
+      "reviewLabel": "审核：{{question}}",
       "quarantinedMessage": "已被注入防护机制隔离 — 义务表未受影响。",
-      "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
+      "rejectedPromptSuffix": "已拒绝并删除。要上传替换文件吗？"
     },
     "review": {
       "needsReview": "待审核 ({{count}})",
@@ -88,21 +88,21 @@
         "heading": "文件信息",
         "filenameLabel": "文件名",
         "descriptionLabel": "说明",
-        "descriptionPendingPlaceholder": "No caption yet — tap the mic or type one",
+        "descriptionPendingPlaceholder": "暂无说明 — 点击麦克风或手动输入",
         "generatingCaption": "正在生成说明…",
         "bucketLabel": "分类",
         "docTypeLabel": "文件类型",
         "vendorNameLabel": "供应商名称"
       },
       "extractedFieldsHeading": "提取的字段",
-      "expiredMessage": "This document can no longer be reviewed automatically.",
+      "expiredMessage": "此文件已无法自动审核。",
       "acceptAsIs": "直接接受",
       "acceptWithCorrections": "修正后接受",
       "reject": "拒绝",
-      "onlyAdminCanResolve": "Only an admin or owner can resolve this.",
+      "onlyAdminCanResolve": "只有管理员或所有者才能处理此项。",
       "deleteButton": "删除",
-      "deleteOrReupload": "or re-upload the document to try reviewing it again.",
-      "onlyAdminCanDelete": "Only an admin or owner can delete this — or re-upload the document to try reviewing it again."
+      "deleteOrReupload": "或重新上传文件以再次尝试审核。",
+      "onlyAdminCanDelete": "只有管理员或所有者才能删除此项 — 或重新上传文件以再次尝试审核。"
     },
     "companyFiles": {
       "heading": "公司文件"
@@ -130,13 +130,13 @@
       "delete": "删除",
       "deleteConfirmMessage": "删除 {{filename}}？此操作无法撤销。",
       "moreActions": "更多操作",
-      "traceHeading": "Trace — document #{{documentId}} · total ${{cost}}",
+      "traceHeading": "追踪记录 — 文件 #{{documentId}} · 总计 ${{cost}}",
       "traceTable": {
-        "node": "Node",
-        "model": "Model",
-        "tokens": "Tokens in/out",
-        "cost": "Cost",
-        "decision": "Decision"
+        "node": "节点",
+        "model": "模型",
+        "tokens": "输入/输出 Token 数",
+        "cost": "费用",
+        "decision": "结果"
       },
       "noDocumentDate": "无文件日期"
     },
@@ -148,21 +148,21 @@
     },
     "gaps": {
       "heading": "差距分析 — 已持有 {{satisfied}} / {{total}}",
-      "empty": "No expectations yet — upload a statutory document that reads as a company event (incorporation, corp sec change)."
+      "empty": "暂无预期项目 — 请上传能识别为公司事件（如注册成立、公司秘书变更）的法定文件。"
     },
     "obligations": {
       "heading": "义务 ({{count}})",
       "empty": "尚未生成任何义务。"
     },
     "documentViewer": {
-      "loadFailed": "Couldn't load the source file.",
-      "loading": "Loading source…",
+      "loadFailed": "无法加载源文件。",
+      "loading": "正在加载源文件…",
       "closePreview": "关闭预览",
-      "previewLabel": "Preview: {{filename}}"
+      "previewLabel": "预览：{{filename}}"
     },
     "documentPreview": {
-      "loadFailed": "Couldn't load the source file.",
-      "loading": "Loading source…",
+      "loadFailed": "无法加载源文件。",
+      "loading": "正在加载源文件…",
       "openSourcePdf": "打开原始 PDF"
     },
     "voiceCaption": {
@@ -172,7 +172,7 @@
     "pictureToggle": {
       "label": "这是照片，不是文件",
       "alreadyMarked": "（已标记）",
-      "reducesAccuracy": "Reduces the accuracy of data detected from this file."
+      "reducesAccuracy": "会降低此文件数据检测的准确性。"
     },
     "docType": {
       "legacySuffix": "{{value}}（旧版）"
