@@ -10,14 +10,20 @@ ExecStart=/opt/jaga/vision/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 810
 Restart=on-failure
 RestartSec=5
 
-# Resource isolation, not a suggestion (2026-09-23, DECISIONS #55): the
-# model peaks at ~2GB RSS while loaded (measured) on a box with 4GB total
-# RAM already running jaga-api, Caddy, SQLite, and Tesseract. 2.5G leaves
-# real headroom above that measured peak without being unbounded — if
-# this service ever exceeds it (a bug, a much larger image than tested,
-# concurrent requests each loading their own model copy), systemd kills
-# only this service, never the box. Restart=on-failure above means a kill
-# doesn't leave it permanently dead.
+# Resource isolation, not a suggestion (2026-09-23, DECISIONS #55; cap
+# unchanged by #58's move to a resident model). The real measured number
+# on this box is ~390MB RSS under a live captioning call (DECISIONS #58 —
+# the ~2GB figure #55 was sized against was a macOS development
+# measurement, ~5x too high for this box's actual CPU-only Linux build).
+# Since #58, the model is loaded once and kept resident for the life of
+# the process (see vision/app.py's module docstring) — so this cap now
+# covers a steady ~390MB resident baseline plus normal per-request
+# overhead, not just a transient per-request load/release spike the way
+# #55 originally sized it. 2.5G still leaves real headroom above the
+# measured ~390MB without being unbounded — if this service ever exceeds
+# it (a bug, a much larger image than tested, concurrent requests),
+# systemd kills only this service, never the box. Restart=on-failure
+# above means a kill doesn't leave it permanently dead.
 #
 # IMPORTANT — verify this actually fires before trusting it: see
 # deploy/README.md's "Verifying jaga-vision.service" section for the

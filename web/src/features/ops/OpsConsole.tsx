@@ -425,14 +425,28 @@ function ReviewQueueCard({
   // stops being null (the effect's own condition below then short-
   // circuits, and the cleanup from the previous run already cleared the
   // interval) — no separate "success" bookkeeping needed.
+  //
+  // 2026-09-23 (DECISIONS #58): also tracks whether the poll window is
+  // currently active, separately from isPendingCaption (which stays true
+  // forever if the window expires with no caption) — this is what drives
+  // the "generating caption…" indicator below. Even with the model now
+  // kept warm (vision/app.py), a cold start after any service (re)start
+  // still pays the one-time ~20s load cost, so the indicator is a real
+  // backstop, not just cosmetic.
+  const [isGeneratingCaption, setIsGeneratingCaption] = useState(false)
   useEffect(() => {
-    if (!isPictureLane || item.document_description !== null) return
+    if (!isPictureLane || item.document_description !== null) {
+      setIsGeneratingCaption(false)
+      return
+    }
+    setIsGeneratingCaption(true)
     const POLL_INTERVAL_MS = 3500
     const POLL_WINDOW_MS = 30000
     const deadline = Date.now() + POLL_WINDOW_MS
     const id = window.setInterval(() => {
       if (Date.now() >= deadline) {
         window.clearInterval(id)
+        setIsGeneratingCaption(false)
         return
       }
       onPoll()
@@ -561,6 +575,20 @@ function ReviewQueueCard({
                   <VoiceCaptionButton onCaption={setDescription} disabled={!canResolve} />
                 )}
               </div>
+              {/* Backstop for the ~20s cold-start load cost after any
+                 jaga-vision (re)start (2026-09-23, DECISIONS #58) — the
+                 model is now kept warm so most requests are fast, but the
+                 first one after a restart still pays that cost once, and
+                 a bare empty field during that wait reads as broken
+                 rather than "working on it." Scoped to the poll's own
+                 active window (isGeneratingCaption), not just
+                 isPendingCaption, so it disappears once the poll gives up
+                 rather than showing forever. */}
+              {isGeneratingCaption && (
+                <span className="mt-1 flex items-center gap-1 text-[11px] text-muted">
+                  <Loader2 size={11} className="animate-spin" /> {t('ops.review.document.generatingCaption')}
+                </span>
+              )}
             </label>
             <label className="text-[12px] text-muted">
               {t('ops.review.document.bucketLabel')}

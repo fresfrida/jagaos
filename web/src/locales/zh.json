@@ -81,6 +81,7 @@
         "filenameLabel": "Filename",
         "descriptionLabel": "Description",
         "descriptionPendingPlaceholder": "No caption yet — tap the mic or type one",
+        "generatingCaption": "Generating caption…",
         "bucketLabel": "Bucket",
         "docTypeLabel": "Doc type",
         "vendorNameLabel": "Vendor name"
