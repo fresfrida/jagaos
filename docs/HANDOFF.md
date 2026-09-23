@@ -495,6 +495,33 @@ stated scope. Screenshots:
 `docs/screenshots/ops-documents-no-show-archived-control.png`,
 `ops-documents-after-archive-fully-hidden.png`.
 
+**DECISIONS #53's deferred piece closed: the file/trace endpoints now 404
+an archived document too (2026-09-23, DECISIONS #54).** `GET
+/api/documents/{id}/file` and `GET /api/trace/{document_id}` fetch by a
+known document id directly, bypassing the listing endpoints #53 fixed —
+so someone who already had an archived document's id (browser history, a
+saved link, a network request captured before archiving) could still pull
+its file bytes or full trace report. Both endpoints' lookup queries gained
+`AND status != 'archived'`: `get_document_file`'s archived id now falls
+through its existing `doc is None` branch to the same 404 a nonexistent
+id gets, no new branch; `get_trace`'s got the identical change, landing on
+404 rather than the 403 it deliberately uses for a genuine cross-tenant
+document (a separate, pre-existing, still-accepted leak, unrelated to
+this fix) — the point was full invisibility for a same-company archived
+document, not "exists but denied." **Disclosed side effect, not a
+regression**: because the exclusion lives in `get_trace`'s one lookup
+query, an archived document in a *different* company now also reads as
+404 instead of that pre-existing 403 leak — strictly more invisible, not
+less. New test:
+`tests/test_auth.py::test_archived_documents_404_from_file_and_trace_endpoints_even_in_own_company`
+— asserts 404 from both endpoints for an archived document that has real
+seeded trace rows (proving the exclusion happens before any data lookup,
+not just "empty result coincidentally looks like 404"), with a
+positive-control live document confirming both endpoints still work
+normally. Full suite 36/36. No frontend change — the UI has had no path
+to reach an archived document's id since #53's fix, so nothing there
+needed touching or re-verifying.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -505,7 +532,6 @@ stated scope. Screenshots:
 - `app/rules/statutory.py`'s Form C-S/C due date (30 Nov) is a working approximation, flagged in its own docstring — confirm before citing a specific date in `docs/WRITEUP.md`
 - `app/llm.py`'s per-token pricing is Anthropic list pricing, not confirmed as the gateway's actual billed rate
 - **`document.sha256` is UNIQUE globally, not per-company** — found live 2026-09-22 seeding a second test company; a byte-identical file can never be uploaded to two different companies. `docs/KANBAN.md` backlog; needs a table rebuild in SQLite, not a one-line fix.
-- **`GET /api/documents/{id}/file` and `GET /api/trace/{document_id}` still don't exclude archived documents** — found 2026-09-23 (DECISIONS #53) while fixing the same gap in `list_documents`/`search_documents`. Both fetch by a known document ID directly with no `status='archived'` check; narrower exposure than the fixed endpoints (needs the ID in hand already) but the same class of issue. `docs/KANBAN.md` Backlog has the fix.
 
 ## Auth (added 2026-09-22, DECISIONS #28-31)
 

@@ -557,10 +557,16 @@ def get_document_file(
     leak cross-tenant existence via 403 "Not a member") — deliberate for
     this endpoint specifically, per explicit instruction: don't confirm a
     document id is real to a caller who can't read it.
+
+    `status != 'archived'` (2026-09-23, DECISIONS #53's remaining piece):
+    an archived document must produce the same 404 as a nonexistent one,
+    for a caller in its own company too — invisibility, not "exists but
+    you can't have it."
     """
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
-            "SELECT company_id, stored_path, media_type, filename FROM document WHERE id = ?",
+            "SELECT company_id, stored_path, media_type, filename FROM document "
+            "WHERE id = ? AND status != 'archived'",
             (document_id,),
         ).fetchone()
     if doc is None or doc["company_id"] != membership.company_id:
@@ -616,10 +622,23 @@ def get_trace(
     document_id: int,
     membership: Annotated[CurrentMembership, Depends(get_current_membership)],
 ) -> dict:
-    """Agent trace panel. ARCHITECTURE.md §6/§7 — cost per document."""
+    """Agent trace panel. ARCHITECTURE.md §6/§7 — cost per document.
+
+    `status != 'archived'` (2026-09-23, DECISIONS #53's remaining piece):
+    an archived document must 404 like a nonexistent one, even for a
+    caller in its own company — not the 403 "exists but you're not a
+    member" this endpoint deliberately uses for a real cross-tenant
+    document (see get_document_file's docstring above for why that leak
+    is an accepted, unrelated tradeoff). Folding the exclusion into this
+    same query means an archived document in *another* company also now
+    reads as 404 rather than 403 — strictly more invisible, not less, so
+    this doesn't reopen anything; it just means that specific pre-existing
+    cross-tenant leak no longer applies to archived documents specifically.
+    """
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
-            "SELECT company_id FROM document WHERE id = ?", (document_id,)
+            "SELECT company_id FROM document WHERE id = ? AND status != 'archived'",
+            (document_id,),
         ).fetchone()
         if doc is None:
             raise HTTPException(404, "document not found")

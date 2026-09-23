@@ -181,6 +181,67 @@ def test_document_file_endpoint_serves_own_company_and_404s_for_other_company(tm
     assert other.status_code == 404, other.text
 
 
+def test_archived_documents_404_from_file_and_trace_endpoints_even_in_own_company(tmp_path):
+    # 2026-09-23 (DECISIONS #53's remaining piece): both endpoints fetch by
+    # a known document id directly, with no archived-status check — found
+    # while fixing the same gap in list_documents/search_documents, fixed
+    # here. An archived document must be invisible through the app for
+    # every role, including the caller's own company and their own role
+    # (this was true even for the admin/owner who did the archiving) — not
+    # 403 "exists but denied" (which would still confirm something's
+    # there), the same flavor of 404 a nonexistent id already gets.
+    from app.db import get_conn
+
+    owner = _signup("archtrace-owner@example.com", "Archive Trace Co")
+
+    real_file = tmp_path / "archived-doc.pdf"
+    real_file.write_bytes(_fake_pdf_bytes("archived"))
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status) VALUES (?, 'archtracesha-archived', "
+            "'archived-doc.pdf', 'application/pdf', 1, ?, 'web', 'archived')",
+            (owner["company"]["id"], str(real_file)),
+        )
+        archived_doc_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO trace (run_id, company_id, document_id, node, decision) "
+            "VALUES ('archtracerun', ?, ?, 'verify', 'needs_review')",
+            (owner["company"]["id"], archived_doc_id),
+        )
+
+        # Positive control — a live document in the same company, same
+        # requests, proving the exclusion is specific to status='archived'
+        # and not an accidental blanket break of either endpoint.
+        live_file = tmp_path / "live-doc.pdf"
+        live_file.write_bytes(_fake_pdf_bytes("live"))
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status) VALUES (?, 'archtracesha-live', "
+            "'live-doc.pdf', 'application/pdf', 1, ?, 'web', 'filed')",
+            (owner["company"]["id"], str(live_file)),
+        )
+        live_doc_id = cur.lastrowid
+
+    archived_file_resp = client.get(f"/api/documents/{archived_doc_id}/file", headers=_auth_headers(owner["token"]))
+    assert archived_file_resp.status_code == 404, archived_file_resp.text
+
+    archived_trace_resp = client.get(f"/api/trace/{archived_doc_id}", headers=_auth_headers(owner["token"]))
+    assert archived_trace_resp.status_code == 404, archived_trace_resp.text
+
+    live_file_resp = client.get(f"/api/documents/{live_doc_id}/file", headers=_auth_headers(owner["token"]))
+    assert live_file_resp.status_code == 200, live_file_resp.text
+
+    # get_trace 200s with an empty nodes list for a document that simply
+    # has no trace rows yet — that's not a 404 case, so this document
+    # deliberately has none seeded; the point here is just that the
+    # document itself is still visible (not a 404), unlike the archived one.
+    live_trace_resp = client.get(f"/api/trace/{live_doc_id}", headers=_auth_headers(owner["token"]))
+    assert live_trace_resp.status_code == 200, live_trace_resp.text
+    assert live_trace_resp.json()["nodes"] == []
+
+
 def test_archive_endpoint_archives_own_company_document_and_404s_for_other_company():
     from app.db import get_conn
 
