@@ -8,6 +8,7 @@
     "logOut": "Log Out",
     "getStarted": "Get Started",
     "language": "Language",
+    "accountMenu": "Account menu",
     "nav": {
       "calendar": "Calendar",
       "tags": "Tags",
@@ -144,7 +145,11 @@
       "uploadDate": "Upload date",
       "documentDate": "Document date",
       "noDocumentDate": "No document date ({{count}})",
-      "noneUploaded": "No documents uploaded yet."
+      "noneUploaded": "No documents uploaded yet.",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month",
+      "selectADay": "Tap a day with documents to see them here.",
+      "noneOnDay": "No documents on this day."
     },
     "gaps": {
       "heading": "Gap analysis — {{satisfied}} of {{total}} held",

@@ -786,6 +786,81 @@ both clean. Screenshots: `docs/screenshots/company-files-dates-and-delete.png`,
 `company-files-delete-confirm-dialog.png`, `calendar-dates-no-filed-badge.png`,
 `search-dates-and-delete.png`.
 
+**Real Chinese/Malay/Tamil translations replace DECISIONS #57's English-value
+stubs (2026-09-23, DECISIONS #61)** — landed as a direct commit just before
+this session (`web/src/locales/{zh,ms,ta}.json`), documented here
+retroactively since it shipped without its own decision row. No key/
+structure changes. Verified this session, not re-translated: all three
+files are valid JSON, 0 of 123 keys are still byte-for-byte identical to
+`en.json`, and the existing i18n wiring renders them correctly with no
+code change (confirmed live via the language switcher). Enum display
+values (`BUCKETS`/`DOC_TYPES`) and dynamic backend-sourced text remain
+untranslated by design, unaffected by this — see DECISIONS #57.
+
+**Mobile-first header (top bar + bottom nav) and a real Calendar month
+grid — two real, screenshot-confirmed mobile bugs fixed in one pass
+(2026-09-23, DECISIONS #62).** (1) At 375px on real Android Chrome,
+`Header.tsx`'s logo, five nav items, language selector, email, and Log Out
+all fought for one row and visibly overlapped/wrapped, confirmed by
+screenshot. Fixed with a responsive split: the existing inline nav/email/
+Log Out now render from `sm:` up only when signed in; a new
+`sections/BottomNav.tsx` carries the same five destinations (Calendar,
+Tags, Search, Company Files, Upload) as icon+label items fixed to the
+bottom of the viewport on phones, with Upload pulled into a raised center
+"+"-style button (the reference pattern the task pointed at, and the
+single most common action) — the other four keep `OPS_NAV_ROUTES`'
+relative order, split two-and-two around it. A new `UserMenu` inside
+`Header.tsx` collapses company/email/role/Log Out behind one account-icon
+button + dropdown on phones; desktop is untouched. `App.tsx` was split
+into `AppContent` (a child of `AuthProvider`, so it can read session
+status) so both the bottom nav and the page's own bottom padding
+(`pb-24 sm:pb-0`, keeping the fixed bar from covering the last item) key
+off `status === 'signed-in'`. Nav icons (`CalendarDays`/`Tag`/`Search`/
+`FileText`/`Upload`) are all already imported elsewhere in this app
+(`RouteCta.tsx`, `TagsPreview.tsx`, `DocumentCard.tsx`, `UploadPage.tsx`)
+— no new icon set added, though `DocumentTypeIcon` below does add one new
+icon (`Image`) from the same already-used `lucide-react` package.
+
+(2) Calendar's "Dates" section (`DatesView.tsx`) was a flat scrolling
+list whose rows showed the raw, truncated filename
+("179014556051314855...") instead of anything meaningful, and didn't read
+as a calendar at all — also confirmed, real. Replaced with a real month
+grid (new `features/calendar/MonthGrid.tsx`: weeks as rows, days as
+cells, a compact count badge per day with documents; month math via three
+new `lib/dates.ts` helpers — `startOfMonth`/`addMonths`/`daysInMonth`)
+with the tapped day's entries listed below it. Each entry uses a new
+shared `formatDocumentLabel()` (`features/ops/opsShared.tsx`): vendor
+name + doc type (e.g. "Lay Meng Engineering — invoice"), falling back to
+description, then doc_type alone — never the filename — plus a small
+file-type icon (`DocumentTypeIcon`, image vs. everything else via
+`media_type`). The upload/document toggle keeps its exact existing
+behavior, just repositioned above the grid.
+
+**Found, deliberately not silently "fixed"**: the task's premise that
+this label format "mirrors what Company Files already does" doesn't
+match the actual code — `DocumentCard.tsx`'s header shows `description`
+first (a deliberate, already-shipped DECISIONS #52 choice, not a bug),
+not vendor+doctype. `formatDocumentLabel()` is used by the new Calendar
+rows only; Company Files was left untouched rather than silently
+overriding a prior, reasoned, already-verified-live decision based on a
+mistaken premise in the task prompt — flagged in `docs/KANBAN.md` Backlog
+for an explicit call on whether to unify.
+
+Verified live end to end (Playwright, real login as `owner@try-demo.test`,
+real seeded data, 375×812 viewport + an Android Chrome user agent):
+before/after screenshots captured against the actual pre-change code (via
+a temporary `git stash`, popped immediately after) confirm both the
+header overlap and the raw-filename flat list in the old code, and their
+absence in the new code; the month grid shows real per-day counts (6/6/4
+for three real seeded days in September 2026); a tapped day's full 6-row
+detail list was verified via DOM text extraction (not just a screenshot
+crop) to confirm no rows were silently dropped. Zero browser console
+errors throughout. `npm run typecheck`/`npm run build` both clean. No
+backend change. Screenshots: `docs/screenshots/mobile-header-before.png`,
+`mobile-header-after.png`, `mobile-bottom-nav-account-menu.png`,
+`calendar-month-grid-before.png`, `calendar-month-grid-after.png`,
+`calendar-day-detail.png`.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -798,7 +873,7 @@ both clean. Screenshots: `docs/screenshots/company-files-dates-and-delete.png`,
 - **`document.sha256` is UNIQUE globally, not per-company** — found live 2026-09-22 seeding a second test company; a byte-identical file can never be uploaded to two different companies. `docs/KANBAN.md` backlog; needs a table rebuild in SQLite, not a one-line fix.
 - **`jaga-vision`'s `MemoryMax=2.5G` cap (DECISIONS #55, #58) is unverified — genuinely untestable on macOS (no systemd/cgroups), not just untested.** The whole "isolated service can't take down the box" design depends on this actually firing. `deploy/README.md` has the exact live-box verification procedure. **`jaga-vision` is deployed and generating correct captions as of 2026-09-23** (DECISIONS #56 — confirmed live, not the same thing as this cap being confirmed) — deployment happening doesn't by itself confirm `MemoryMax` fires; that must still be checked before trusting the isolation in front of anyone. **DECISIONS #58 revised what the cap needs to cover** (a real measured ~390MB resident baseline, not the ~2GB #55 assumed) but the code change itself hasn't reached the box yet — see the entry above.
 - **`vision/app.py`'s resident-model change (DECISIONS #58) has not been deployed to the live Lightsail box** — the code is committed locally but `jaga-vision` on the box is still running the old per-request-load version until it's deployed and restarted, which needs an explicit go-ahead first (same box, same rule as the original DECISIONS #55 build). Until then, the box's captions still pay the ~20s load cost on every single request, not just the first after a restart.
-- **`zh.json`/`ta.json`/`ms.json` (DECISIONS #57) are English-value placeholders, not real translations** — selecting 中文/தமிழ்/BM in the header today changes the stored language code and re-renders through i18next, but every string still reads in English. Real translations are a separate, deferred task (`docs/KANBAN.md` Backlog).
+- **Four new UI strings from the mobile-first fix (DECISIONS #62) were translated by the assistant, not a human** — `header.accountMenu`, `ops.dates.prevMonth`/`nextMonth`/`selectADay`/`noneOnDay` in `zh.json`/`ms.json`/`ta.json`. Everything else in those three files is now a real, human-provided translation (DECISIONS #61, supersedes #57's English-value stubs) — just not these four yet. `docs/KANBAN.md` Backlog has the follow-up.
 
 ## Auth (added 2026-09-22, DECISIONS #28-31)
 
@@ -879,14 +954,16 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
 | Client-side photo downscale before upload (2026-09-22) | `lib/imageNormalize.ts` |
 | Tap-to-talk voice captioning (Web Speech API, 2026-09-23, DECISIONS #52) | `hooks/useSpeechCaption.ts` |
-| i18n bootstrap (i18next instance, language persistence) + locale files — EN complete, ZH/TA/MS are English-value stubs pending real translation (2026-09-23, DECISIONS #57) | `i18n.ts`, `locales/{en,zh,ta,ms}.json` |
+| i18n bootstrap (i18next instance, language persistence) + locale files — all four real (EN, and ZH/TA/MS since DECISIONS #61 superseded #57's English-value stubs; four strings within ZH/TA/MS from DECISIONS #62 are assistant- not human-translated, `docs/KANBAN.md` Backlog) | `i18n.ts`, `locales/{en,zh,ta,ms}.json` |
 | The real logged-in app's shared data layer (documents/expectations/obligations/reviewItems + backend health) and status bar, used by every page below (2026-09-23, DECISIONS #59) | `features/ops/useOpsData.ts`, `features/ops/OpsStatusBar.tsx` |
 | Shared field/status components (`DocTypeField`, `PillPicker`, `VoiceCaptionButton`, `PictureToggleField`, `StatusPill` — no badge for `filed`/`processed`, DECISIONS #60 — blob-URL fetch hook) and the API client (`BUCKETS`/`DOC_TYPES`, all `/api/documents`\|`/api/search`\|etc. calls) | `features/ops/opsShared.tsx`, `features/ops/opsApi.ts` |
 | Shared destructive-action confirmation modal ("Delete X? This can't be undone.", 2026-09-23, DECISIONS #60) | `components/ui/ConfirmDialog.tsx` |
+| Mobile-only bottom nav (Calendar/Tags/Upload-center/Search/Company Files) + the compact account-menu dropdown inside the top bar (2026-09-23, DECISIONS #62) | `sections/BottomNav.tsx`, `sections/Header.tsx` (`UserMenu`) |
 | Upload a document + the review queue — `/upload` | `pages/UploadPage.tsx`, `features/ops/ReviewQueueCard.tsx` |
 | Every document, bucket-filterable (reads `?bucket=` for deep links) — `/company-files` | `pages/CompanyFilesPage.tsx`, `features/ops/DocumentCard.tsx`, `features/ops/DocumentResultsList.tsx` |
 | Real, session-scoped full-text search — `/search` | `pages/SearchPage.tsx` |
-| Signed-in Calendar hub (dates/obligations/gap analysis merged) and Tags landing (six bucket buttons into Company Files) — same URLs as the marketing `/calendar`/`/tags`, session-branched in `Page.tsx` | `features/calendar/CalendarHub.tsx`, `features/calendar/DatesView.tsx`, `features/tags/TagsLanding.tsx` |
+| Signed-in Calendar hub (dates/obligations/gap analysis merged) and Tags landing (six bucket buttons into Company Files) — same URLs as the marketing `/calendar`/`/tags`, session-branched in `Page.tsx`; Dates renders a real month grid, not a flat list (2026-09-23, DECISIONS #62) | `features/calendar/CalendarHub.tsx`, `features/calendar/DatesView.tsx`, `features/calendar/MonthGrid.tsx`, `features/tags/TagsLanding.tsx` |
+| Shared "vendor — doc type / description / doc type" document label + file-type icon, used by Calendar's day list only — not (yet) Company Files, see `docs/KANBAN.md` Backlog (2026-09-23, DECISIONS #62) | `features/ops/opsShared.tsx` (`formatDocumentLabel`, `DocumentTypeIcon`) |
 | Login form | `pages/LoginPage.tsx` |
 
 ## Commands (run in `web/`)
@@ -925,7 +1002,7 @@ see the callout below on why that matters for `/ops` specifically.
 
 ## Known risks
 
-- Header: logo, a nav that depends on session state (`aria-current` on the active item) — signed-out shows the marketing tabs Calendar and Tags; signed-in shows all five real-app items, Calendar/Tags/Search/Company Files/Upload, in that order (2026-09-23, DECISIONS #59) — plus Log In / (email + Log Out when signed in), Get Started (hidden on phones, still points at the marketing `/calendar` even when signed in — `docs/KANBAN.md` Backlog). The old nav (Product, Use Cases, Security, Stack, Pricing) is gone. The landing (`/`) is hero-only. `/how-it-works`, `/stack` and `/get-started` still exist but have no header tab; they are reached from the footer (Guides, Security). Other footer labels are plain-text placeholders. "Log In" now goes to a real `/login` (dev-login placeholder — see the Auth section above for what that means and doesn't mean).
+- Header: logo, a nav that depends on session state (`aria-current` on the active item) — signed-out shows the marketing tabs Calendar and Tags; signed-in shows all five real-app items, Calendar/Tags/Search/Company Files/Upload, in that order (2026-09-23, DECISIONS #59) — plus Log In / (email + Log Out when signed in), Get Started (hidden on phones, still points at the marketing `/calendar` even when signed in — `docs/KANBAN.md` Backlog). The old nav (Product, Use Cases, Security, Stack, Pricing) is gone. The landing (`/`) is hero-only. `/how-it-works`, `/stack` and `/get-started` still exist but have no header tab; they are reached from the footer (Guides, Security). Other footer labels are plain-text placeholders. "Log In" now goes to a real `/login` (dev-login placeholder — see the Auth section above for what that means and doesn't mean). **Below `sm` (phones), signed in: the five real-app items move to a fixed bottom nav (`sections/BottomNav.tsx`) instead of the inline list above, and the inline email/Log Out collapse into a single account-menu button (`UserMenu`) — DECISIONS #62, fixing a real overlap bug confirmed on Android Chrome at 375px. Signed-out mobile keeps the inline two-item nav (Calendar, Tags) — light enough to not need the same treatment.**
 - The landing has no footer and no scroll, but the hero grows if search results are shown on a very short viewport (verified fine at 1440x900).
 - DB schema screenshots are Postgres-flavoured (uuid, enums, `vector(1536)`, RLS, Supabase `auth_subject`); the chosen store is SQLite. Mapping is unresolved.
 - Python version drift: `ARCHITECTURE.md` says 3.11, `bootstrap.sh` installs 3.12, conda env `agent` is 3.11.15.

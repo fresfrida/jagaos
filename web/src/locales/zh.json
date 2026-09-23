@@ -8,6 +8,7 @@
     "logOut": "登出",
     "getStarted": "开始使用",
     "language": "语言",
+    "accountMenu": "账户菜单",
     "nav": {
       "calendar": "日历",
       "tags": "标签",
@@ -144,7 +145,11 @@
       "uploadDate": "上传日期",
       "documentDate": "文件日期",
       "noDocumentDate": "无文件日期 ({{count}})",
-      "noneUploaded": "尚未上传任何文件。"
+      "noneUploaded": "尚未上传任何文件。",
+      "prevMonth": "上个月",
+      "nextMonth": "下个月",
+      "selectADay": "点击有文件的日期即可在此查看。",
+      "noneOnDay": "这一天没有文件。"
     },
     "gaps": {
       "heading": "差距分析 — 已持有 {{satisfied}} / {{total}}",

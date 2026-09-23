@@ -1,4 +1,7 @@
+import { CircleUserRound } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Badge } from '../components/ui/Badge'
 import { Container } from '../components/ui/Container'
 import { ButtonLink } from '../components/ui/ButtonLink'
 import { Logo } from '../components/ui/Logo'
@@ -8,27 +11,14 @@ import { cn } from '../lib/cn'
 import { SUPPORTED_LANGUAGES, setLanguage, type LanguageCode } from '../i18n'
 import { navigate } from '../router/navigate'
 import { Link } from '../router/Link'
-import { OPS_NAV_ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
-
-// 2026-09-23 (header/nav restructure): the logged-in nav's five items
-// (Calendar, Tags, Search, Company Files, Upload) each need a translated
-// label — the logged-out marketing nav's Calendar/Tags share the same two
-// ids, so they're included here too rather than left reading from
-// ROUTES[id].title (untranslated) while their three new neighbors read
-// from t().
-const NAV_LABEL_KEYS: Partial<Record<RouteId, string>> = {
-  calendar: 'header.nav.calendar',
-  tags: 'header.nav.tags',
-  search: 'header.nav.search',
-  'company-files': 'header.nav.companyFiles',
-  upload: 'header.nav.upload',
-}
+import { NAV_LABEL_KEYS, OPS_NAV_ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute } from '../router/routes'
 
 /** Compact language switcher — a plain <select>, not a custom dropdown
  * widget, per the "keep the control itself simple" brief. Persists via
  * setLanguage (web/src/i18n.ts, localStorage) so the choice survives a
- * reload; zh/ta/ms are English-value stubs for now (2026-09-23) — real
- * translations are a separate, deferred follow-up task. */
+ * reload. zh/ta/ms now hold real Chinese/Malay/Tamil translations (see
+ * i18n.ts's own docstring) — DECISIONS #57 shipped them as English-value
+ * stubs first, superseded once the real translations landed. */
 function LanguageSwitcher() {
   const { i18n, t } = useTranslation()
   return (
@@ -42,6 +32,70 @@ function LanguageSwitcher() {
         <option key={lang.code} value={lang.code}>{lang.label}</option>
       ))}
     </select>
+  )
+}
+
+/** Collapses company/email/role + Log Out behind one button on phones
+ * (2026-09-23, mobile-first header fix) — there is no room to spell out
+ * "Try Demo Pte Ltd · owner@… · OWNER · Log Out" as flat text at 375px,
+ * confirmed by a real Android Chrome screenshot where the top bar's items
+ * overlapped. Desktop keeps the existing inline email + Log Out
+ * (`sm:hidden` on this component's own wrapper in Header below) —
+ * unchanged there, this is additive for small screens only. Same
+ * click-outside-closes pattern as `DocumentCard.tsx`'s overflow menu. */
+function UserMenu() {
+  const { t } = useTranslation()
+  const { user, company, role, logout } = useAuth()
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = () => setOpen(false)
+    document.addEventListener('click', onDocClick)
+    return () => document.removeEventListener('click', onDocClick)
+  }, [open])
+
+  if (!user) return null
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((o) => !o)
+        }}
+        aria-label={t('header.accountMenu')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-muted hover:border-ink/40 hover:text-ink"
+      >
+        <CircleUserRound size={19} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-card border border-line bg-white py-2 shadow-lg"
+        >
+          <div className="border-b border-line px-3 pb-2">
+            {company && <p className="truncate text-[13px] font-medium text-ink">{company.name}</p>}
+            <p className="truncate text-[12px] text-muted">{user.email}</p>
+            {role && <Badge mono className="mt-1">{role}</Badge>}
+          </div>
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              void logout().then(() => navigate(routeHref('home')))
+            }}
+            className="block w-full px-3 pt-2 text-left text-[13px] text-ink hover:bg-canvas"
+          >
+            {t('header.logOut')}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -60,7 +114,12 @@ export function Header({ current }: { current: ResolvedRoute }) {
       <Container className="flex h-16 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-3 sm:gap-8">
           <Logo />
-          <nav aria-label={t('header.primaryNav')}>
+          {/* Signed-in: the bottom nav (BottomNav.tsx) carries these five
+             items on phones, so the inline list only needs to render from
+             sm: up. Signed-out: just two items (Calendar, Tags), light
+             enough to keep inline at every width — no bottom nav exists
+             for the logged-out marketing pages. */}
+          <nav aria-label={t('header.primaryNav')} className={status === 'signed-in' ? 'hidden sm:block' : 'block'}>
             <ul className="flex items-center gap-0.5">
               {/* Signed-in nav is the five real-app items in their
                  specified order; Calendar/Tags are the same two paths as
@@ -96,10 +155,13 @@ export function Header({ current }: { current: ResolvedRoute }) {
               </Link>
               <button
                 onClick={() => void logout().then(() => navigate(routeHref('home')))}
-                className="rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3"
+                className="hidden rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:block sm:px-3"
               >
                 {t('header.logOut')}
               </button>
+              <span className="sm:hidden">
+                <UserMenu />
+              </span>
             </>
           ) : (
             <Link href={routeHref('login')} className="rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3">

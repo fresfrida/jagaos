@@ -5,9 +5,11 @@ import zh from './locales/zh.json'
 import ta from './locales/ta.json'
 import ms from './locales/ms.json'
 
-/** Singapore's four official languages. zh/ta/ms are English-value stubs
- * for now (structure only) — real translations are a separate, deferred
- * follow-up task, not part of wiring the plumbing. */
+/** Singapore's four official languages. zh/ta/ms shipped as English-value
+ * stubs when this plumbing was first wired (DECISIONS #57); real Chinese/
+ * Malay/Tamil translations landed afterward (git log: "Add real Chinese/
+ * Malay/Tamil translations for nav, buttons, and key labels") — no code
+ * change needed for that swap, per #57's own design. */
 export const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'EN' },
   { code: 'zh', label: '中文' },

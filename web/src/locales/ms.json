@@ -8,6 +8,7 @@
     "logOut": "Log Keluar",
     "getStarted": "Mula",
     "language": "Bahasa",
+    "accountMenu": "Menu akaun",
     "nav": {
       "calendar": "Kalendar",
       "tags": "Tag",
@@ -144,7 +145,11 @@
       "uploadDate": "Tarikh muat naik",
       "documentDate": "Tarikh dokumen",
       "noDocumentDate": "Tiada tarikh dokumen ({{count}})",
-      "noneUploaded": "Belum ada dokumen dimuat naik."
+      "noneUploaded": "Belum ada dokumen dimuat naik.",
+      "prevMonth": "Bulan sebelumnya",
+      "nextMonth": "Bulan seterusnya",
+      "selectADay": "Ketik hari yang mempunyai dokumen untuk melihatnya di sini.",
+      "noneOnDay": "Tiada dokumen pada hari ini."
     },
     "gaps": {
       "heading": "Analisis jurang — {{satisfied}} daripada {{total}} dipegang",

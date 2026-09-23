@@ -35,3 +35,21 @@ export function formatWeekRange(startIso: string): string {
   const startText = sameMonth ? String(startDate.getDate()) : formatDayMonth(startIso)
   return `${startText} – ${formatDayMonth(end)} ${endDate.getFullYear()}`
 }
+
+/** First day of the month `iso` falls in, as `YYYY-MM-DD` (2026-09-23, Calendar month grid). */
+export function startOfMonth(iso: string): string {
+  const d = parseIsoDate(iso)
+  return toIsoDate(new Date(d.getFullYear(), d.getMonth(), 1))
+}
+
+/** `iso` shifted by whole months, clamped to day 1 first so e.g. Jan 31 + 1 month can't skip to March. */
+export function addMonths(iso: string, months: number): string {
+  const d = parseIsoDate(startOfMonth(iso))
+  return toIsoDate(new Date(d.getFullYear(), d.getMonth() + months, 1))
+}
+
+/** Number of days in the month `iso` falls in. */
+export function daysInMonth(iso: string): number {
+  const d = parseIsoDate(iso)
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+}

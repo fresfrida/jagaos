@@ -66,6 +66,20 @@ export const TAB_ROUTES = ['calendar', 'tags'] as const
  * from OpsConsole's remaining tabs. */
 export const OPS_NAV_ROUTES = ['calendar', 'tags', 'search', 'company-files', 'upload'] as const
 
+/** Translated label per signed-in nav item, shared by the desktop header
+ * (`Header.tsx`) and the mobile bottom nav (`BottomNav.tsx`, 2026-09-23
+ * mobile-first header fix) so the two surfaces can't drift out of sync —
+ * the logged-out marketing nav's Calendar/Tags share the same two ids, so
+ * they're included here too rather than left reading from
+ * ROUTES[id].title (untranslated). */
+export const NAV_LABEL_KEYS: Partial<Record<RouteId, string>> = {
+  calendar: 'header.nav.calendar',
+  tags: 'header.nav.tags',
+  search: 'header.nav.search',
+  'company-files': 'header.nav.companyFiles',
+  upload: 'header.nav.upload',
+}
+
 export const routeHref = (id: RouteId): string => ROUTES[id].path
 
 /** Trailing slashes are ignored. Unknown paths are 'not-found'. */

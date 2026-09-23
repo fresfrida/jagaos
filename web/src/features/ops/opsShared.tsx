@@ -5,11 +5,39 @@
  * doesn't have to import the whole review-card/document-card machinery
  * along with it. Content moved verbatim; nothing here changed behavior. */
 
-import { Mic, MicOff } from 'lucide-react'
+import { FileText, Image as ImageIcon, Mic, MicOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSpeechCaption } from '../../hooks/useSpeechCaption'
-import { DOC_TYPES, opsApi } from './opsApi'
+import { DOC_TYPES, opsApi, type DocumentRow } from './opsApi'
+
+/** "Vendor — doc_type", falling back to the description, then doc_type
+ * alone, never a raw filename (2026-09-23, Calendar month-grid fix — a
+ * confirmed real bug: DatesView's day rows showed raw truncated filenames
+ * like "179014556051314855..." instead of anything meaningful). One
+ * shared rule so a day's document list and any future caller agree on
+ * what "a meaningful label" means, rather than reinventing it inline.
+ * **Not yet used by `DocumentCard.tsx`** (Company Files) — that card's
+ * header deliberately shows `description` first instead (DECISIONS #52),
+ * a separate, already-shipped, already-reasoned-through choice; this
+ * matches the Calendar task's own explicit fallback order, not what
+ * Company Files currently renders. */
+export function formatDocumentLabel(doc: Pick<DocumentRow, 'vendor_name' | 'doc_type' | 'description'>): string {
+  if (doc.vendor_name) return doc.doc_type ? `${doc.vendor_name} — ${doc.doc_type}` : doc.vendor_name
+  if (doc.description) return doc.description
+  if (doc.doc_type) return doc.doc_type
+  return ''
+}
+
+/** Small inline file-type icon — image vs. everything else (PDF today),
+ * distinguished the same way `DocumentThumbnail` below already does
+ * (`media_type.startsWith('image/')`) but without fetching the file's
+ * bytes, for compact rows where a full thumbnail fetch per entry isn't
+ * warranted (2026-09-23, Calendar month-grid fix). */
+export function DocumentTypeIcon({ mediaType }: { mediaType: string }) {
+  const Icon = mediaType.startsWith('image/') ? ImageIcon : FileText
+  return <Icon size={14} className="shrink-0 text-muted" aria-hidden="true" />
+}
 
 // 2026-09-22 (DECISIONS #45): shared <datalist> id both DocumentCard's and
 // ReviewQueueCard's vendor_name <input> point at via list=. Each page that
