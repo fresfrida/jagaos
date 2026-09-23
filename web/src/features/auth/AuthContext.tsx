@@ -12,6 +12,12 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   login: (params: DevLoginParams) => Promise<void>
   logout: () => Promise<void>
+  // 2026-09-23 (role/permission work): the company-settings page needs the
+  // rest of the app (header, any other open tab reading company.name) to
+  // reflect a save immediately, not just on the next full reload — a
+  // targeted re-fetch of /api/auth/me rather than a second, parallel
+  // "update company in place" code path.
+  refreshCompany: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -59,7 +65,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ status: 'signed-out', user: null, company: null, role: null, error: null })
   }, [])
 
-  return <AuthContext.Provider value={{ ...state, login, logout }}>{children}</AuthContext.Provider>
+  const refreshCompany = useCallback(async () => {
+    const { company } = await authApi.me()
+    setState((prev) => ({ ...prev, company }))
+  }, [])
+
+  return <AuthContext.Provider value={{ ...state, login, logout, refreshCompany }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth(): AuthContextValue {

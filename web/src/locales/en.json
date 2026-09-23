@@ -7,6 +7,12 @@
       "backToHome": "Back to home"
     }
   },
+  "home": {
+    "heading": "Welcome to JagaOS",
+    "subheading": "Company memory for growing teams — capture documents, decisions and deadlines, then find them again in seconds.",
+    "signIn": "Sign in",
+    "getStarted": "Get started"
+  },
   "header": {
     "primaryNav": "Primary",
     "logIn": "Log In",
@@ -19,8 +25,17 @@
       "tags": "Tags",
       "search": "Search",
       "companyFiles": "Company Files",
-      "upload": "Upload"
+      "upload": "Upload",
+      "companySettings": "Company Settings"
     }
+  },
+  "companySettings": {
+    "heading": "Company Settings",
+    "nameLabel": "Company name",
+    "fyeMonthLabel": "FYE month",
+    "fyeDayLabel": "FYE day",
+    "readOnlyNotice": "Only the owner can change these — ask them if something needs updating.",
+    "saved": "Saved."
   },
   "auth": {
     "login": {

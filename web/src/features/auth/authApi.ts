@@ -17,6 +17,11 @@ export interface User {
 export interface Company {
   id: number
   name: string
+  // 2026-09-23 (role/permission work): previously never returned by
+  // dev-login/me — nothing read them, since there was no endpoint to edit
+  // them either. Both now exist for the company-settings page.
+  fye_month: number
+  fye_day: number
 }
 
 export interface Session {
@@ -90,6 +95,18 @@ export const authApi = {
       clearToken()
     }
   },
+
+  // Company settings (2026-09-23, role/permission work) — owner-only
+  // server-side (require_role("owner"), app/main.py::edit_company); the
+  // frontend gates the page/fields the same way but the backend check is
+  // the real one. Scoped to name/fye_month/fye_day, same floor as the
+  // request body itself (CompanyEditRequest's own docstring).
+  updateCompany: (companyId: number, body: { name?: string; fye_month?: number; fye_day?: number }) =>
+    apiRequest<{ status: string }>(`/api/companies/${companyId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(body),
+    }),
 }
 
 export const ROLE_ORDER: Record<Role, number> = { viewer: 0, user: 1, admin: 2, owner: 3 }

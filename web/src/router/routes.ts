@@ -3,10 +3,11 @@ import { PRODUCT_NAME } from '../config/product'
 /** Real URL paths (/calendar), served by the SPA fallback on Vite, Caddy and Vercel (see web/vercel.json). */
 export type RouteId =
   | 'home' | 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'get-started' | 'login' | 'ops'
-  | 'upload' | 'company-files' | 'search'
+  | 'upload' | 'company-files' | 'search' | 'company-settings'
 export type ResolvedRoute = RouteId | 'not-found'
 /** Pages that share the title + content layout. */
-export type FrameRouteId = 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'ops' | 'upload' | 'company-files' | 'search'
+export type FrameRouteId =
+  | 'calendar' | 'tags' | 'how-it-works' | 'stack' | 'ops' | 'upload' | 'company-files' | 'search' | 'company-settings'
 
 export interface RouteConfig {
   path: string
@@ -54,6 +55,7 @@ export const ROUTES: Record<RouteId, RouteConfig> = {
   upload: { path: '/upload', title: 'Upload', titleKey: 'ops.tabs.review' },
   'company-files': { path: '/company-files', title: 'Company Files', titleKey: 'ops.companyFiles.heading' },
   search: { path: '/search', title: 'Search', titleKey: 'ops.search.heading' },
+  'company-settings': { path: '/company-settings', title: 'Company Settings', titleKey: 'companySettings.heading' },
 }
 
 /** The logged-out header's nav tabs, in order. */
@@ -78,6 +80,7 @@ export const NAV_LABEL_KEYS: Partial<Record<RouteId, string>> = {
   search: 'header.nav.search',
   'company-files': 'header.nav.companyFiles',
   upload: 'header.nav.upload',
+  'company-settings': 'header.nav.companySettings',
 }
 
 export const routeHref = (id: RouteId): string => ROUTES[id].path

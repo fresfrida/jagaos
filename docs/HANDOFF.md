@@ -14,10 +14,10 @@ status" and "How to resume" below.
 
 This repo currently holds:
 - **Planning docs** at root, moved into `MDs/` by the user 2026-09-22 (`ARCHITECTURE.md`, `PLATFORM.md`, `UI-SPEC.md`, `GAPS.md`, ...). Written for the earlier "JagaOS = Singapore corp-sec records keeper" concept. Useful context, not automatically current. `GAPS.md` §5 is still binding.
-- **`web/`** — the marketing landing page (mock data, logged-out) plus the real logged-in app: `/login`, then five URL-addressable pages (`/upload`, `/company-files`, `/search`, plus `/calendar` and `/tags` which double as the signed-in Calendar hub and Tags landing page once authenticated — DECISIONS #59, 2026-09-23, supersedes the old single tabbed `/ops` page, kept only as a redirect to `/upload`). Session-backed throughout. See "Where the main logic lives" below.
-- **`app/`** — backend, per `ARCHITECTURE.md` §9 plus a 4-role auth layer (`app/auth.py`, 2026-09-22, DECISIONS #29-31). See "Backend status" below.
+- **`web/`** — `/` (minimal signed-out landing, `WelcomeHero.tsx`, since 2026-09-23 DECISIONS #64 — redirects a signed-in visitor into the app instead of showing marketing content), `/login`, then six URL-addressable app pages (`/upload`, `/company-files`, `/search`, `/company-settings` — owner/admin-only, new 2026-09-23 — plus `/calendar` and `/tags` which double as the signed-in Calendar hub and Tags landing page once authenticated — DECISIONS #59, supersedes the old single tabbed `/ops` page, kept only as a redirect to `/upload`). Session-backed throughout, now role-aware end to end (DECISIONS #64, `docs/PERMISSIONS.md`). See "Where the main logic lives" below.
+- **`app/`** — backend, per `ARCHITECTURE.md` §9 plus a 4-role auth layer (`app/auth.py`, 2026-09-22, DECISIONS #29-31; ownership + company-settings enforcement added 2026-09-23, DECISIONS #64). See "Backend status" below.
 - **`evals/`** — eval runner + adversarial cases, `evals/report.md` committed (10/10 passing, no gateway key needed).
-- **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, auth/tenant-isolation, and vision-caption async wiring (`tests/test_vision_caption.py`, mocked, no torch). 39/39 passing (most need no gateway key).
+- **`tests/`** — pytest: deterministic core, live-gateway, review pause/resume, auth/tenant-isolation/ownership, company settings, and vision-caption async wiring (`tests/test_vision_caption.py`, mocked, no torch). 41/41 passing (most need no gateway key).
 - **`deploy/`** — Lightsail provisioning (Caddy, systemd, `bootstrap.sh`, plus `jaga-vision.service`, DECISIONS #55). **`jaga-vision` is now deployed and confirmed working on production** (2026-09-23, DECISIONS #56 — a real uploaded photo got a correct caption, checked directly in the live DB); `MemoryMax` enforcement and the exact dependency versions running on the box are still unconfirmed, see "Known gaps" below.
 - **`vision/`** — isolated image-captioning service (own venv, `Salesforce/blip-image-captioning-base`), 2026-09-23, DECISIONS #55. Deliberately separate from `app/` — see "Backend status" below.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
@@ -954,6 +954,113 @@ both clean throughout. No backend change. Screenshots:
 `company-files-bucket-chips-bm.png`, `company-files-edit-pills-bm.png`,
 `tags-landing-bm.png`.
 
+**Logged-out landing page + all four roles actually enforced and testable
+end to end — a real feature, the first round of the day to touch backend
+authorization, not a bug fix (2026-09-23, DECISIONS #64).** Full
+role × action matrix, and the three real ambiguities in the request
+resolved and recorded (not silently picked): `docs/PERMISSIONS.md` — not
+repeated in full here.
+
+**Landing**: `Page.tsx`'s `home` case rendered `<Hero/>` unconditionally —
+confirmed live, a signed-in visitor to `/` saw the marketing hero instead
+of the app, unlike `calendar`/`tags` (already session-branched). Fixed
+with the same bare mount-effect pattern `/ops`'s redirect already uses:
+signed-in → `HomeRedirect` → `/calendar`; signed-out → a new, deliberately
+minimal `WelcomeHero.tsx` (heading, one line, Sign in + Get started, both
+routing to `/login` per the explicit ask, not `GetStartedPage`) — no
+search demo, no marketing CTAs, no scroll. `Hero.tsx` deleted (confirmed
+via grep it was `/`'s only caller) rather than left as dead code;
+`MemorySearch.tsx` (used only by the now-deleted `Hero.tsx`) was **not**
+cascade-deleted — flagged in `docs/KANBAN.md` instead of chased down
+further, a bigger side-quest than this task asked for. Footer suppression
+needed no new code (`App.tsx` already hides it for `route === 'home'`).
+
+**Permissions** (ground truth already existed — `ROLE_ORDER`/
+`require_role` in `app/auth.py`, `document.uploaded_by_user_id` in
+`app/db.py` — this closes enforcement gaps, it doesn't build a new
+model): `PATCH /api/documents/{id}` (`edit_document`) gained an ownership
+check — a `user`-role account may now only edit a document they
+themselves uploaded (admin/owner unaffected; a document with no recorded
+uploader, e.g. pre-existing seed data, stays editable by any `user`+,
+since there's no real uploader to protect it from). New
+`PATCH /api/companies/{id}` (`edit_company`, owner-only), scoped to
+`name`/`fye_month`/`fye_day` — the company row was previously write-once
+at signup; `CompanyOut` (`dev_login`/`/api/auth/me`) had to gain
+`fye_month`/`fye_day` for the first time so the new settings page has
+something to show before a save. `resolve_review` was deliberately **kept
+admin-only**, not extended to let a `user` resolve their own upload's
+review item despite the surface symmetry with the new edit rule — the
+review queue is this product's human-in-the-loop safety check
+(DECISIONS #40), and two of its own checks (#33, #48) exist precisely
+because trusting the uploader's or the model's self-report alone was
+already proven unsafe on this codebase; letting the uploader also clear
+their own flagged upload would remove the second pair of eyes that's the
+actual point. **Found, not fixed**: `GET`/`POST /api/companies` have no
+session or role check at all — confirmed pre-existing and genuinely
+unused (no frontend/script/test caller) by grep, flagged in
+`docs/KANBAN.md` rather than fixed inside an already-large scope.
+
+**Seeding**: `scripts/seed_dev_db.py` now always ensures one account per
+role (`admin@`/`user@`/`viewer@try-demo.test`, alongside the existing
+`owner@`) exists — via the already-idempotent `add_member` +
+rejoin-`dev-login` endpoints, no new endpoint needed — and prints all four
+tokens even on a re-run of an already-seeded company (the old code
+returned early before reaching that point on that path).
+
+**Nav + role chip**: `Header.tsx`'s new `visibleNavRoutes(role)` hides
+Upload for `viewer` (already 403'd server-side) and appends Company
+Settings for admin+ — resolving a real contradiction in the request (one
+part implied admin can reach the settings page, another implied the nav
+entry is owner-only; both can't be true — the entry is visible to
+owner+admin, the fields stay owner-only editable, the only reading under
+which "admin sees it read-only" is a reachable UI state).
+`BottomNav.tsx` reads `role` directly from `useAuth()` (no new prop
+plumbing) and, for `viewer`, drops the raised center Upload button and
+reflows the remaining four into one plain even row. A persistent role
+chip (`Badge`, always visible beside the avatar button, not just inside
+the opened dropdown) and a Company Settings link inside that same
+dropdown (own resolution: the bottom nav has no room for a conditional
+sixth slot, so the already-mobile-only account menu is where a mobile
+owner/admin actually reaches the page) both live in `Header.tsx`'s
+`UserMenu`.
+
+Verified live end to end, not just by unit test: two new backend tests
+(`tests/test_auth.py` — ownership: uploader edits own doc 200, a
+different `user` 403, admin/owner unaffected, a `NULL`-uploader doc stays
+editable; company settings: admin 403, owner 200 and persists, plus the
+exact paired contrast the request named — the same admin session's
+`POST .../archive` succeeds (200) immediately next to its
+`PATCH .../companies` failing (403)) — full suite 41/41. The same paired
+contrast was also re-run live via `curl` against the real running
+backend (not just pytest), with a second real `user`-role account created
+for the cross-user case since the seed script only creates one per role:
+admin PATCH company settings → 403; viewer POST upload → 403; a
+different `user` PATCHing someone else's fresh upload → 403; that
+document PATCHed by its actual uploader → 200; admin archiving it → 200;
+the same admin session's company-settings PATCH → 403 again. Frontend:
+`npm run typecheck`/`npm run build` clean; Playwright at 375px for the
+landing page and each of the four seeded roles' Calendar view (role chip,
+nav differences, bottom-nav reflow for viewer all confirmed), plus
+desktop-width nav screenshots (owner sees Company Settings, user
+doesn't), the mobile account-menu's Company Settings link, and a real
+settings save confirmed to propagate to the Calendar page's own
+company-name display via a new `refreshCompany()` on `AuthContext`. Zero
+console errors across all four role sessions. Screenshots:
+`docs/screenshots/landing-page-signed-out.png`,
+`role-owner-calendar-375.png`, `role-admin-calendar-375.png`,
+`role-user-calendar-375.png`, `role-viewer-calendar-375.png`,
+`nav-owner-company-settings-visible.png`,
+`nav-user-no-company-settings.png`,
+`mobile-usermenu-company-settings-link.png`,
+`company-settings-owner-editable.png`, `company-settings-admin-readonly.png`,
+`company-settings-saved-confirmation.png`.
+
+**Not deployed**: this round changed the backend (two new/changed
+endpoints, two new Pydantic model fields) — Vercel auto-deploys the
+frontend half on push per the standing convention, but **Lightsail needs
+an explicit redeploy to pick up the backend change, not done here**
+pending a separate go-ahead.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -976,14 +1083,19 @@ caller's membership — never from a client-supplied parameter (closes a
 real tenant-isolation gap; every endpoint previously trusted whatever
 `company_id` the client sent). 4 roles, numeric order in `app/auth.py`:
 `viewer < user < admin < owner`. Permissions: viewer reads; user also
-uploads; admin also resolves reviews and adds members; owner also manages
-the company. This is a **simpler, generic set than `PLATFORM.md`'s original
-six** (owner/director/staff/accountant/corpsec/auditor) — a deliberate
-supersession (DECISIONS #29), not an oversight. **Resolved 2026-09-22**:
-corp sec maps to `viewer` (sees everything, changes nothing — already what
-the role does, no new name needed); **one `owner` per company, many
-`admin`s**, enforced in `add_member` (`app/main.py`), not just documented —
-adding a second owner is a 409.
+uploads and edits their own uploads (**own-upload check added
+2026-09-23, DECISIONS #64** — `user` can't edit another user's upload;
+admin/owner can edit any); admin also resolves reviews, archives
+documents, and adds members; owner also manages the company (**new
+2026-09-23**: `PATCH /api/companies/{id}`, name/FYE only). Full
+role × action matrix: `docs/PERMISSIONS.md`. This is a **simpler, generic
+set than `PLATFORM.md`'s original six** (owner/director/staff/accountant/
+corpsec/auditor) — a deliberate supersession (DECISIONS #29), not an
+oversight. **Resolved 2026-09-22**: corp sec maps to `viewer` (sees
+everything, changes nothing — already what the role does, no new name
+needed); **one `owner` per company, many `admin`s**, enforced in
+`add_member` (`app/main.py`), not just documented — adding a second owner
+is a 409.
 
 **Login is a placeholder, the session model isn't.** `POST
 /api/auth/dev-login` (email in, session out) exists because no
@@ -996,18 +1108,25 @@ the moment this backend is reachable from the internet (Lightsail). See
 
 Schema: `app_user`, `membership` (`company_id`, `user_id`, `role`),
 `session` (hashed tokens, 7-day TTL). `document.uploaded_by_user_id`
-attributes uploads. Endpoints: `POST /api/auth/dev-login`, `GET
-/api/auth/me`, `POST /api/auth/logout`, `GET`/`POST
-/api/companies/{id}/members`. Tests: `tests/test_auth.py` (13/13, no gateway
-key needed — pure DB/HTTP against `TestClient`).
+attributes uploads and, since 2026-09-23, is actually enforced (not just
+recorded) for `user`-role edits. Endpoints: `POST /api/auth/dev-login`,
+`GET /api/auth/me`, `POST /api/auth/logout`, `GET`/`POST
+/api/companies/{id}/members`, `PATCH /api/companies/{id}` (owner-only,
+new 2026-09-23). Tests: `tests/test_auth.py` (17 tests, part of the full
+41-test suite, no gateway key needed — pure DB/HTTP against
+`TestClient`).
 
-Frontend: `web/src/features/auth/` (`AuthContext`/`useAuth`, `authApi.ts`
-for session storage + the auth calls), `web/src/pages/LoginPage.tsx`.
-The real app's five pages (`/upload`, `/company-files`, `/search`, plus
-the signed-in `/calendar`/`/tags`, DECISIONS #59) are session-scoped and
-role-aware via the shared `RequireSession`/`useAuth` — upload hidden below
-`user`, review Accept/Reject hidden below `admin` — instead of a company
-create/switch UI. `web/src/lib/apiClient.ts`
+Frontend: `web/src/features/auth/` (`AuthContext`/`useAuth` — gained
+`refreshCompany()` 2026-09-23 so a settings save reflects app-wide without
+a reload, `authApi.ts` for session storage + the auth calls),
+`web/src/pages/LoginPage.tsx`. The real app's six pages (`/upload`,
+`/company-files`, `/search`, `/company-settings` — new, owner/admin-only,
+2026-09-23 — plus the signed-in `/calendar`/`/tags`, DECISIONS #59) are
+session-scoped and role-aware via the shared `RequireSession`/`useAuth` —
+upload hidden below `user`, review Accept/Reject hidden below `admin`,
+editing another user's upload blocked for `user` role, Company Settings
+nav entry hidden below `admin` and its fields disabled below `owner` —
+instead of a company create/switch UI. `web/src/lib/apiClient.ts`
 is the one shared fetch wrapper both `authApi.ts` and `opsApi.ts` use (was
 two separate copies before 2026-09-22; also where FastAPI's `{"detail":
 ...}` error bodies get turned into a plain message instead of showing raw
@@ -1038,12 +1157,13 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Mock memories + tags | `features/memories/mockData.ts` |
 | Event → documents/decisions rule | `features/calendar/eventRelations.ts` |
 | Logged-out preview search — deliberately still mock, real search lives at `/search` instead (2026-09-22, DECISIONS #41 — this file has no session to call a real endpoint with) | `features/search/searchService.ts` |
-| Routes, path parsing, page titles, nav lists | `router/routes.ts` (`ROUTES`, `TAB_ROUTES`, `OPS_NAV_ROUTES`, `parsePath`) |
+| Routes, path parsing, page titles, nav lists | `router/routes.ts` (`ROUTES`, `TAB_ROUTES`, `OPS_NAV_ROUTES`, `NAV_LABEL_KEYS`, `parsePath`) |
 | Client-side navigation | `router/Link.tsx`, `router/navigate.ts`, `router/useRoute.ts`, `router/useRouteEffects.ts` |
-| Route → page mapping (branches on session for `calendar`/`tags`); shared frame shell (optional i18n title/description override) | `pages/Page.tsx`, `pages/FramePage.tsx` |
+| Route → page mapping (branches on session for `home`/`calendar`/`tags`, 2026-09-23 DECISIONS #64 added the `home` branch); shared frame shell (optional i18n title/description override) | `pages/Page.tsx`, `pages/FramePage.tsx` |
+| Signed-out landing content — deliberately minimal, both CTAs go to `/login` (2026-09-23, DECISIONS #64, replaces the deleted `Hero.tsx`) | `sections/WelcomeHero.tsx` |
 | App window chrome around the logged-out Calendar/Tags marketing preview | `features/preview/ProductFrame.tsx` |
 | Reusable UI | `components/ui/*` (Button, Badge, Card, Container, Reveal, EmptyState, MemoryCard, SourceLabel, Logo) |
-| Session state, login/logout, role helpers | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
+| Session state, login/logout, role helpers, company-settings save/refresh (2026-09-23, `refreshCompany()`) | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
 | Session-gate-and-redirect guard shared by every real-app page (2026-09-23, DECISIONS #59) | `features/auth/RequireSession.tsx` |
 | Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
 | Client-side photo downscale before upload (2026-09-22) | `lib/imageNormalize.ts` |
@@ -1052,7 +1172,8 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | The real logged-in app's shared data layer (documents/expectations/obligations/reviewItems + backend health) and status bar, used by every page below (2026-09-23, DECISIONS #59) | `features/ops/useOpsData.ts`, `features/ops/OpsStatusBar.tsx` |
 | Shared field/status components (`DocTypeField`, `BucketField`, `PillPicker`, `VoiceCaptionButton`, `PictureToggleField`, `StatusPill` — no badge for `filed`/`processed`, DECISIONS #60 — blob-URL fetch hook), translated-label accessors for enum display values (`bucketLabel`/`docTypeLabel`/`roleLabel`/`riskLabel`, DECISIONS #63 — translate display only, never the stored value), `formatDocumentLabel`/`DocumentTypeIcon` (DECISIONS #62-63), and the API client (`BUCKETS`/`DOC_TYPES`, all `/api/documents`\|`/api/search`\|etc. calls) | `features/ops/opsShared.tsx`, `features/ops/opsApi.ts` |
 | Shared destructive-action confirmation modal ("Delete X? This can't be undone.", 2026-09-23, DECISIONS #60) | `components/ui/ConfirmDialog.tsx` |
-| Mobile-only bottom nav (Calendar/Tags/Upload-center/Search/Company Files) + the compact account-menu dropdown inside the top bar (2026-09-23, DECISIONS #62) | `sections/BottomNav.tsx`, `sections/Header.tsx` (`UserMenu`) |
+| Mobile-only bottom nav (Calendar/Tags/Upload-center/Search/Company Files, role-aware since DECISIONS #64 — `viewer` loses the center Upload button and reflows to four) + the compact account-menu dropdown inside the top bar (persistent role chip + Company Settings link, DECISIONS #62/#64) | `sections/BottomNav.tsx`, `sections/Header.tsx` (`UserMenu`, `visibleNavRoutes`) |
+| Company settings — owner-editable, admin read-only, no nav entry or route access below admin (2026-09-23, DECISIONS #64); full role × action matrix | `pages/CompanySettingsPage.tsx`, `docs/PERMISSIONS.md` |
 | Upload a document + the review queue — `/upload` | `pages/UploadPage.tsx`, `features/ops/ReviewQueueCard.tsx` |
 | Every document, bucket-filterable (reads `?bucket=` for deep links) — `/company-files` | `pages/CompanyFilesPage.tsx`, `features/ops/DocumentCard.tsx`, `features/ops/DocumentResultsList.tsx` |
 | Real, session-scoped full-text search — `/search` | `pages/SearchPage.tsx` |
@@ -1096,8 +1217,8 @@ see the callout below on why that matters for `/ops` specifically.
 
 ## Known risks
 
-- Header: logo, a nav that depends on session state (`aria-current` on the active item) — signed-out shows the marketing tabs Calendar and Tags; signed-in shows all five real-app items, Calendar/Tags/Search/Company Files/Upload, in that order (2026-09-23, DECISIONS #59) — plus Log In / (email + Log Out when signed in), Get Started (hidden on phones, still points at the marketing `/calendar` even when signed in — `docs/KANBAN.md` Backlog). The old nav (Product, Use Cases, Security, Stack, Pricing) is gone. The landing (`/`) is hero-only. `/how-it-works`, `/stack` and `/get-started` still exist but have no header tab; they are reached from the footer (Guides, Security). Other footer labels are plain-text placeholders. "Log In" now goes to a real `/login` (dev-login placeholder — see the Auth section above for what that means and doesn't mean). **Below `sm` (phones), signed in: the five real-app items move to a fixed bottom nav (`sections/BottomNav.tsx`) instead of the inline list above, and the inline email/Log Out collapse into a single account-menu button (`UserMenu`) — DECISIONS #62, fixing a real overlap bug confirmed on Android Chrome at 375px. Signed-out mobile keeps the inline two-item nav (Calendar, Tags) — light enough to not need the same treatment.**
-- The landing has no footer and no scroll, but the hero grows if search results are shown on a very short viewport (verified fine at 1440x900).
+- Header: logo, a nav that depends on session state AND role (`aria-current` on the active item) — signed-out shows the marketing tabs Calendar and Tags; signed-in shows the real-app items filtered by role (`Header.tsx`'s `visibleNavRoutes`, 2026-09-23, DECISIONS #64) — Calendar/Tags/Search/Company Files/Upload for user+ (Upload hidden for `viewer`), plus Company Settings appended for admin+ — in that order, plus Log In / (email + Log Out when signed in, or a persistent role chip + avatar menu on phones), Get Started (hidden on phones, still points at the marketing `/calendar` even when signed in — `docs/KANBAN.md` Backlog). The old nav (Product, Use Cases, Security, Stack, Pricing) is gone. The landing (`/`) is a minimal `WelcomeHero` for signed-out visitors only (2026-09-23, DECISIONS #64) — a signed-in visitor is redirected into `/calendar` instead of seeing it. `/how-it-works`, `/stack` and `/get-started` still exist but have no header tab; they are reached from the footer (Guides, Security). Other footer labels are plain-text placeholders. "Log In" now goes to a real `/login` (dev-login placeholder — see the Auth section above for what that means and doesn't mean). **Below `sm` (phones), signed in: the real-app items move to a fixed bottom nav (`sections/BottomNav.tsx`, also role-aware since DECISIONS #64 — `viewer` loses the raised center Upload button and gets four even items instead) rather than the inline list above, and the inline email/Log Out collapse into a single account-menu button (`UserMenu`, with a persistent role chip beside it and a Company Settings link inside it for admin+) — DECISIONS #62, fixing a real overlap bug confirmed on Android Chrome at 375px. Signed-out mobile keeps the inline two-item nav (Calendar, Tags) — light enough to not need the same treatment.**
+- The signed-out landing (`WelcomeHero`) has no footer and no scroll — it's deliberately just a heading, one line, and two buttons, so there's no search-results-growth case to worry about (unlike the deleted `Hero.tsx`, which had this exact caveat for its `MemorySearch` box).
 - DB schema screenshots are Postgres-flavoured (uuid, enums, `vector(1536)`, RLS, Supabase `auth_subject`); the chosen store is SQLite. Mapping is unresolved.
 - Python version drift: `ARCHITECTURE.md` says 3.11, `bootstrap.sh` installs 3.12, conda env `agent` is 3.11.15.
 - Fonts load from Google Fonts at runtime (external request).
@@ -1109,8 +1230,8 @@ see the callout below on why that matters for `/ops` specifically.
 
 ## How to resume
 
-1. Read `docs/KANBAN.md` (Doing / Blocked) and `docs/DECISIONS.md`, especially #28-31.
+1. Read `docs/KANBAN.md` (Doing / Blocked), `docs/DECISIONS.md` (especially #28-31, #64), and `docs/PERMISSIONS.md`.
 2. Start both servers: `uvicorn app.main:app --reload` from repo root (backend), `cd web && npm run dev` (frontend, local iteration — the deployed `https://jagaos.vercel.app` is what actually gets checked on the phone, per the Commands section above).
-3. `python scripts/seed_dev_db.py` if you want a company with data already in it (idempotent — safe to re-run) rather than starting from an empty `/login` signup.
-4. Log in at `/login`, land on `/upload`, upload a document, watch it get classified/extracted, resolve anything flagged, then check `/calendar` (dates/obligations/gap analysis), `/company-files`, and `/search` (2026-09-23, DECISIONS #59 — five real pages, not one tabbed `/ops`; the old URL still works, redirecting to `/upload`). That loop working, end to end, in the browser, is the current bar — not another backend node.
-5. Next real milestones, in the order they'd bite: member-management UI (backend's done, no frontend), a company settings page, a product frame with its own styling instead of `/ops`'s debug-console look (`docs/KANBAN.md` Backlog has the full list).
+3. `python scripts/seed_dev_db.py` (idempotent — safe to re-run) to get a company with data and one account per role — prints `owner@`/`admin@`/`user@`/`viewer@try-demo.test` and each one's dev-login token — rather than starting from an empty `/login` signup.
+4. Log in at `/login`, land on `/upload`, upload a document, watch it get classified/extracted, resolve anything flagged, then check `/calendar` (dates/obligations/gap analysis), `/company-files`, `/search`, and — owner/admin only — `/company-settings` (2026-09-23, DECISIONS #59/#64 — six real pages, not one tabbed `/ops`; the old URL still works, redirecting to `/upload`). Log in as each seeded role to see the nav/permission differences firsthand. That loop working, end to end, in the browser, is the current bar — not another backend node.
+5. Next real milestones, in the order they'd bite: member-management UI (backend's done, no frontend), a product frame with its own styling instead of `/ops`'s debug-console look, deploying this round's backend change to Lightsail (`docs/KANBAN.md` Backlog has the full list).

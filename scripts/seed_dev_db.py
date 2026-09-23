@@ -1,5 +1,5 @@
 """Seeds the local dev database (the one `uvicorn app.main:app` serves,
-JAGA_DB_PATH in .env) with a test company, an owner account, and the
+JAGA_DB_PATH in .env) with a test company, one account per role, and the
 synthetic demo corpus — so the app has something to look at without
 uploading files or creating a login by hand every time.
 
@@ -25,6 +25,16 @@ FILES_DIR = Path(__file__).parent.parent / "evals" / "demo_corpus" / "files"
 
 OWNER_EMAIL = "owner@try-demo.test"
 COMPANY_NAME = "Try Demo Pte Ltd"
+
+# One account per role (2026-09-23, role/permission work), so testing "what
+# does a viewer see" doesn't need hand-creating a membership every time.
+# (role, email, display name) — owner is handled separately above/below,
+# it's the one dev-login can create a company with in a single call.
+ROLE_ACCOUNTS = [
+    ("admin", "admin@try-demo.test", "Demo Admin"),
+    ("user", "user@try-demo.test", "Demo User"),
+    ("viewer", "viewer@try-demo.test", "Demo Viewer"),
+]
 
 
 def main() -> None:
@@ -54,26 +64,46 @@ def main() -> None:
         ).json()
         print(f"Created company #{auth['company']['id']}: {COMPANY_NAME}, owner {OWNER_EMAIL}")
 
+    company_id = auth["company"]["id"]
     headers = {"Authorization": f"Bearer {auth['token']}"}
-    print(f"Dev login token (for curl/testing): {auth['token']}")
 
-    if already_seeded:
-        print(f"\nLog in at http://localhost:5173/login as {OWNER_EMAIL} to use it in the app.")
-        return
+    if not already_seeded:
+        for path in sorted(FILES_DIR.glob("*.pdf")):
+            with open(path, "rb") as f:
+                resp = client.post(
+                    "/api/documents",
+                    params={"source_channel": "web"},
+                    files={"file": (path.name, f, "application/pdf")},
+                    headers=headers,
+                )
+            resp.raise_for_status()
+            body = resp.json()
+            print(f"  {path.name}: {body.get('status')}")
 
-    for path in sorted(FILES_DIR.glob("*.pdf")):
-        with open(path, "rb") as f:
-            resp = client.post(
-                "/api/documents",
-                params={"source_channel": "web"},
-                files={"file": (path.name, f, "application/pdf")},
-                headers=headers,
-            )
-        resp.raise_for_status()
-        body = resp.json()
-        print(f"  {path.name}: {body.get('status')}")
+    # Idempotent the same way the owner path above is: POST .../members
+    # 409s on an already-existing membership (app/main.py::add_member) —
+    # expected and fine on a re-run, not an error to stop for.
+    accounts = [("owner", OWNER_EMAIL, auth["token"])]
+    for role, email, name in ROLE_ACCOUNTS:
+        add = client.post(
+            f"/api/companies/{company_id}/members",
+            json={"email": email, "name": name, "role": role},
+            headers=headers,
+        )
+        if add.status_code not in (200, 409):
+            add.raise_for_status()
+        login = client.post("/api/auth/dev-login", json={"email": email})
+        login.raise_for_status()
+        accounts.append((role, email, login.json()["token"]))
 
-    print(f"\nSeeded. Log in at http://localhost:5173/login as {OWNER_EMAIL} (owner role) to use it in the app.")
+    # Email is the only "credential" this auth model has (dev-login is a
+    # placeholder for real magic-link email, app/auth.py's docstring) —
+    # there's no password to print alongside it.
+    print(f"\nAccounts for '{COMPANY_NAME}' (company #{company_id}):")
+    for role, email, token in accounts:
+        print(f"  {role:6s}  {email:28s}  token={token}")
+
+    print("\nLog in at http://localhost:5173/login as any email above to use it in the app.")
 
 
 if __name__ == "__main__":

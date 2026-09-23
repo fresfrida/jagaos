@@ -185,6 +185,13 @@ class UserOut(BaseModel):
 class CompanyOut(BaseModel):
     id: int
     name: str
+    # 2026-09-23 (role/permission work): fye_month/fye_day were always in
+    # the `company` table but never returned to the frontend by either
+    # dev_login or /api/auth/me — no endpoint existed to edit them, so
+    # there was nothing to show them for. Now the new company-settings
+    # page needs the current values to edit, not just blindly overwrite.
+    fye_month: int
+    fye_day: int
 
 
 class AuthResponse(BaseModel):
@@ -211,3 +218,18 @@ class AddMemberRequest(BaseModel):
     email: str
     name: str | None = None
     role: RoleName
+
+
+class CompanyEditRequest(BaseModel):
+    """PATCH /api/companies/{id} body (2026-09-23, role/permission work).
+    Owner-only (app/main.py::edit_company). Scoped to exactly the fields
+    `dev_login`'s signup form already collects (`name`/`fye_month`/
+    `fye_day`) — a deliberate floor, not the company table's full column
+    set (`uen`/`incorporated_on`/`gst_registered`/`gst_period`/`dormant`
+    have no UI to collect or validate them yet). Every field optional —
+    only the ones sent are changed, same convention as
+    `DocumentEditRequest`."""
+
+    name: str | None = None
+    fye_month: int | None = Field(default=None, ge=1, le=12)
+    fye_day: int | None = Field(default=None, ge=1, le=31)

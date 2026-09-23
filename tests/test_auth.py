@@ -467,3 +467,123 @@ def test_archived_documents_never_appear_in_list_or_search_for_any_role():
         search_ids = [d["id"] for d in client.get("/api/search?q=findable", headers=_auth_headers(token)).json()]
         assert archived_doc_id not in search_ids, search_ids
         assert live_doc_id in search_ids, search_ids
+
+
+def test_user_can_only_edit_own_uploads_admin_can_edit_any():
+    # 2026-09-23 (role/permission work): edit_document previously checked
+    # tenant scoping only, no ownership — any `user`-role account could
+    # edit any document in the company, even though `uploaded_by_user_id`
+    # already existed in the schema. Confirmed live before this fix.
+    from app.db import get_conn
+
+    owner = _signup("ownership-owner@example.com", "Ownership Co")
+    add_a = client.post(
+        f"/api/companies/{owner['company']['id']}/members",
+        json={"email": "ownership-usera@example.com", "role": "user"},
+        headers=_auth_headers(owner["token"]),
+    )
+    add_b = client.post(
+        f"/api/companies/{owner['company']['id']}/members",
+        json={"email": "ownership-userb@example.com", "role": "user"},
+        headers=_auth_headers(owner["token"]),
+    )
+    assert add_a.status_code == 200 and add_b.status_code == 200
+    user_a_id = add_a.json()["user_id"]
+    user_a_token = client.post("/api/auth/dev-login", json={"email": "ownership-usera@example.com"}).json()["token"]
+    user_b_token = client.post("/api/auth/dev-login", json={"email": "ownership-userb@example.com"}).json()["token"]
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status, uploaded_by_user_id) VALUES "
+            "(?, 'ownershipsha-a', 'a-doc.pdf', 'application/pdf', 1, '/tmp/a-doc.pdf', "
+            "'web', 'filed', ?)",
+            (owner["company"]["id"], user_a_id),
+        )
+        a_doc_id = cur.lastrowid
+        # No uploaded_by_user_id at all (direct-SQL fixture, same shape as
+        # every other pre-existing test in this file) — must NOT become
+        # uneditable-by-everyone; there's no real uploader to protect it from.
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status) VALUES "
+            "(?, 'ownershipsha-none', 'no-uploader-doc.pdf', 'application/pdf', 1, "
+            "'/tmp/no-uploader-doc.pdf', 'web', 'filed')",
+            (owner["company"]["id"],),
+        )
+        no_uploader_doc_id = cur.lastrowid
+
+    # The uploader themselves can edit their own document.
+    own_edit = client.patch(
+        f"/api/documents/{a_doc_id}", json={"description": "edited by owner-of-upload"},
+        headers=_auth_headers(user_a_token),
+    )
+    assert own_edit.status_code == 200, own_edit.text
+
+    # A different user-role account cannot edit someone else's upload.
+    cross_user_edit = client.patch(
+        f"/api/documents/{a_doc_id}", json={"description": "hijacked"},
+        headers=_auth_headers(user_b_token),
+    )
+    assert cross_user_edit.status_code == 403, cross_user_edit.text
+
+    # admin/owner are unaffected by the ownership check.
+    admin_edit = client.patch(
+        f"/api/documents/{a_doc_id}", json={"description": "edited by owner role"},
+        headers=_auth_headers(owner["token"]),
+    )
+    assert admin_edit.status_code == 200, admin_edit.text
+
+    # A document with no recorded uploader stays editable by any user+ role.
+    no_uploader_edit = client.patch(
+        f"/api/documents/{no_uploader_doc_id}", json={"description": "editable, no owner recorded"},
+        headers=_auth_headers(user_b_token),
+    )
+    assert no_uploader_edit.status_code == 200, no_uploader_edit.text
+
+
+def test_company_settings_patch_requires_owner_and_persists():
+    # 2026-09-23 (role/permission work): the company row was previously
+    # write-once at signup — PATCH /api/companies/{id} is new.
+    owner = _signup("settings-owner@example.com", "Settings Co")
+    add_admin = client.post(
+        f"/api/companies/{owner['company']['id']}/members",
+        json={"email": "settings-admin@example.com", "role": "admin"},
+        headers=_auth_headers(owner["token"]),
+    )
+    assert add_admin.status_code == 200
+    admin_token = client.post("/api/auth/dev-login", json={"email": "settings-admin@example.com"}).json()["token"]
+
+    # admin (not owner) is rejected...
+    admin_patch = client.patch(
+        f"/api/companies/{owner['company']['id']}", json={"name": "Renamed by admin"},
+        headers=_auth_headers(admin_token),
+    )
+    assert admin_patch.status_code == 403, admin_patch.text
+
+    # ...the exact paired contrast the feature request asked to see: the
+    # same admin session can already delete (archive) a document (existing,
+    # unchanged behavior) but cannot edit company settings.
+    from app.db import get_conn
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status) VALUES "
+            "(?, 'settingssha-a', 'a-doc.pdf', 'application/pdf', 1, '/tmp/a-doc.pdf', "
+            "'web', 'needs_review')",
+            (owner["company"]["id"],),
+        )
+        doc_id = cur.lastrowid
+    admin_archive = client.post(f"/api/documents/{doc_id}/archive", headers=_auth_headers(admin_token))
+    assert admin_archive.status_code == 200, admin_archive.text
+
+    # owner succeeds and it actually persists.
+    owner_patch = client.patch(
+        f"/api/companies/{owner['company']['id']}",
+        json={"name": "Renamed by owner", "fye_month": 6, "fye_day": 30},
+        headers=_auth_headers(owner["token"]),
+    )
+    assert owner_patch.status_code == 200, owner_patch.text
+    me = client.get("/api/auth/me", headers=_auth_headers(owner["token"])).json()
+    assert me["company"]["name"] == "Renamed by owner"

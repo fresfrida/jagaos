@@ -7,10 +7,11 @@ import { TagsLanding } from '../features/tags/TagsLanding'
 import { TagsPreview } from '../features/tags/TagsPreview'
 import { navigate } from '../router/navigate'
 import { routeHref, type ResolvedRoute } from '../router/routes'
-import { Hero } from '../sections/Hero'
+import { WelcomeHero } from '../sections/WelcomeHero'
 import { HowItWorks } from '../sections/HowItWorks'
 import { StackList } from '../sections/StackList'
 import { CompanyFilesPage } from './CompanyFilesPage'
+import { CompanySettingsPage } from './CompanySettingsPage'
 import { FramePage } from './FramePage'
 import { GetStartedPage } from './GetStartedPage'
 import { LoginPage } from './LoginPage'
@@ -26,13 +27,23 @@ function OpsRedirect() {
   return null
 }
 
+/** Same bare mount-effect pattern as OpsRedirect above (2026-09-23,
+ * role/permission work) — a signed-in visitor to / used to see the
+ * marketing hero (Hero.tsx, now deleted) instead of the app, a confirmed
+ * gap: `home` never branched on session status the way `calendar`/`tags`
+ * already did. Redirects into Calendar, the real signed-in hub. */
+function HomeRedirect() {
+  useEffect(() => navigate(routeHref('calendar')), [])
+  return null
+}
+
 /** Maps a route to its page. Pages compose features; they hold no logic of their own. */
 export function Page({ route }: { route: ResolvedRoute }) {
   const { status } = useAuth()
 
   switch (route) {
     case 'home':
-      return <Hero />
+      return status === 'signed-in' ? <HomeRedirect /> : <WelcomeHero />
     case 'calendar':
       // Same URL for everyone (2026-09-23, header/nav restructure) — a
       // signed-in visitor gets the real Calendar hub (dates/obligations/
@@ -95,6 +106,12 @@ export function Page({ route }: { route: ResolvedRoute }) {
       return (
         <FramePage route="search">
           <SearchPage />
+        </FramePage>
+      )
+    case 'company-settings':
+      return (
+        <FramePage route="company-settings">
+          <CompanySettingsPage />
         </FramePage>
       )
     case 'not-found':

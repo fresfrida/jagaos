@@ -6,13 +6,33 @@ import { Container } from '../components/ui/Container'
 import { ButtonLink } from '../components/ui/ButtonLink'
 import { Logo } from '../components/ui/Logo'
 import { useAuth } from '../features/auth/AuthContext'
+import { roleAtLeast, type Role } from '../features/auth/authApi'
 import { roleLabel } from '../features/ops/opsShared'
 import { useScrolled } from '../hooks/useScrolled'
 import { cn } from '../lib/cn'
 import { SUPPORTED_LANGUAGES, setLanguage, type LanguageCode } from '../i18n'
 import { navigate } from '../router/navigate'
 import { Link } from '../router/Link'
-import { NAV_LABEL_KEYS, OPS_NAV_ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute } from '../router/routes'
+import { NAV_LABEL_KEYS, OPS_NAV_ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
+
+/** Which signed-in nav items this role should see (2026-09-23, role/
+ * permission work). Two real gaps this closes, both confirmed live before
+ * the fix: every role saw all five OPS_NAV_ROUTES items unconditionally,
+ * including Upload for a viewer (who the backend already 403s on upload —
+ * app/auth.py's require_role("user") on POST /api/documents — the nav
+ * item just shouldn't have been there to begin with); and there was no
+ * nav entry at all for the new company-settings page. Resolves a real
+ * contradiction in the original ask (docs/DECISIONS.md has the full
+ * write-up): "admin sees it read-only" only makes sense if admin can
+ * reach the page, so the entry is visible to owner + admin, not owner
+ * alone — the fields themselves are still owner-only editable, enforced
+ * both in CompanySettingsPage.tsx and (the real check) app/main.py. */
+function visibleNavRoutes(role: Role | null): readonly RouteId[] {
+  return [
+    ...OPS_NAV_ROUTES.filter((id) => id !== 'upload' || role !== 'viewer'),
+    ...(role !== null && roleAtLeast(role, 'admin') ? (['company-settings'] as const) : []),
+  ]
+}
 
 /** Compact language switcher — a plain <select>, not a custom dropdown
  * widget, per the "keep the control itself simple" brief. Persists via
@@ -59,7 +79,12 @@ function UserMenu() {
   if (!user) return null
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center gap-1.5">
+      {/* Persistent role chip (2026-09-23, role/permission work) — the
+         role Badge below used to only be visible after opening the
+         dropdown; the ask wants it visible at a glance, next to the
+         avatar button, without opening anything. */}
+      {role && <Badge mono>{roleLabel(t, role)}</Badge>}
       <button
         type="button"
         onClick={(e) => {
@@ -77,13 +102,28 @@ function UserMenu() {
         <div
           role="menu"
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-card border border-line bg-white py-2 shadow-lg"
+          className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-card border border-line bg-white py-2 shadow-lg"
         >
           <div className="border-b border-line px-3 pb-2">
             {company && <p className="truncate text-[13px] font-medium text-ink">{company.name}</p>}
             <p className="truncate text-[12px] text-muted">{user.email}</p>
             {role && <Badge mono className="mt-1">{roleLabel(t, role)}</Badge>}
           </div>
+          {/* Company Settings (2026-09-23): the desktop inline nav already
+             gets this entry (visibleNavRoutes below); the bottom nav
+             (mobile, signed-in) has no room for a sixth fixed slot, so
+             this dropdown — already the mobile account surface — is where
+             a mobile owner/admin actually reaches the page. owner+admin
+             only, same gate as the desktop nav entry. */}
+          {role && roleAtLeast(role, 'admin') && (
+            <Link
+              href={routeHref('company-settings')}
+              onClick={() => setOpen(false)}
+              className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-canvas"
+            >
+              {t('header.nav.companySettings')}
+            </Link>
+          )}
           <button
             role="menuitem"
             onClick={() => {
@@ -102,8 +142,9 @@ function UserMenu() {
 
 export function Header({ current }: { current: ResolvedRoute }) {
   const scrolled = useScrolled()
-  const { status, user, logout } = useAuth()
+  const { status, user, role, logout } = useAuth()
   const { t } = useTranslation()
+  const navRoutes = status === 'signed-in' ? visibleNavRoutes(role) : TAB_ROUTES
 
   return (
     <header
@@ -122,11 +163,12 @@ export function Header({ current }: { current: ResolvedRoute }) {
              for the logged-out marketing pages. */}
           <nav aria-label={t('header.primaryNav')} className={status === 'signed-in' ? 'hidden sm:block' : 'block'}>
             <ul className="flex items-center gap-0.5">
-              {/* Signed-in nav is the five real-app items in their
-                 specified order; Calendar/Tags are the same two paths as
-                 the logged-out marketing nav (Page.tsx branches on
-                 session state to decide what renders at each). */}
-              {(status === 'signed-in' ? OPS_NAV_ROUTES : TAB_ROUTES).map((id) => {
+              {/* Signed-in nav is the real-app items in their specified
+                 order, filtered by role (visibleNavRoutes above);
+                 Calendar/Tags are the same two paths as the logged-out
+                 marketing nav (Page.tsx branches on session state to
+                 decide what renders at each). */}
+              {navRoutes.map((id) => {
                 const active = current === id
                 return (
                   <li key={id}>

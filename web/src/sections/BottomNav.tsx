@@ -12,10 +12,18 @@
  * Calendar/Tags/Search/Company-Files/Upload; this only ever pulls Upload
  * out of its slot into the middle, the other four keep their relative
  * order). Rendered only when signed in — App.tsx also adds bottom padding
- * to <main> in that case so this bar never covers the last item. */
+ * to <main> in that case so this bar never covers the last item.
+ *
+ * **Role-aware since 2026-09-23** (role/permission work): a viewer never
+ * sees the raised center Upload button (they're already 403'd server-side
+ * on upload) — the remaining four items reflow into one plain even row
+ * instead. Company Settings, the new owner/admin-only page, isn't a sixth
+ * slot here — reachable on mobile via the account menu instead
+ * (Header.tsx's UserMenu). */
 
 import { CalendarDays, FileText, Search, Tag, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '../features/auth/AuthContext'
 import { cn } from '../lib/cn'
 import { Link } from '../router/Link'
 import { NAV_LABEL_KEYS, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
@@ -41,6 +49,12 @@ const ICONS: Record<RouteId, typeof CalendarDays> = {
   'get-started': CalendarDays,
   login: CalendarDays,
   ops: CalendarDays,
+  // Never actually rendered by this bar (2026-09-23, role/permission
+  // work) — Company Settings is reachable on mobile via UserMenu
+  // (Header.tsx) instead, this bar has no room for a conditional sixth
+  // slot. A filler value only, same as the other non-nav RouteIds above,
+  // just satisfying Record<RouteId, ...>.
+  'company-settings': CalendarDays,
 }
 
 function NavItem({ id, active }: { id: RouteId; active: boolean }) {
@@ -63,7 +77,31 @@ function NavItem({ id, active }: { id: RouteId; active: boolean }) {
 
 export function BottomNav({ current }: { current: ResolvedRoute }) {
   const { t } = useTranslation()
+  // Pulled directly from useAuth() (2026-09-23, role/permission work) —
+  // same hook Header.tsx already uses, no new plumbing needed. A viewer
+  // is already 403'd server-side on upload (app/auth.py's
+  // require_role("user") on POST /api/documents), so the raised center
+  // button — this app's single most prominent call to action — shouldn't
+  // exist for a role that can never use it.
+  const { role } = useAuth()
   const uploadActive = current === CENTER_ROUTE
+
+  if (role === 'viewer') {
+    // Simplest, least-surprising reflow (explicit call, not the only
+    // option): the remaining four items as one plain even row, same
+    // NavItem component, no raised center treatment.
+    return (
+      <nav
+        aria-label={t('header.primaryNav')}
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 backdrop-blur-md sm:hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="mx-auto flex max-w-[520px] items-stretch">
+          {[...LEFT_ROUTES, ...RIGHT_ROUTES].map((id) => <NavItem key={id} id={id} active={current === id} />)}
+        </div>
+      </nav>
+    )
+  }
 
   return (
     <nav

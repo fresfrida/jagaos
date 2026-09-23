@@ -36,6 +36,7 @@ from app.rules.transitions import InvalidTransition, transition_document  # noqa
 from app.models import (  # noqa: E402
     AddMemberRequest,
     AuthResponse,
+    CompanyEditRequest,
     CompanyOut,
     DevLoginRequest,
     DocumentEditRequest,
@@ -118,7 +119,7 @@ def dev_login(body: DevLoginRequest) -> AuthResponse:
             company_id, role = membership["company_id"], membership["role"]
 
         company = conn.execute(
-            "SELECT id, name FROM company WHERE id = ?", (company_id,)
+            "SELECT id, name, fye_month, fye_day FROM company WHERE id = ?", (company_id,)
         ).fetchone()
         final_user = conn.execute(
             "SELECT id, email, name FROM app_user WHERE id = ?", (user_id,)
@@ -128,7 +129,7 @@ def dev_login(body: DevLoginRequest) -> AuthResponse:
     return AuthResponse(
         token=token,
         user=UserOut(id=final_user["id"], email=final_user["email"], name=final_user["name"]),
-        company=CompanyOut(id=company["id"], name=company["name"]),
+        company=CompanyOut(id=company["id"], name=company["name"], fye_month=company["fye_month"], fye_day=company["fye_day"]),
         role=role,
     )
 
@@ -137,11 +138,11 @@ def dev_login(body: DevLoginRequest) -> AuthResponse:
 def auth_me(membership: Annotated[CurrentMembership, Depends(get_current_membership)]) -> dict:
     with get_conn(DB_PATH) as conn:
         company = conn.execute(
-            "SELECT id, name FROM company WHERE id = ?", (membership.company_id,)
+            "SELECT id, name, fye_month, fye_day FROM company WHERE id = ?", (membership.company_id,)
         ).fetchone()
     return {
         "user": {"id": membership.user_id, "email": membership.email, "name": membership.name},
-        "company": {"id": company["id"], "name": company["name"]},
+        "company": {"id": company["id"], "name": company["name"], "fye_month": company["fye_month"], "fye_day": company["fye_day"]},
         "role": membership.role,
     }
 
@@ -241,6 +242,39 @@ def create_company(
             (uen, name, fye_month, fye_day, int(dormant), int(gst_registered)),
         )
         return {"id": cur.lastrowid, "name": name}
+
+
+@app.patch("/api/companies/{company_id}")
+def edit_company(
+    company_id: int, body: CompanyEditRequest,
+    membership: Annotated[CurrentMembership, Depends(require_role("owner"))],
+) -> dict:
+    """Company settings (2026-09-23, role/permission work) — the company
+    row was previously write-once, set at signup (`dev_login` above) and
+    never editable again. owner-only: the permission model's own framing
+    is "owner also manages the company" (`docs/HANDOFF.md`'s Auth
+    section), a rank above admin's "resolves reviews and adds members".
+    Scoped to `CompanyEditRequest`'s three fields (see its own docstring
+    for why not the company table's full column set)."""
+    if company_id != membership.company_id:
+        raise HTTPException(403, "Not a member of this company")
+
+    updates: dict[str, object] = {}
+    if body.name is not None:
+        updates["name"] = body.name
+    if body.fye_month is not None:
+        updates["fye_month"] = body.fye_month
+    if body.fye_day is not None:
+        updates["fye_day"] = body.fye_day
+
+    if updates:
+        set_clause = ", ".join(f"{col} = ?" for col in updates)
+        with get_conn(DB_PATH) as conn:
+            conn.execute(
+                f"UPDATE company SET {set_clause} WHERE id = ?",
+                (*updates.values(), company_id),
+            )
+    return {"status": "updated"}
 
 
 # 2026-09-23 (DECISIONS #55): jaga-vision is a separate, isolated systemd
@@ -386,6 +420,20 @@ def resolve_review(
     # status) happen inside app/graph/human_review.py on resume, not here —
     # that keeps "what does resolving mean" in one place instead of split
     # between this endpoint and the graph node.
+    #
+    # Deliberately kept admin+ (2026-09-23, role/permission work) — NOT
+    # extended to let a `user` resolve review items on their own uploads,
+    # even though "edit your own upload" now is (see edit_document above).
+    # Considered and rejected: resolving is the human-in-the-loop safety
+    # check this whole review queue exists for (DECISIONS #40 — every
+    # upload needs review, no auto-file, even a clean one), specifically
+    # including the GST-arithmetic and hallucination-guard flags
+    # (DECISIONS #33, #48) that were added *because* trusting the model's
+    # or the uploader's own self-report alone was already proven unsafe on
+    # this exact codebase. Letting the uploader also be the one who clears
+    # their own flagged upload would remove the second pair of eyes that's
+    # the actual point — so this stays a real oversight action (the same
+    # tier as add_member), not a routine self-service one.
     with get_conn(DB_PATH) as conn:
         item = conn.execute(
             "SELECT id, company_id FROM review_item WHERE id = ? AND status = 'open'",
@@ -567,13 +615,31 @@ def edit_document(
     correcting *to* a picture is the one direction this field supports;
     see its docstring on DocumentEditRequest for why the reverse isn't
     handled). Only True does anything — False/omitted is a no-op; there is
-    no reclassification path back out of the memory lane here."""
+    no reclassification path back out of the memory lane here.
+
+    **Ownership check added 2026-09-23** (role/permission work):
+    `uploaded_by_user_id` already existed in the schema but was never read
+    here, so any `user`-role account could edit any document in the
+    company — confirmed live before this change. A `user` (not admin+) may
+    now only edit a document they themselves uploaded; admin/owner are
+    unaffected (unchanged from the "same bar as uploading" rule above,
+    just scoped to admin+ for cross-uploader edits). A document with no
+    recorded uploader (`uploaded_by_user_id IS NULL` — direct-SQL test
+    fixtures, or any future non-web ingestion path) is deliberately *not*
+    treated as unownable-by-everyone: there is no real uploader to protect
+    it from, so a `user` account may edit it same as before this change."""
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
-            "SELECT company_id FROM document WHERE id = ?", (document_id,)
+            "SELECT company_id, uploaded_by_user_id FROM document WHERE id = ?", (document_id,)
         ).fetchone()
     if doc is None or doc["company_id"] != membership.company_id:
         raise HTTPException(404, "document not found")
+    if (
+        membership.role == "user"
+        and doc["uploaded_by_user_id"] is not None
+        and doc["uploaded_by_user_id"] != membership.user_id
+    ):
+        raise HTTPException(403, "You can only edit documents you uploaded yourself")
 
     updates: dict[str, object] = {}
     if body.description is not None:
