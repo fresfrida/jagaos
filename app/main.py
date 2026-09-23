@@ -451,13 +451,45 @@ def resolve_review(
     # tier as add_member), not a routine self-service one.
     with get_conn(DB_PATH) as conn:
         item = conn.execute(
-            "SELECT id, company_id FROM review_item WHERE id = ? AND status = 'open'",
+            "SELECT r.id, r.company_id, r.document_id, d.status AS document_status "
+            "FROM review_item r JOIN document d ON d.id = r.document_id "
+            "WHERE r.id = ? AND r.status = 'open'",
             (review_item_id,),
         ).fetchone()
         if item is None:
             raise HTTPException(404, "review item not found or already resolved")
         if item["company_id"] != membership.company_id:
             raise HTTPException(403, "Not a member of this company")
+
+    if item["document_status"] == "quarantined":
+        # 2026-09-23 (DECISIONS #68): a quarantined document's pipeline run
+        # never reaches human_review's interrupt() — verify() returns
+        # early, before ever pausing (see verify.py's injection_hits
+        # branch). Confirmed LIVE this is NOT the same as a genuinely
+        # missing checkpoint (the InvalidUpdateError/410 case below,
+        # itself confirmed live against a real restarted server —
+        # DECISIONS #67): LangGraph still checkpoints after verify() runs,
+        # it's just a checkpoint reflecting an already-completed run with
+        # nothing pending — resuming it succeeds as a silent no-op (200,
+        # no error, document status and review_item both left untouched)
+        # rather than raising, so the 410 fallback this endpoint otherwise
+        # relies on never actually fires for this case — confirmed by
+        # reproducing it against the live server, not assumed from the
+        # first read. Handled directly here instead: the same effect as
+        # POST /api/documents/{id}/archive (transition to archived,
+        # dismiss the open review_item), reached from this endpoint
+        # because that's what the UI already calls for this card
+        # (ReviewQueueCard.tsx hides Accept, offers only Reject/Delete).
+        try:
+            transition_document(item["document_id"], "archived", actor=membership.email, db_path=DB_PATH)
+        except InvalidTransition:
+            pass  # already archived by a concurrent/earlier request — resolving again is a no-op success
+        with get_conn(DB_PATH) as conn:
+            conn.execute(
+                "UPDATE review_item SET status = 'dismissed' WHERE id = ?",
+                (review_item_id,),
+            )
+        return {"status": "archived", "events": None, "obligations_created": None}
 
     try:
         result = PIPELINE.invoke(

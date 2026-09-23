@@ -1,6 +1,6 @@
 # Eval report
 
-Run at 2026-09-23T13:30:01.722334+00:00
+Run at 2026-09-23T15:52:24.755248+00:00
 
 ## Adversarial — injection guardrail (app.guards.injection.scan)
 
@@ -26,7 +26,7 @@ Run at 2026-09-23T13:30:01.722334+00:00
 
 | Case | Result | Detail |
 |---|---|---|
-| low_confidence_classification | PASS | [{'code': 'low_confidence_classification', 'params': {'confidence': '30%'}}] |
+| low_confidence_classification | PASS | [{'code': 'could_not_read_document', 'params': {}}] |
 | description_admits_unreadable | PASS | [{'code': 'description_signals_problem', 'params': {'word': 'unreadable'}}] |
 | description_admits_illegible | PASS | [{'code': 'description_signals_problem', 'params': {'word': 'illegible'}}] |
 | clean_confident_classification | PASS | [] |

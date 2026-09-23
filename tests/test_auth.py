@@ -292,6 +292,57 @@ def test_archive_endpoint_archives_own_company_document_and_404s_for_other_compa
     assert other.status_code == 404, other.text
 
 
+def test_resolve_review_archives_a_quarantined_document_without_touching_the_pipeline():
+    # 2026-09-23 (DECISIONS #68): a real, live-reproduced bug — resuming a
+    # quarantined document's thread_id does NOT reliably raise LangGraph's
+    # InvalidUpdateError the way an actually-expired/restarted session
+    # does (confirmed against the real running dev server: verify()'s
+    # early-return branch still leaves a checkpoint behind, just one
+    # reflecting an already-completed run with nothing pending — resuming
+    # THAT can silently no-op, 200, nothing changed, instead of erroring).
+    # resolve_review now checks document.status == 'quarantined' up front
+    # and archives directly, never calling PIPELINE.invoke for this case —
+    # so this test doesn't need a real pipeline run or gateway call either,
+    # a directly-seeded quarantined document is enough to prove the branch.
+    from app.db import get_conn
+
+    owner = _signup("quarantineresolve@example.com", "Quarantine Resolve Co")
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status) VALUES (?, 'quarantineresolvesha', 'q-doc.pdf', "
+            "'application/pdf', 1, '/tmp/q-doc.pdf', 'web', 'quarantined')",
+            (owner["company"]["id"],),
+        )
+        doc_id = cur.lastrowid
+        cur = conn.execute(
+            "INSERT INTO review_item (company_id, document_id, reason, question, "
+            "proposed_json, status) VALUES (?, ?, 'injection_suspected_blocked', "
+            "'[{\"code\": \"injection_suspected_blocked\", \"params\": {}}]', '{}', 'open')",
+            (owner["company"]["id"], doc_id),
+        )
+        review_item_id = cur.lastrowid
+
+    # thread_id deliberately garbage — must never reach the pipeline for a
+    # quarantined document, so an unresolvable thread_id doesn't matter.
+    resp = client.post(
+        f"/api/review/{review_item_id}/resolve?thread_id=no-such-thread-ever",
+        headers=_auth_headers(owner["token"]),
+        json={"action": "reject", "corrected_fields": {}},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "archived"
+
+    with get_conn() as conn:
+        doc_status = conn.execute("SELECT status FROM document WHERE id = ?", (doc_id,)).fetchone()["status"]
+        review_status = conn.execute(
+            "SELECT status FROM review_item WHERE id = ?", (review_item_id,)
+        ).fetchone()["status"]
+    assert doc_status == "archived"
+    assert review_status == "dismissed"
+
+
 def test_add_member_requires_admin_or_owner():
     owner = _signup("owner5@example.com", "Role Co 5")
     client.post(

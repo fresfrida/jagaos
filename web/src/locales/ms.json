@@ -124,6 +124,7 @@
         "fileMissing": "Fail hilang — padam atau muat naik semula dokumen ini.",
         "prefix": "Sila sahkan: {{reasons}}",
         "injectionSuspected": "model menandakan dokumen ini mungkin mengandungi arahan yang disuntik — sila sahkan ia selamat sebelum diteruskan",
+        "injectionSuspectedBlocked": "Kami tidak dapat memproses fail ini dengan selamat, jadi tiada apa-apa yang diekstrak daripadanya. Padamkannya, atau muat naik salinan lain.",
         "extractionError": "ralat pengekstrakan: {{detail}}",
         "zeroAmounts": "subjumlah, GST dan jumlah kesemuanya sifar — ini kelihatan seperti bacaan yang gagal, bukan invois bernilai sifar yang sebenar",
         "gstMismatch": "GST {{gst}} bukan ~9% daripada subjumlah {{subtotal}} (dijangka ~{{expectedGst}})",
@@ -131,7 +132,8 @@
         "amountsNotInText": "jumlah yang diekstrak tidak ditemui di mana-mana dalam teks dokumen — sila semak semula dengan imej sebelum mengesahkan",
         "missingRequiredFields": "medan wajib hilang: {{fields}}",
         "missingArithmeticFields": "subjumlah/GST/jumlah tiada — tidak dapat mengesahkan pengiraan",
-        "descriptionSignalsProblem": "penerangan menunjukkan kemungkinan masalah pengekstrakan (\"{{word}}\") — sila semak dokumen ini dibaca dengan betul"
+        "descriptionSignalsProblem": "penerangan menunjukkan kemungkinan masalah pengekstrakan (\"{{word}}\") — sila semak dokumen ini dibaca dengan betul",
+        "couldNotReadDocument": "Kami tidak dapat membaca fail ini. Cuba foto yang lebih jelas atau fail lain."
       },
       "fieldLabel": {
         "vendor": "Vendor",

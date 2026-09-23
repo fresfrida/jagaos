@@ -168,8 +168,9 @@ def test_verify_regex_hit_still_hard_quarantines_regardless_of_model_flag():
     }
     result = verify(state)["verify_result"]
 
-    assert result["needs_review"] is False, "hard quarantine is not a reviewable state"
+    assert result["needs_review"] is False, "hard quarantine still never routes through human_review"
     assert result["ok"] is False
+    assert result["reasons"] == [{"code": "injection_suspected_blocked", "params": {}}]
 
     with get_conn() as conn:
         doc = conn.execute(
@@ -177,18 +178,32 @@ def test_verify_regex_hit_still_hard_quarantines_regardless_of_model_flag():
         ).fetchone()
         assert doc["status"] == "quarantined", f"expected quarantined, got {doc['status']}"
 
+        # 2026-09-23 (DECISIONS #68): a quarantined upload used to vanish
+        # with no review_item at all — confirmed live to be exactly why it
+        # got zero feedback anywhere. Now gets one (status 'open'), reusing
+        # the normal review queue rather than new plumbing; needs_review
+        # staying False above means this document's own pipeline run still
+        # never reaches human_review's interrupt(). Resolving this
+        # review_item is NOT handled via a 410/expired-checkpoint fallback
+        # (confirmed live that resuming this thread's already-completed
+        # checkpoint can silently no-op instead of raising) — app/main.py
+        # ::resolve_review detects document.status == 'quarantined' and
+        # archives directly, bypassing the pipeline resume entirely.
         review_item = conn.execute(
-            "SELECT id FROM review_item WHERE document_id = ?", (document_id,)
+            "SELECT reason, question, proposed_json, status FROM review_item WHERE document_id = ?",
+            (document_id,),
         ).fetchone()
-        assert review_item is None, "a hard quarantine must not create a review_item"
+        assert review_item is not None, "a quarantined document must still get a review_item now"
+        assert review_item["status"] == "open"
+        assert review_item["reason"] == "injection_suspected_blocked"
+        assert json.loads(review_item["question"]) == [{"code": "injection_suspected_blocked", "params": {}}]
+        assert review_item["proposed_json"] == "{}", "no extracted fields presented as trustworthy for a blocked document"
 
         security_event = conn.execute(
             "SELECT kind, action FROM security_event WHERE document_id = ?", (document_id,)
         ).fetchone()
         assert security_event is not None
         assert security_event["action"] == "quarantined"
-        # (Quarantine path itself is untouched by DECISIONS #40 below — this
-        # existing test's continued pass is that "unchanged" verification.)
 
 
 def test_verify_clean_extraction_still_needs_review_not_filed():
@@ -465,7 +480,7 @@ def test_obligation_transition_rejects_open_to_satisfied_directly_is_allowed_but
     assert raised
 
 
-def test_verify_low_classify_confidence_alone_no_longer_produces_a_reason():
+def test_verify_flags_a_document_that_could_not_be_read_no_percentage_shown():
     # 2026-09-23 (live regression report, round 1): a document that lands
     # on lane='memory' (classify.py's own no-OCR-text fallback,
     # confidence=0.3, description='Untitled photo' — reproduced exactly,
@@ -477,12 +492,16 @@ def test_verify_low_classify_confidence_alone_no_longer_produces_a_reason():
     # 2026-09-23 (round 2, items 7/8): that check's contribution to
     # reasons/question was deliberately removed — needs_review is already
     # unconditional (DECISIONS #40), so this document still gets reviewed
-    # exactly the same either way; a document whose only issue was low
-    # classification confidence now correctly falls through to the same
-    # "no issues found" path as any other document, rather than a message
-    # naming a raw percentage. _check_classify_confidence itself still
-    # exists and is still exercised directly by evals/run.py's
-    # unreadable-document eval — only verify()'s call site is gone.
+    # either way; reasoned at the time that removing it only stops the
+    # message naming a raw percentage.
+    #
+    # 2026-09-23 (round 3, DECISIONS #68): reconnected the same day — the
+    # removal above had a real, uncaught side effect: with zero reasons,
+    # this exact document fell through to the generic "No issues found,"
+    # actively misleading for one nobody could actually read. Reconnected
+    # with a new code/params (could_not_read_document, no params) — the
+    # percentage itself is genuinely gone, not just hidden by the
+    # frontend; only the fact that something's wrong is signaled now.
     from app.graph.verify import verify
 
     document_id = _seed_company_and_document("neverextractedsha")
@@ -497,9 +516,9 @@ def test_verify_low_classify_confidence_alone_no_longer_produces_a_reason():
     }
     result = verify(state)["verify_result"]
 
-    assert result["ok"] is True, result["reasons"]
+    assert result["ok"] is False, result["reasons"]
     assert result["needs_review"] is True, "DECISIONS #40 — still unconditional regardless"
-    assert result["reasons"] == []
+    assert result["reasons"] == [{"code": "could_not_read_document", "params": {}}]
 
 
 def test_verify_flags_a_description_that_admits_the_document_could_not_be_read():

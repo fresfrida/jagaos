@@ -17,6 +17,7 @@ import {
   FIELD_CLASS,
   fieldLabel,
   isFileMissingReason,
+  isInjectionBlockedReason,
   isoToDmy,
   parseReviewReasons,
   reasonText,
@@ -121,6 +122,10 @@ export function ReviewQueueCard({
   const reasons = parseReviewReasons(item.question)
   const isRoutine = reasons.length === 0
   const isFileMissing = isFileMissingReason(reasons)
+  // 2026-09-23 (DECISIONS #68): a hard-quarantined document — nothing was
+  // ever presented as trustworthy to confirm (proposed_json is "{}"), so
+  // Accept has nothing to do; only Delete/Reject make sense.
+  const isInjectionBlocked = isInjectionBlockedReason(reasons)
 
   const [edits, setEdits] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {}
@@ -542,9 +547,22 @@ export function ReviewQueueCard({
             <p className={`mb-2 text-[13px] ${isFileMissing ? 'text-red-700' : 'text-amber-800'}`}>{reasonText(t, reasons)}</p>
           )}
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => void resolve('confirm')} disabled={busy} icon={<Check size={14} />}>
-              {Object.keys(edits).some((n) => edits[n] !== originalValue(n)) ? t('ops.review.acceptWithCorrections') : t('ops.review.acceptAsIs')}
-            </Button>
+            {/* 2026-09-23 (DECISIONS #68): no Accept for a hard-quarantined
+               document — proposed_json is "{}" (nothing was ever presented
+               as trustworthy to confirm), so there's nothing for this
+               button to do. Reject stays and doubles as the "Delete it"
+               action the reason text names, no separate button needed —
+               app/main.py::resolve_review detects the document is already
+               'quarantined' and archives it directly server-side, rather
+               than attempting the pipeline resume this document's run
+               never paused for in the first place (confirmed live: that
+               resume does NOT reliably 410 the way an actually-expired
+               session does — see resolve_review's own comment). */}
+            {!isInjectionBlocked && (
+              <Button size="sm" onClick={() => void resolve('confirm')} disabled={busy} icon={<Check size={14} />}>
+                {Object.keys(edits).some((n) => edits[n] !== originalValue(n)) ? t('ops.review.acceptWithCorrections') : t('ops.review.acceptAsIs')}
+              </Button>
+            )}
             <Button size="sm" variant="secondary" onClick={() => void resolve('reject')} disabled={busy} icon={<X size={14} />}>
               {t('ops.review.reject')}
             </Button>

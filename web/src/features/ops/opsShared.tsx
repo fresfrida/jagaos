@@ -90,6 +90,12 @@ export function riskLabel(t: TFunction, risk: string): string {
 // here, since they also drive styling, not just text.
 const REASON_LABEL_KEY: Record<string, string> = {
   injection_suspected: 'ops.review.reasons.injectionSuspected',
+  // 2026-09-23 (DECISIONS #68): distinct from injection_suspected above —
+  // that's the soft, model-only-flagged case (still reviewable, Accept
+  // available). This is the hard, regex-corroborated quarantine — more
+  // severe, no Accept (ReviewQueueCard.tsx's isInjectionBlocked hides it),
+  // only Delete/Reject. Plain language, no "quarantine"/jargon.
+  injection_suspected_blocked: 'ops.review.reasons.injectionSuspectedBlocked',
   extraction_error: 'ops.review.reasons.extractionError',
   zero_amounts: 'ops.review.reasons.zeroAmounts',
   gst_mismatch: 'ops.review.reasons.gstMismatch',
@@ -98,6 +104,12 @@ const REASON_LABEL_KEY: Record<string, string> = {
   missing_required_fields: 'ops.review.reasons.missingRequiredFields',
   missing_arithmetic_fields: 'ops.review.reasons.missingArithmeticFields',
   description_signals_problem: 'ops.review.reasons.descriptionSignalsProblem',
+  // 2026-09-23 (DECISIONS #68): reconnected app/graph/verify.py::
+  // _check_classify_confidence's contribution (items 7/8 had removed it,
+  // which left an unreadable document showing nothing — "No issues
+  // found" — actively misleading). New code, no percentage/confidence
+  // param, unlike the old one this replaces.
+  could_not_read_document: 'ops.review.reasons.couldNotReadDocument',
 }
 
 /** review_item.question is now JSON-encoded ReviewReason[], not a
@@ -116,6 +128,15 @@ export function isFileMissingReason(reasons: ReviewReason[]): boolean {
   return reasons.length === 1 && reasons[0]?.code === 'file_missing'
 }
 
+/** 2026-09-23 (DECISIONS #68): a hard-quarantined document's only review
+ * reason — no extraction was ever presented as trustworthy for it
+ * (`proposed_json` is `"{}"`, `app/graph/verify.py`), so there is nothing
+ * for Accept to confirm; ReviewQueueCard.tsx hides that button and shows
+ * only Delete/Reject when this is true. */
+export function isInjectionBlockedReason(reasons: ReviewReason[]): boolean {
+  return reasons.length === 1 && reasons[0]?.code === 'injection_suspected_blocked'
+}
+
 /** The full human-facing sentence for a review card's headline, built
  * from translated per-reason text — never a raw code, and never a stored
  * English sentence (that's the whole point of this restructure: this
@@ -123,6 +144,13 @@ export function isFileMissingReason(reasons: ReviewReason[]): boolean {
  * sentence could never actually be translated). */
 export function reasonText(t: TFunction, reasons: ReviewReason[]): string {
   if (isFileMissingReason(reasons)) return t('ops.review.reasons.fileMissing')
+  // 2026-09-23 (DECISIONS #68): same reasoning as file_missing above —
+  // its own translated string is already a complete, standalone
+  // statement ("...Delete it, or upload a different copy."), not a
+  // fragment meant to follow "Please confirm:" (there's nothing to
+  // confirm when Accept isn't even offered — caught live, the wrapped
+  // version read as nonsensical).
+  if (isInjectionBlockedReason(reasons)) return t('ops.review.reasons.injectionSuspectedBlocked')
   if (reasons.length === 0) return t('ops.review.reasons.clean')
   const joined = reasons
     .map((r) => {

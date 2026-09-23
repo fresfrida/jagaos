@@ -124,6 +124,7 @@
         "fileMissing": "File missing — delete or re-upload this document.",
         "prefix": "Please confirm: {{reasons}}",
         "injectionSuspected": "the model flagged this document as possibly containing injected instructions — please confirm it's safe before it proceeds",
+        "injectionSuspectedBlocked": "We couldn't process this file safely, so nothing was extracted from it. Delete it, or upload a different copy.",
         "extractionError": "extraction error: {{detail}}",
         "zeroAmounts": "subtotal, GST and total are all zero — this looks like a failed read, not a real zero-value invoice",
         "gstMismatch": "GST {{gst}} is not ~9% of subtotal {{subtotal}} (expected ~{{expectedGst}})",
@@ -131,7 +132,8 @@
         "amountsNotInText": "the extracted amounts weren't found anywhere in the document's text — please double-check these against the image before confirming",
         "missingRequiredFields": "missing required field(s): {{fields}}",
         "missingArithmeticFields": "missing subtotal/GST/total — cannot verify arithmetic",
-        "descriptionSignalsProblem": "the description signals a possible extraction problem (\"{{word}}\") — please check this document was read correctly"
+        "descriptionSignalsProblem": "the description signals a possible extraction problem (\"{{word}}\") — please check this document was read correctly",
+        "couldNotReadDocument": "We couldn't read this file. Try a clearer photo or a different file."
       },
       "fieldLabel": {
         "vendor": "Vendor",

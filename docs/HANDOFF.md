@@ -22,7 +22,7 @@ This repo currently holds:
 - **`vision/`** — isolated image-captioning service (own venv, `Salesforce/blip-image-captioning-base`), 2026-09-23, DECISIONS #55. Deliberately separate from `app/` — see "Backend status" below.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
-- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way. **Exception, 2026-09-23 (DECISIONS #65/#66/#67)**: each of these three rounds' regression fixes were built, tested, and verified but deliberately left uncommitted in the working tree on an explicit one-off instruction each time — wait for a go-ahead before committing/pushing. **#65 and #66 have since been committed and pushed** (`249ee8c`, confirmed via `git log`) — only #67 is still sitting uncommitted. If you're picking this repo back up and `git status` shows uncommitted changes, check DECISIONS #67 before assuming that's stray work to discard.
+- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way. **Exception, 2026-09-23 (DECISIONS #65/#66/#67/#68)**: each of these four rounds' regression fixes were built, tested, and verified but deliberately left uncommitted in the working tree on an explicit one-off instruction each time — wait for a go-ahead before committing/pushing. **#65, #66, and #67 have since been committed and pushed** (`249ee8c`, `73a49ef`, confirmed via `git log`) — **only #68 is still sitting uncommitted.** If you're picking this repo back up and `git status` shows uncommitted changes, check DECISIONS #68 before assuming that's stray work to discard.
 
 ## Backend status (2026-09-21)
 
@@ -1493,9 +1493,115 @@ dev DB. Screenshots (375px, EN + Malay):
 `round6-bottomnav-ms.png`, `round6-reject410-after.png`,
 `round6-company-files-no-archived.png`, `round6-item6-photo-picked.png`.
 
+**Follow-up: quarantined uploads get real feedback in the Needs Review
+queue — and a genuinely different, more correct fix than what was
+proposed was needed to make Reject actually work on one, found by
+verifying the proposal live instead of trusting the read (2026-09-23,
+DECISIONS #68).** Decided design, given up front: no separate "notice"
+concept — a blocked file lands in the exact same queue as everything
+else, plain language, no "quarantine"/"confidence"/"admin" jargon.
+
+**(1) `verify()`'s hard-quarantine branch now inserts a `review_item`**
+— it used to `return` before ever reaching the bottom-of-function INSERT
+(confirmed by reading the full function), exactly why a quarantined
+upload vanished with zero feedback (DECISIONS #67's own flagged gap).
+Reuses the existing INSERT, not new plumbing; `proposed_json` is
+deliberately `"{}"`, not the real `extract_result` — a document flagged
+for injected instructions shouldn't have its extracted field values
+presented as trustworthy to accept, on top of Accept not even being
+offered for this reason (see #4). New code `injection_suspected_blocked`
+(distinct from the existing soft `injection_suspected`, which stays
+reviewable with Accept available).
+
+**(2) A real, more serious bug found by verifying the proposed mechanism
+live, not assumed from the read.** The proposal: reuse DECISIONS #67's
+reject-on-410 auto-archive fallback — "this document's pipeline never
+reaches human_review, so there's no checkpoint to resume, ever, so it'll
+410 like an expired session." Reproduced against the actual running dev
+server and found this is **not reliably true**: LangGraph still
+checkpoints after `verify()` runs even on this early-return path — it's
+just a checkpoint reflecting an already-*completed* run with nothing
+pending. Resuming *that* via `Command(resume=...)` succeeds as a silent
+no-op (a real HTTP 200, `document.status` and `review_item.status` both
+left completely untouched) rather than raising `InvalidUpdateError`/410,
+unlike a genuinely-restarted session's fully-absent checkpoint (confirmed
+both ways against the live server). The original plan's Reject button
+would have shown a false "rejected and archived" success message while
+silently leaving the card stuck in the queue forever — worse than doing
+nothing, and confirmed live before shipping it. **Real fix**:
+`app/main.py::resolve_review` now checks `document.status == 'quarantined'`
+before ever touching the pipeline, and if so, archives directly
+(`transition_document(..., "archived", ...)` + dismiss the review_item)
+— the same effect `POST /api/documents/{id}/archive` already has, reached
+from the endpoint the UI already calls, bypassing the unreliable pipeline
+resume entirely for this case.
+
+**(3) `_check_classify_confidence` reconnected to `verify()`'s reasons**
+— DECISIONS #67 (items 7/8) had deliberately disconnected this,
+reasoning that `needs_review` is already unconditional so nothing was
+skipped; the uncaught side effect was that an unreadable document then
+produced *zero* reasons and fell through to "No issues found," actively
+misleading for a document nobody could actually read. Reconnected with a
+new code (`could_not_read_document`, renamed from
+`low_confidence_classification` now that it's user-facing again) and
+empty params — the percentage is genuinely gone from the data, not just
+hidden by the frontend. `_check_description_signals_problem` untouched
+(already correctly scoped as a content check, not a numeric score).
+
+**(4) Accept hidden for the blocked case** (`ReviewQueueCard.tsx`'s
+`isInjectionBlocked`, `opsShared.tsx::isInjectionBlockedReason`) —
+nothing was ever presented as trustworthy to confirm; only Reject shows,
+and it now genuinely removes the card (see #2).
+
+**(5) Confirmed live, not assumed**: the "Extracted fields" section
+already correctly stays hidden for both cases (gated on
+`fieldNames.length > 0`, naturally empty since `proposed_json` is `"{}"`
+for the blocked case and lane='memory' never populates it for the
+unreadable case); the "Document" fields section (filename/description/
+bucket/doc_type/vendor_name) correctly still renders for both — classify()
+already ran and set these before verify() ever sees the document, for
+both cases. `reasonText()` (`opsShared.tsx`) also special-cased
+`injectionSuspectedBlocked` the same way `file_missing` already was — its
+translated sentence is a complete, standalone statement ("...Delete it,
+or upload a different copy."), not a fragment meant to follow "Please
+confirm:" (caught live: the wrapped version read as nonsensical, nothing
+was being confirmed). New `ops.review.reasons.injectionSuspectedBlocked`/
+`couldNotReadDocument` i18n keys in all 4 locales.
+
+New regression test
+(`tests/test_auth.py::test_resolve_review_archives_a_quarantined_document_without_touching_the_pipeline`)
+— seeds a quarantined document directly (gateway-free) and asserts the
+real HTTP resolve call archives it without ever needing a real pipeline
+checkpoint, proving the fix works regardless of process/checkpoint state,
+not just in the one live repro.
+
+Verified live end to end (Playwright, 375px, EN + Malay): a real
+regex-triggered quarantine attempt via the actual upload endpoint hit a
+**separate, pre-existing, out-of-scope crash** in
+`app/extract/extract.py` (`llm_result.tool_calls[0]` —
+`TypeError: 'NoneType' object is not subscriptable`, the model
+apparently sometimes returns no tool call for adversarial invoice-shaped
+text) — not fixed here, flagged in `docs/KANBAN.md`'s Backlog instead;
+live verification of the review-queue behavior itself used a
+directly-seeded quarantined document instead (same `resolve_review` code
+path regardless of how the review_item was created), while the
+unreadable-document case was verified via a real upload end to end (no
+gateway call needed for that path — classify.py's own no-OCR-text
+fallback is deterministic). Confirmed: no Accept button, no Extracted
+fields section, plain-language reason with zero "quarantine"/
+"confidence"/"admin" wording in either language, clicking Reject actually
+removes the card and archives the document (`document.status`/
+`review_item.status` confirmed in the DB), the unreadable case keeps
+Accept and shows the new plain reason instead of a misleading "No issues
+found." `pytest tests/` 48/48 (1 new test), `python evals/run.py` 14/14
+adversarial, `npm run typecheck`/`npm run build` clean. Screenshots
+(375px, EN + Malay): `docs/screenshots/round7-quarantine-headline-buttons-en.png`,
+`round7-quarantine-headline-buttons-ms.png`,
+`round7-unreadable-card-en.png`, `round7-unreadable-card-ms.png`.
+
 **Known gaps, in the order they'll bite:**
-- **DECISIONS #67's regression/cleanup round is sitting uncommitted, waiting for an explicit go-ahead** — see the "GitHub" bullet at the top of this file. #65 and #66 (previously flagged here as unpushed) have since been committed and pushed (`249ee8c`). Until #67 is pushed, the live app still has the reject-double-click, no-quarantine-feedback (see the dedicated gap below), raw-ISO-date-in-fields, visible-confidence-wording, redundant-picture-checkbox, and cramped-bottom-nav issues this round fixed.
-- **Quarantined uploads now get zero inline feedback anywhere** (2026-09-23, DECISIONS #67, item 3) — deleting the "Last upload result" banner (explicitly instructed) removed the only place a quarantine result was ever shown; a quarantine never creates a `review_item`, so nothing in the review queue picks up the slack either. Real, rare, flagged rather than silently accepted — `docs/KANBAN.md` Backlog has the follow-up decision needed.
+- **DECISIONS #68's round is sitting uncommitted, waiting for an explicit go-ahead** — see the "GitHub" bullet at the top of this file. #65, #66, and #67 (previously flagged here as unpushed) have since been committed and pushed (`249ee8c`, `73a49ef`). Until #68 is pushed, the live app still has the no-quarantine-feedback gap and the misleading-"no-issues-found"-on-an-unreadable-document issue this round fixed.
+- **`app/extract/extract.py` crashes with a 500 on some adversarial invoice-shaped text** (found live 2026-09-23, DECISIONS #68) — `llm_result.tool_calls[0]["function"]["arguments"]` raises `TypeError: 'NoneType' object is not subscriptable` when the model returns no tool call at all; reproduced with a synthetic invoice PDF containing the GAPS.md §3 injection demo string. A document hitting this never reaches `verify()`, so it never even gets quarantined — the upload just 500s. Real, reproducible, pre-existing, out of scope for this round; `docs/KANBAN.md` Backlog has the fix needed (a defensive check for a missing tool call).
 - **Golden-path eval cases (`evals/cases/golden/`) remain blocked on real data** (2026-09-23, DECISIONS #66) — this session has no access to real labelled invoices/documents, and the project's own privacy policy (`WINNING.md`) deliberately keeps real corporate documents out of the repo. Needs the user to supply specific files or explicitly waive that policy.
 - **Whether items 1/2/6's original live symptom ("file missing" + "no issues found" together, vanishing photos) is actually resolved is unconfirmed from this session** (2026-09-23, DECISIONS #66) — most plausibly it already was, by the reporting session's own Lightsail deploy fix; the new `_check_file_exists` guardrail is real defense-in-depth regardless, verified only via a unit test, not against the live box.
 - **The EXIF-rotation fix's real-world impact on the *specific* live-mobile regression that prompted it is unconfirmed** — verified with a synthetic test image + a real gateway call, not the original reported photo. The frontend should already prevent pure-rotation cases for a real web upload (`imageNormalize.ts`'s own docstring); if the symptom persists after this deploys, the already-tracked deskew/crop/quality gap (below) is the more likely cause, not rotation.

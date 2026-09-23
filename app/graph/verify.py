@@ -146,20 +146,25 @@ def _check_classify_confidence(classify: dict, floor: float = CONFIDENCE_FLOOR) 
     """Catches classify.py's own deterministic no-OCR-text fallback
     (confidence=0.3, description='Untitled photo') — the exact mechanism
     a sideways/unreadable photo falls into. `classify_result['confidence']`
-    was never checked anywhere in this file before this.
+    was never checked anywhere in this file before the check that added
+    this function.
 
-    2026-09-23 (live regression report, items 7/8): no longer called from
-    verify() below — needs_review is already unconditional for every
-    document (DECISIONS #40), so a document whose only issue was low
-    classification confidence still gets reviewed exactly the same either
-    way; the only thing removing this call site changes is that the
-    message stops naming a raw percentage. The function itself stays
-    (evals/run.py's unreadable-document eval exercises this detection
-    logic directly, independent of whether verify() ever surfaces its
-    text) — only its former call site in verify() is gone."""
+    2026-09-23 (live regression report, items 7/8): this call site was
+    removed from verify() below on the reasoning that needs_review is
+    already unconditional (DECISIONS #40), so a document whose only issue
+    was low classification confidence still gets reviewed either way.
+    **Reconnected the same day (DECISIONS #68)**: that removal had a real
+    side effect neither round caught at the time — an unreadable document
+    now produced zero reasons, so it fell through to the generic "No
+    issues found," which actively misleads a reviewer looking at a
+    document nobody could actually read. Reconnected, but with a genuinely
+    new, plain-language code/params — no percentage, no "confidence"
+    wording anywhere the user sees (params intentionally empty; the old
+    `{"confidence": f"{confidence:.0%}"}` param is gone, not just hidden
+    by the frontend)."""
     confidence = classify.get("confidence")
     if confidence is not None and confidence < floor:
-        return [{"code": "low_confidence_classification", "params": {"confidence": f"{confidence:.0%}"}}]
+        return [{"code": "could_not_read_document", "params": {}}]
     return []
 
 
@@ -211,15 +216,46 @@ def verify(state: PipelineState) -> PipelineState:
 
     if injection_hits:
         # Regex-corroborated — deterministic and independent of the model,
-        # so this stays a hard, unconditional quarantine (unchanged).
+        # so this stays a hard, unconditional quarantine (unchanged):
+        # needs_review=False, so _route_after_verify (pipeline.py) still
+        # routes straight to END, never through human_review — no
+        # interrupt() ever runs for this thread_id, so no LangGraph
+        # checkpoint ever exists for it (2026-09-23, DECISIONS #68).
         detail = f"regex={injection_hits}, model_flag={model_flagged}"
         quarantine(document_id, detail, DB_PATH)
-        result = VerifyResult(
-            ok=False,
-            reasons=[{"code": "injection_suspected_hard", "params": {"detail": detail}}],
-            needs_review=False,
-        )
+        quarantine_reasons = [{"code": "injection_suspected_blocked", "params": {}}]
+        result = VerifyResult(ok=False, reasons=quarantine_reasons, needs_review=False)
         with get_conn(DB_PATH) as conn:
+            # 2026-09-23 (DECISIONS #68): this branch used to return here
+            # without ever creating a review_item — confirmed live, that's
+            # exactly why a quarantined upload vanished with zero feedback
+            # anywhere (found via last round's "Last upload result" box
+            # removal). Reuses the same INSERT the bottom of this function
+            # already does for the normal reviewable path, not new
+            # plumbing — proposed_json is "{}" (not extract_result):
+            # a document flagged for injected instructions shouldn't have
+            # its extracted field VALUES presented as trustworthy proposed
+            # data to accept, on top of there being no Accept action for
+            # this reason code anyway (ReviewQueueCard.tsx). This document
+            # never reaches human_review (see above) — resolving this
+            # review_item is handled directly in app/main.py::resolve_review
+            # (checks document.status == 'quarantined' and archives it
+            # without ever touching the pipeline), not via the 410/expired-
+            # checkpoint path: confirmed live that resuming a thread whose
+            # only checkpoint is this early-returned, already-completed
+            # verify() run does NOT reliably raise LangGraph's
+            # InvalidUpdateError the way a genuinely restarted session
+            # does — it can silently no-op instead (see resolve_review's
+            # own comment for the full story).
+            conn.execute(
+                "INSERT INTO review_item (company_id, document_id, reason, question, proposed_json, status) "
+                "VALUES (?, ?, ?, ?, '{}', 'open')",
+                (
+                    state["company_id"], document_id,
+                    "injection_suspected_blocked",
+                    json.dumps(quarantine_reasons),
+                ),
+            )
             conn.execute(
                 "INSERT INTO trace (run_id, company_id, document_id, node, decision) "
                 "VALUES (?, ?, ?, 'verify', 'quarantined')",
@@ -249,14 +285,16 @@ def verify(state: PipelineState) -> PipelineState:
         reasons.extend(_check_amounts_in_text(extract, text))
         reasons.extend(_check_required_invoice_fields(extract))
 
-    # 2026-09-23 (live regression report, items 7/8): _check_classify_confidence's
-    # contribution removed here — needs_review is already unconditional
-    # (DECISIONS #40), so a document whose only issue was low confidence
-    # (classify's or a per-field extract confidence) now correctly falls
-    # through to the same "no issues found" path as any other document,
-    # rather than a message naming a raw percentage or specific field
-    # names. _check_description_signals_problem stays: unlike a numeric
-    # confidence score, it's a content check on the model's own words.
+    # 2026-09-23 (items 7/8, then reconnected same day — DECISIONS #68):
+    # _check_classify_confidence's contribution was removed here on the
+    # reasoning that needs_review is already unconditional (DECISIONS
+    # #40), so a low-confidence document still gets reviewed either way.
+    # Reconnected after finding the real side effect: with no reasons at
+    # all, an unreadable document fell through to the generic "no issues
+    # found" text, which is actively misleading, not just less specific.
+    # The function's own code/params changed too (could_not_read_document,
+    # no params) — no percentage, not the old confidence-bearing text.
+    reasons.extend(_check_classify_confidence(classify))
     reasons.extend(_check_description_signals_problem(classify.get("description")))
 
     # 2026-09-23 (live regression report, items 1/2/6): checked last and

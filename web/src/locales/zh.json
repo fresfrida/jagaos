@@ -124,6 +124,7 @@
         "fileMissing": "文件缺失 — 请删除或重新上传此文件。",
         "prefix": "请确认：{{reasons}}",
         "injectionSuspected": "模型标记此文件可能包含注入指令 — 请确认安全后再继续",
+        "injectionSuspectedBlocked": "我们无法安全处理此文件，因此未从中提取任何内容。请删除它，或上传其他文件。",
         "extractionError": "提取错误：{{detail}}",
         "zeroAmounts": "小计、消费税和总额均为零 — 这很可能是读取失败，而非真实的零金额发票",
         "gstMismatch": "消费税 {{gst}} 与小计 {{subtotal}} 的约9%不符（预期约 {{expectedGst}}）",
@@ -131,7 +132,8 @@
         "amountsNotInText": "提取的金额在文件文本中均未找到 — 请在确认前对照图片仔细核实",
         "missingRequiredFields": "缺少必填字段：{{fields}}",
         "missingArithmeticFields": "缺少小计/消费税/总额 — 无法核实算术",
-        "descriptionSignalsProblem": "描述提示可能存在提取问题（\"{{word}}\"）— 请检查此文件是否读取正确"
+        "descriptionSignalsProblem": "描述提示可能存在提取问题（\"{{word}}\"）— 请检查此文件是否读取正确",
+        "couldNotReadDocument": "我们无法读取此文件。请尝试更清晰的照片或其他文件。"
       },
       "fieldLabel": {
         "vendor": "供应商",
