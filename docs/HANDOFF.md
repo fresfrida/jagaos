@@ -22,7 +22,7 @@ This repo currently holds:
 - **`vision/`** — isolated image-captioning service (own venv, `Salesforce/blip-image-captioning-base`), 2026-09-23, DECISIONS #55. Deliberately separate from `app/` — see "Backend status" below.
 - **Python env** — conda env `agent` (Python 3.11.16), `requirements.txt` installed.
 - **`DB/`** — schema screenshots (source of truth for tables; no SQL file exists). `app/db.py` implements the SQLite translation per `ARCHITECTURE.md` §2.
-- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way. **Exception, 2026-09-23 (DECISIONS #65 and #66)**: both rounds' regression fixes were built, tested, and verified but deliberately left uncommitted in the working tree on an explicit one-off instruction each time — wait for a go-ahead before committing/pushing either round. If you're picking this repo back up and `git status` shows uncommitted changes, check DECISIONS #65/#66 before assuming that's stray work to discard.
+- **GitHub**: `github.com/fresfrida/jagaos` (private). **Collaboration mode is `solo` as of 2026-09-22** (project `CLAUDE.md`'s first line) — commit and push freely after each completed task, no explicit ask needed; `./scripts/prepush-check.sh` still runs before every push. Redeploying the Lightsail backend (not git-triggered) still needs an explicit ask either way. **Exception, 2026-09-23 (DECISIONS #65/#66/#67)**: each of these three rounds' regression fixes were built, tested, and verified but deliberately left uncommitted in the working tree on an explicit one-off instruction each time — wait for a go-ahead before committing/pushing. **#65 and #66 have since been committed and pushed** (`249ee8c`, confirmed via `git log`) — only #67 is still sitting uncommitted. If you're picking this repo back up and `git status` shows uncommitted changes, check DECISIONS #67 before assuming that's stray work to discard.
 
 ## Backend status (2026-09-21)
 
@@ -1323,8 +1323,179 @@ would have been 3). Screenshots:
 `regression2-company-files-sg-dates.png`,
 `regression2-vendor-prefill-no-confidence.png`.
 
+**A third live-mobile regression/cleanup round (11 items) on the
+upload/review flow — built, tested, and verified, but deliberately NOT
+committed or pushed this round either, same one-off wait-for-go-ahead
+instruction as #65/#66 (2026-09-23, DECISIONS #67).** Opened noting the
+reporting session's own earlier deploy issue was already fixed and the
+Lightsail box confirmed correctly live.
+
+**(1) Reject = delete, one terminal state.** Investigated first, not
+assumed a bug: `GET /api/documents` already excludes
+`status != 'archived'` unconditionally (DECISIONS #53), reject already
+chains straight through to `archived` (DECISIONS #50), and `StatusPill`'s
+status maps have no `rejected` entry at all — confirmed by reading the
+code, not just believing the report. **The real gap**: `ReviewQueueCard
+.tsx::resolve()`'s handling of a 410 (the in-memory `MemorySaver`
+checkpoint is gone — a server restart since upload, `docs/HANDOFF.md`'s
+own known limitation) showed the identical manual "this document can no
+longer be reviewed automatically... [Delete]" fallback for *both* confirm
+and reject, needing a second click either way. Reject's intent is
+unambiguous ("make this gone"), so its 410 path now calls the same
+archive endpoint the manual fallback used, automatically — no second
+click. Confirm keeps the manual fallback: a correction can't be silently
+auto-applied without knowing what was actually being confirmed.
+**Verified live with a real forced 410**, not simulated: uploaded a
+document through the real UI, restarted the backend process (the exact
+condition that produces this — wipes `MemorySaver`'s in-memory state),
+then rejected the now-orphaned review item. No fallback prompt appeared;
+the normal "rejected and archived, upload a replacement?" banner did;
+`document.status` confirmed `archived` directly in the DB afterward.
+
+**(2) Deleted/rejected items never appear on the calendar or any list.**
+Confirmed already true, not rebuilt — item 1's own finding already covers
+every list this could apply to (`GET /api/documents` feeds Calendar,
+Company Files, and Search alike). Verified live: an archived test
+document is absent from both Company Files and Calendar.
+
+**(3) "Last upload result" box removed outright** (`UploadPage.tsx`) —
+the review queue below genuinely does already communicate a
+`needs_review` outcome, exactly as instructed. **A real side effect
+flagged plainly, not silently absorbed**: a *quarantined* upload (the
+injection-guardrail hard-stop) never creates a `review_item` at all, so
+after this change it gets zero inline feedback of any kind — the file
+just doesn't appear anywhere, with no explanation shown. Rare (a genuine
+injection-quarantine event), but a real regression from this specific
+instruction, not a false alarm — `docs/KANBAN.md` Backlog has the
+follow-up decision needed (leave as-is, or add back a minimal
+quarantine-only notice).
+
+**(4) DD/MM/YYYY dates in the extracted-fields grid.** A real constraint
+surfaced and reasoned through *before* writing code, not discovered
+after: a native `<input type="date">`'s *displayed* format follows the
+browser/OS locale, not application code — HTML5 only guarantees the
+underlying stored value is ISO `YYYY-MM-DD`. There is no way to force a
+native date input to always visually show DD/MM/YYYY across every
+browser/OS. Built a small masked text input instead (`opsShared.tsx`'s
+`isoToDmy`/`dmyToIso`) — parses/validates DD/MM/YYYY on the way in, ISO
+stored underneath — applied to the two date-shaped extract fields
+(`issued_on`, `due_on`; a closed, hand-kept-in-sync set matching
+`InvoiceFields`/`StatutoryFields`, `app/models.py`), not every field the
+generic grid renders.
+
+**(5) Doc Type's "—" clear pill removed.** Checked first, as asked: does
+any workflow depend on clearing `doc_type` back to empty? `doc_type` is
+always set by the pipeline before a human ever sees this field, clearing
+it produces an empty string with no meaningful effect anywhere
+downstream (`derive_expectations.py`'s doc_type matching, the PATCH
+endpoint) — a vestigial pill nobody needed. Removed from `DocTypeField`
+(`opsShared.tsx`), fixing every caller at once.
+
+**(6) The separate "is this a picture, not a document?" checkbox
+removed entirely** (`PictureToggleField` deleted, both call sites in
+`ReviewQueueCard.tsx`/`DocumentCard.tsx`) — reasoned through, not just
+followed: `DOC_TYPES` already includes `'photo'` as a normal pill option,
+so the checkbox was a second control answering the exact question the
+pill already did. Picking "Photo" from the Doc Type pills now IS the
+correction — `resolve()`/`save()` detect it and send `is_picture: true`
+instead of a plain `doc_type` update, triggering the same existing
+deterministic server-side lane/doc_type/bucket correction
+(`DocumentEditRequest`'s docstring, unchanged) — only what triggers it
+moved. Still locks (disabled) once already in memory lane, same
+one-directional design as before. The upload-time Document/Photo toggle
+(`UploadPage.tsx`) deliberately untouched — at that point nothing has
+been classified yet, so there's no Doc Type field to pick from.
+**Verified live end to end**, not just typechecked or read: picked Photo
+on a seeded review card, saved, confirmed directly in the DB that
+`lane='memory', doc_type='photo', bucket='Memory Lane'` — the exact
+correction the old checkbox used to produce.
+
+**(7/8) All confidence wording removed from what a user sees.**
+`app/graph/verify.py::_check_classify_confidence`'s and
+`_low_confidence_fields`'s contributions to `reasons`/`question` are
+gone. Reasoned, not just executed: `needs_review` is already
+unconditional (DECISIONS #40), so a document whose only issue was low
+confidence still gets reviewed exactly the same either way — removing
+these only stops the message from naming a raw percentage or specific
+field names, it skips no review. `_check_classify_confidence` itself
+stays defined (`evals/run.py`'s unreadable-document eval exercises it
+directly, independent of `verify()`); `_low_confidence_fields` was
+genuinely dead after this and deleted, along with the now-unused call
+site. `_check_description_signals_problem` deliberately kept — a content
+check on the model's own words, not a numeric score, the same
+distinction the report itself drew. The per-field inline confidence
+percentage/"(please check)" flag removed from `ReviewQueueCard.tsx`'s
+extracted-fields grid too.
+
+**(9) Bottom nav given more vertical room** (`BottomNav.tsx`) — items'
+`py-1.5`→`py-2.5`, icon `20`→`22`; the raised center Upload button grown
+proportionally (`h-12`/`-mt-5`→`h-14`/`-mt-6`, icon `20`→`22`) so it
+doesn't shrink relative to the now-taller bar around it.
+
+**(10a) Field-name translations + a language-name fix.** New
+`ops.review.fieldLabel.*` map (`opsShared.tsx::fieldLabel`) translates
+every possible extract-result field name (`vendor`, `gst_reg_no`,
+`invoice_no`, `issued_on`, `subtotal`, `gst`, `total` from
+`InvoiceFields`; `doc_type`, `reference_no`, `due_on`, `subject` from
+`StatutoryFields`) instead of printing the raw dict key — the generic
+fields grid renders whichever set a document's lane produced, so all 11
+needed covering, not just the invoice ones. `i18n.ts`'s Malay option
+renamed `"BM"` → `"Malay"`.
+
+**(10b) The largest single piece of this round — `verify()`'s reasons
+restructured from pre-joined English sentences to `{code, params}`
+dicts.** New `ReviewReason` Pydantic model (`app/models.py`); every
+reason-producing check in `app/graph/verify.py` converted — injection-
+suspected, extraction-error, zero-amounts, gst/total-mismatch, amounts-
+not-in-text, missing-required-fields, missing-arithmetic-fields,
+description-signals-problem, file-missing, the clean/no-issues case, and
+the hard-quarantine case — the *entire* set, reported as a complete
+conversion rather than assumed safe from a partial one. Stored as JSON
+in `review_item.question`; the frontend now owns all phrasing via new
+`ops.review.reasons.*` i18n keys with interpolation
+(`opsShared.tsx::reasonText`), the same pattern `ops.status.*` already
+established for status codes. `review_item.reason` (DB column) now holds
+a short debug string (reason codes joined, e.g. `"gst_mismatch"`)
+instead of the old full sentence — no longer load-bearing for the
+frontend: `ReviewQueueCard.tsx`'s `isRoutine`/`isFileMissing` now derive
+from the parsed `question` array's shape (empty / a lone `file_missing`
+entry) instead of exact-matching a stored string. Touched:
+`app/models.py`, `app/graph/verify.py`, `app/graph/human_review.py`
+(interrupt payload, unused downstream — confirmed via grep — so a free
+rename), ~10 `tests/test_rules_smoke.py` assertions rewritten to check
+`code`/`params` instead of substring-matching sentences (one test's
+whole premise — low-classify-confidence alone triggering a reason — was
+intentionally flipped to assert the new "falls through to clean"
+behavior, per 7/8's own stated reasoning, not left contradicting the
+code), `opsApi.ts`'s `VerifyResult`/`ReviewItem` TypeScript types.
+
+**(11) Existing amber/red warning styling kept exactly as-is**, per
+explicit instruction — just wired through the new i18n-driven text
+instead of a raw stored string.
+
+**Verified live end to end** (Playwright, 375px, EN and Malay, a
+manufactured GST-mismatch review card plus a real forced-410 reject):
+the full flagged-card sentence renders correctly in both languages with
+real interpolated numbers ("Please confirm: GST 84.00 is not ~9% of
+subtotal 300.00 (expected ~27.00)" / "Sila sahkan: GST 84.00 bukan ~9%
+daripada subjumlah 300.00 (dijangka ~27.00)"); field labels translated in
+both languages; the DD/MM/YYYY date field renders `15/09/2026` from a
+stored `2026-09-15`; no raw codes, percentages, or confidence wording
+found anywhere in the rendered card text in either language; the
+doc-type clear pill and the separate picture checkbox both confirmed
+absent from the DOM. `pytest tests/` 47/47, `python evals/run.py` 14/14
+adversarial, `npm run typecheck`/`npm run build` clean. The two
+manufactured test documents used for live verification were cleaned up
+via the real archive endpoint afterward, not left sitting in the shared
+dev DB. Screenshots (375px, EN + Malay):
+`docs/screenshots/round6-review-card-gst-en-cropped.png`,
+`round6-review-card-gst-ms-cropped.png`, `round6-bottomnav-en.png`,
+`round6-bottomnav-ms.png`, `round6-reject410-after.png`,
+`round6-company-files-no-archived.png`, `round6-item6-photo-picked.png`.
+
 **Known gaps, in the order they'll bite:**
-- **DECISIONS #65 and #66's regression-fix rounds are both sitting uncommitted, waiting for an explicit go-ahead** — see the "GitHub" bullet at the top of this file. Until pushed (and Lightsail redeployed, since `app/main.py`/`app/extract/ocr.py`/`app/graph/verify.py` all changed across the two rounds), the live app still has the footer-in-signed-in-app, no-EXIF-correction, no-field-completeness-check, doc-type-contradiction, duplicate-review-message, temp-file-leak, no-file-missing-check, vendor-not-prefilled, zero-amount-not-flagged, dead-upload-button, raw-ISO-date, and visible-confidence-score issues these two rounds fixed.
+- **DECISIONS #67's regression/cleanup round is sitting uncommitted, waiting for an explicit go-ahead** — see the "GitHub" bullet at the top of this file. #65 and #66 (previously flagged here as unpushed) have since been committed and pushed (`249ee8c`). Until #67 is pushed, the live app still has the reject-double-click, no-quarantine-feedback (see the dedicated gap below), raw-ISO-date-in-fields, visible-confidence-wording, redundant-picture-checkbox, and cramped-bottom-nav issues this round fixed.
+- **Quarantined uploads now get zero inline feedback anywhere** (2026-09-23, DECISIONS #67, item 3) — deleting the "Last upload result" banner (explicitly instructed) removed the only place a quarantine result was ever shown; a quarantine never creates a `review_item`, so nothing in the review queue picks up the slack either. Real, rare, flagged rather than silently accepted — `docs/KANBAN.md` Backlog has the follow-up decision needed.
 - **Golden-path eval cases (`evals/cases/golden/`) remain blocked on real data** (2026-09-23, DECISIONS #66) — this session has no access to real labelled invoices/documents, and the project's own privacy policy (`WINNING.md`) deliberately keeps real corporate documents out of the repo. Needs the user to supply specific files or explicitly waive that policy.
 - **Whether items 1/2/6's original live symptom ("file missing" + "no issues found" together, vanishing photos) is actually resolved is unconfirmed from this session** (2026-09-23, DECISIONS #66) — most plausibly it already was, by the reporting session's own Lightsail deploy fix; the new `_check_file_exists` guardrail is real defense-in-depth regardless, verified only via a unit test, not against the live box.
 - **The EXIF-rotation fix's real-world impact on the *specific* live-mobile regression that prompted it is unconfirmed** — verified with a synthetic test image + a real gateway call, not the original reported photo. The frontend should already prevent pure-rotation cases for a real web upload (`imageNormalize.ts`'s own docstring); if the symptom persists after this deploys, the already-tracked deskew/crop/quality gap (below) is the more likely cause, not rotation.
@@ -1437,7 +1608,7 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Tap-to-talk voice captioning (Web Speech API, 2026-09-23, DECISIONS #52) | `hooks/useSpeechCaption.ts` |
 | i18n bootstrap (i18next instance, language persistence) + locale files — all four real (EN, and ZH/TA/MS since DECISIONS #61 superseded #57's English-value stubs; four strings within ZH/TA/MS from DECISIONS #62 are assistant- not human-translated, `docs/KANBAN.md` Backlog) | `i18n.ts`, `locales/{en,zh,ta,ms}.json` |
 | The real logged-in app's shared data layer (documents/expectations/obligations/reviewItems + backend health) and status bar, used by every page below (2026-09-23, DECISIONS #59) | `features/ops/useOpsData.ts`, `features/ops/OpsStatusBar.tsx` |
-| Shared field/status components (`DocTypeField`, `BucketField`, `PillPicker`, `VoiceCaptionButton`, `PictureToggleField`, `StatusPill` — no badge for `filed`/`processed`, DECISIONS #60 — blob-URL fetch hook), translated-label accessors for enum display values (`bucketLabel`/`docTypeLabel`/`roleLabel`/`riskLabel`, DECISIONS #63 — translate display only, never the stored value), `formatDocumentLabel`/`DocumentTypeIcon` (DECISIONS #62-63), and the API client (`BUCKETS`/`DOC_TYPES`, all `/api/documents`\|`/api/search`\|etc. calls) | `features/ops/opsShared.tsx`, `features/ops/opsApi.ts` |
+| Shared field/status components (`DocTypeField`, `BucketField`, `PillPicker`, `VoiceCaptionButton`, `StatusPill` — no badge for `filed`/`processed`, DECISIONS #60 — blob-URL fetch hook; `PictureToggleField` removed 2026-09-23, DECISIONS #67 — the Doc Type "Photo" pill is the only control for this now), translated-label accessors for enum display values (`bucketLabel`/`docTypeLabel`/`roleLabel`/`riskLabel`, DECISIONS #63; `fieldLabel` for extract-result field names, DECISIONS #67 — translate display only, never the stored value), structured review reasons (`parseReviewReasons`/`isFileMissingReason`/`reasonText` — app/graph/verify.py's `{code, params}` dicts translated into the flagged-card sentence, DECISIONS #67, supersedes a pre-joined English sentence), a DD/MM/YYYY masked date input (`isoToDmy`/`dmyToIso`/`DATE_FIELD_NAMES`, DECISIONS #67 — a native `<input type="date">` can't guarantee that display format cross-browser), `formatDocumentLabel`/`DocumentTypeIcon` (DECISIONS #62-63), and the API client (`BUCKETS`/`DOC_TYPES`, all `/api/documents`\|`/api/search`\|etc. calls) | `features/ops/opsShared.tsx`, `features/ops/opsApi.ts` |
 | Shared destructive-action confirmation modal ("Delete X? This can't be undone.", 2026-09-23, DECISIONS #60) | `components/ui/ConfirmDialog.tsx` |
 | Mobile-only bottom nav (Calendar/Tags/Upload-center/Search/Company Files, role-aware since DECISIONS #64 — `viewer` loses the center Upload button and reflows to four) + the compact account-menu dropdown inside the top bar (persistent role chip + Company Settings link, DECISIONS #62/#64) | `sections/BottomNav.tsx`, `sections/Header.tsx` (`UserMenu`, `visibleNavRoutes`) |
 | Company settings — owner-editable, admin read-only, no nav entry or route access below admin (2026-09-23, DECISIONS #64); full role × action matrix | `pages/CompanySettingsPage.tsx`, `docs/PERMISSIONS.md` |

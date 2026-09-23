@@ -5,7 +5,7 @@
  * data-fetching now comes from the shared useOpsData hook instead of
  * OpsConsole's own state. */
 
-import { Loader2, ShieldAlert, Upload } from 'lucide-react'
+import { Loader2, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
@@ -17,8 +17,8 @@ import { normalizeImageForUpload } from '../lib/imageNormalize'
 import { onTriggerUploadPicker } from '../lib/uploadTrigger'
 import { OpsStatusBar } from '../features/ops/OpsStatusBar'
 import { ReviewQueueCard } from '../features/ops/ReviewQueueCard'
-import { StatusPill, VENDOR_NAMES_DATALIST_ID } from '../features/ops/opsShared'
-import { opsApi, type UploadResult } from '../features/ops/opsApi'
+import { VENDOR_NAMES_DATALIST_ID } from '../features/ops/opsShared'
+import { opsApi } from '../features/ops/opsApi'
 import { useOpsData } from '../features/ops/useOpsData'
 
 function UploadReviewContent() {
@@ -27,7 +27,6 @@ function UploadReviewContent() {
   const { documents, reviewItems, apiUp, error, setError, refresh } = useOpsData()
 
   const [busy, setBusy] = useState(false)
-  const [lastUpload, setLastUpload] = useState<UploadResult | null>(null)
   const [justRejectedFilename, setJustRejectedFilename] = useState<string | null>(null)
   const [isPictureUpload, setIsPictureUpload] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -43,10 +42,6 @@ function UploadReviewContent() {
     if (!canUpload) return
     return onTriggerUploadPicker(() => fileInputRef.current?.click())
   }, [canUpload])
-  // 2026-09-22 (DECISIONS #47): same routine-vs-flagged distinction
-  // ReviewQueueCard already makes (isRoutine, DECISIONS #40) — a clean
-  // upload's badge shouldn't read as "something's wrong" here either.
-  const isRoutineUpload = lastUpload?.status === 'needs_review' && lastUpload.review?.reason === 'clean extraction'
   // 2026-09-22 (DECISIONS #45): vendor_name autocomplete source — distinct
   // values already on this company's documents, no new endpoint.
   const vendorNames = [...new Set(documents.map((d) => d.vendor_name).filter((v): v is string => Boolean(v)))].sort()
@@ -57,8 +52,11 @@ function UploadReviewContent() {
     setJustRejectedFilename(null)
     try {
       const normalized = await normalizeImageForUpload(file)
-      const result = await opsApi.uploadDocument(normalized, isPictureUpload)
-      setLastUpload(result)
+      // 2026-09-23 (live regression report, item 3): the result used to
+      // be kept and rendered in a "Last upload result" banner — removed
+      // outright, the review queue below already communicates the
+      // outcome for a needs_review upload. Not read here anymore.
+      await opsApi.uploadDocument(normalized, isPictureUpload)
       // 2026-09-23: back to the default (No) after every upload — the
       // common case is still a real document, and leaving Yes stuck on
       // would silently mis-tag the next, unrelated file.
@@ -163,46 +161,6 @@ function UploadReviewContent() {
               >
                 {t('ops.upload.uploadReplacement')}
               </Button>
-            </div>
-          )}
-
-          {lastUpload && (
-            <div className="mt-4 rounded-card border border-line bg-canvas p-4 text-[13px]">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-ink">{t('ops.upload.lastResult')}</span>
-                {!isRoutineUpload && <StatusPill status={lastUpload.status} />}
-              </div>
-              {lastUpload.classify && (
-                <p className="mt-1 text-muted">
-                  {/* This is classification confidence ("this looks like an
-                     invoice"), not extraction accuracy — scoping the label
-                     to document-type detection so it doesn't read as a
-                     blanket trust score on the extracted fields (2026-09-22). */}
-                  {t('ops.upload.classifiedAs', {
-                    lane: lastUpload.classify.lane,
-                    docType: lastUpload.classify.doc_type,
-                    confidence: (lastUpload.classify.confidence * 100).toFixed(0),
-                  })}
-                  {lastUpload.classify.injection_suspected && (
-                    <span className="ml-2 inline-flex items-center gap-1 text-red-700">
-                      <ShieldAlert size={12} /> {t('ops.upload.injectionSuspected')}
-                    </span>
-                  )}
-                </p>
-              )}
-              {/* 2026-09-23 (live regression report): this used to repeat
-                 the full review question text — the same text
-                 ReviewQueueCard.tsx then renders again immediately below
-                 for the same document, now sitting in the Needs Review
-                 list. Confirmed live: shown twice for one upload. The
-                 review card owns the message; this banner now gives a
-                 short pointer to it instead of duplicating it. */}
-              {lastUpload.status === 'needs_review' && lastUpload.review?.question && (
-                <p className="mt-1 text-amber-800">{t('ops.upload.reviewShortLabel')}</p>
-              )}
-              {lastUpload.status === 'quarantined' && (
-                <p className="mt-1 text-red-700">{t('ops.upload.quarantinedMessage')}</p>
-              )}
             </div>
           )}
         </Card>

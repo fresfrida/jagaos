@@ -10,7 +10,7 @@ import { File, FileSpreadsheet, FileText, Image as ImageIcon, Mic, MicOff } from
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSpeechCaption } from '../../hooks/useSpeechCaption'
-import { BUCKETS, DOC_TYPES, opsApi, type DocumentRow } from './opsApi'
+import { BUCKETS, DOC_TYPES, opsApi, type DocumentRow, type ReviewReason } from './opsApi'
 
 // 2026-09-23 (live BM/Tamil i18n audit): BUCKETS/DOC_TYPES are the literal
 // DB/API values (bucket filtering, derive_expectations.py's doc_type slug
@@ -77,6 +77,117 @@ const RISK_LABEL_KEY: Record<string, string> = {
 export function riskLabel(t: TFunction, risk: string): string {
   const key = RISK_LABEL_KEY[risk]
   return key ? t(key) : risk
+}
+
+// 2026-09-23 (live regression report, items 7/8/10b): app/graph/verify.py
+// now returns structured {code, params} reasons instead of a pre-joined
+// English sentence — this is the frontend half, the same "translated
+// display, stable code underneath, never-disappears fallback" shape as
+// bucketLabel/docTypeLabel above. Two sentinel shapes read specially
+// (mirrored from verify.py's own logic, kept in sync by hand): an empty
+// array is "no issues found"; a lone file_missing entry is the distinct
+// red headline — both checked by the caller (ReviewQueueCard.tsx), not
+// here, since they also drive styling, not just text.
+const REASON_LABEL_KEY: Record<string, string> = {
+  injection_suspected: 'ops.review.reasons.injectionSuspected',
+  extraction_error: 'ops.review.reasons.extractionError',
+  zero_amounts: 'ops.review.reasons.zeroAmounts',
+  gst_mismatch: 'ops.review.reasons.gstMismatch',
+  total_mismatch: 'ops.review.reasons.totalMismatch',
+  amounts_not_in_text: 'ops.review.reasons.amountsNotInText',
+  missing_required_fields: 'ops.review.reasons.missingRequiredFields',
+  missing_arithmetic_fields: 'ops.review.reasons.missingArithmeticFields',
+  description_signals_problem: 'ops.review.reasons.descriptionSignalsProblem',
+}
+
+/** review_item.question is now JSON-encoded ReviewReason[], not a
+ * sentence (2026-09-23) — parses defensively (an unparseable/legacy value
+ * degrades to "no issues found" rather than crashing the card). */
+export function parseReviewReasons(question: string): ReviewReason[] {
+  try {
+    const parsed: unknown = JSON.parse(question)
+    return Array.isArray(parsed) ? (parsed as ReviewReason[]) : []
+  } catch {
+    return []
+  }
+}
+
+export function isFileMissingReason(reasons: ReviewReason[]): boolean {
+  return reasons.length === 1 && reasons[0]?.code === 'file_missing'
+}
+
+/** The full human-facing sentence for a review card's headline, built
+ * from translated per-reason text — never a raw code, and never a stored
+ * English sentence (that's the whole point of this restructure: this
+ * backend has no notion of the caller's language, so a ready-made
+ * sentence could never actually be translated). */
+export function reasonText(t: TFunction, reasons: ReviewReason[]): string {
+  if (isFileMissingReason(reasons)) return t('ops.review.reasons.fileMissing')
+  if (reasons.length === 0) return t('ops.review.reasons.clean')
+  const joined = reasons
+    .map((r) => {
+      const key = REASON_LABEL_KEY[r.code]
+      return key ? t(key, r.params) : r.code
+    })
+    .join('; ')
+  return t('ops.review.reasons.prefix', { reasons: joined })
+}
+
+// The generic "Extracted fields" grid (ReviewQueueCard.tsx) renders every
+// extract_result key it's handed — a mix of InvoiceFields' and
+// StatutoryFields' (app/models.py) field names, since which lane produced
+// the data decides which set shows up. Raw dict keys ("gst_reg_no") used
+// to print as-is regardless of language (2026-09-23, i18n audit, item
+// 10a) — translated display only, same never-disappears fallback as
+// bucketLabel/docTypeLabel above; the field NAME sent back on save is
+// always the raw key, unaffected by this.
+const FIELD_LABEL_KEY: Record<string, string> = {
+  vendor: 'ops.review.fieldLabel.vendor',
+  gst_reg_no: 'ops.review.fieldLabel.gstRegNo',
+  invoice_no: 'ops.review.fieldLabel.invoiceNo',
+  issued_on: 'ops.review.fieldLabel.issuedOn',
+  subtotal: 'ops.review.fieldLabel.subtotal',
+  gst: 'ops.review.fieldLabel.gst',
+  total: 'ops.review.fieldLabel.total',
+  doc_type: 'ops.review.fieldLabel.docType',
+  reference_no: 'ops.review.fieldLabel.referenceNo',
+  due_on: 'ops.review.fieldLabel.dueOn',
+  subject: 'ops.review.fieldLabel.subject',
+}
+
+export function fieldLabel(t: TFunction, name: string): string {
+  const key = FIELD_LABEL_KEY[name]
+  return key ? t(key) : name
+}
+
+// A field extracted as a date (app/models.py's InvoiceFields.issued_on,
+// StatutoryFields.issued_on/due_on — Provenance[date]) — the closed,
+// hand-kept-in-sync set of extract_result keys that get the DD/MM/YYYY
+// masked input below instead of a plain text box (2026-09-23, live
+// regression report item 4).
+export const DATE_FIELD_NAMES = new Set(['issued_on', 'due_on'])
+
+// A native <input type="date">'s DISPLAYED format is controlled by the
+// browser/OS locale, not app code — HTML5 only guarantees the underlying
+// value is ISO YYYY-MM-DD, so it can't be forced to always show
+// DD/MM/YYYY (Singapore's convention) across every browser/OS. Chosen
+// instead: a plain masked text input, parsed/validated on the way in,
+// ISO stored underneath — the real, working option, not the one with an
+// unfixable cross-browser display gap.
+export function isoToDmy(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso
+}
+
+/** null when `dmy` isn't (yet) a complete, valid DD/MM/YYYY string — the
+ * caller keeps showing what the user typed either way, only committing
+ * the parsed ISO value once it's complete, so typing "1" then "15" then
+ * "15/0" etc. doesn't fight the user mid-keystroke. */
+export function dmyToIso(dmy: string): string | null {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dmy.trim())
+  if (!m) return null
+  const [, d, mo, y] = m
+  return `${y}-${mo}-${d}`
 }
 
 /** "Vendor — doc_type", falling back to the description, then doc_type
@@ -268,12 +379,16 @@ export function DocTypeField({
   if (isLegacyValue) labels[value] = t('ops.docType.legacySuffix', { value })
   return (
     <div className="mt-1">
+      {/* No clearLabel (2026-09-23, live regression report item 5): doc_type
+         is always set by the pipeline before a human ever sees this field,
+         and clearing it back to an empty string has no meaningful effect
+         anywhere downstream (checked: derive_expectations.py's doc_type
+         matching, the PATCH endpoint) — a vestigial "—" pill nobody needs. */}
       <PillPicker
         options={isLegacyValue ? [value, ...DOC_TYPES] : [...DOC_TYPES]}
         value={value}
         disabled={disabled}
         onChange={onChange}
-        clearLabel="—"
         labels={labels}
       />
     </div>
@@ -334,45 +449,6 @@ export function VoiceCaptionButton({ onCaption, disabled }: { onCaption: (text: 
     >
       {listening ? <MicOff size={14} /> : <Mic size={14} />}
     </button>
-  )
-}
-
-/** "Is this a picture, not a document?" as an after-upload correction —
- * grouped with the other document-level metadata fields (2026-09-23),
- * not a separate special control, matching the upload-time toggle it
- * mirrors. One-directional by design (DocumentEditRequest's docstring,
- * app/models.py): once `locked` (the document's saved lane is already
- * 'memory'), there's nothing left to correct, so the checkbox is shown
- * checked and disabled rather than implying an un-correction this doesn't
- * support. */
-export function PictureToggleField({
-  checked,
-  locked,
-  disabled,
-  onChange,
-}: {
-  checked: boolean
-  locked: boolean
-  disabled: boolean
-  onChange: (checked: boolean) => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <label className="flex flex-col gap-1 text-[12px] text-muted sm:col-span-3">
-      <span className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={disabled || locked}
-          onChange={(e) => onChange(e.target.checked)}
-        />
-        {t('ops.pictureToggle.label')}
-        {locked && <span className="text-[11px] text-muted">{t('ops.pictureToggle.alreadyMarked')}</span>}
-      </span>
-      {checked && !locked && (
-        <span className="text-[11px] text-muted">{t('ops.pictureToggle.reducesAccuracy')}</span>
-      )}
-    </label>
   )
 }
 

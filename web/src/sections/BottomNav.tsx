@@ -71,12 +71,15 @@ function NavItem({ id, active }: { id: RouteId; active: boolean }) {
     <Link
       href={routeHref(id)}
       aria-current={active ? 'page' : undefined}
+      // 2026-09-23 (live regression report, item 9): more vertical room —
+      // py-1.5 -> py-2.5, icon 20 -> 22 — the bar felt cramped on a real
+      // phone. The raised center button below grows proportionally too.
       className={cn(
-        'flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] leading-none transition-colors',
+        'flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[11px] leading-none transition-colors',
         active ? 'text-ink' : 'text-muted',
       )}
     >
-      <Icon size={20} strokeWidth={active ? 2.25 : 2} aria-hidden="true" />
+      <Icon size={22} strokeWidth={active ? 2.25 : 2} aria-hidden="true" />
       <span>{t(NAV_LABEL_KEYS[id] ?? '')}</span>
     </Link>
   )
@@ -127,24 +130,28 @@ export function BottomNav({ current }: { current: ResolvedRoute }) {
              picker directly instead (lib/uploadTrigger.ts's window
              event, caught by UploadPage.tsx) rather than just navigating
              to the page it's already on. */}
+          {/* 2026-09-23 (live regression report, item 9): grown proportionally
+             with NavItem's own increase (h-12/-mt-5 -> h-14/-mt-6, icon
+             20 -> 22) so the raised button doesn't shrink relative to the
+             now-taller bar around it. */}
           {uploadActive ? (
             <button
               type="button"
               onClick={() => triggerUploadPicker()}
               aria-label={t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
-              className="-mt-5 flex h-12 w-12 items-center justify-center rounded-full border-4 border-white bg-ink text-white shadow-md transition-colors"
+              className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-ink text-white shadow-md transition-colors"
             >
-              <Upload size={20} aria-hidden="true" />
+              <Upload size={22} aria-hidden="true" />
             </button>
           ) : (
             <Link
               href={routeHref(CENTER_ROUTE)}
-              className="-mt-5 flex h-12 w-12 items-center justify-center rounded-full border-4 border-white bg-sage text-white shadow-md transition-colors"
+              className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-sage text-white shadow-md transition-colors"
             >
-              <Upload size={20} aria-hidden="true" />
+              <Upload size={22} aria-hidden="true" />
             </Link>
           )}
-          <span className={cn('mt-0.5 text-[11px] leading-none', uploadActive ? 'text-ink' : 'text-muted')}>
+          <span className={cn('mt-1 text-[11px] leading-none', uploadActive ? 'text-ink' : 'text-muted')}>
             {t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
           </span>
         </div>

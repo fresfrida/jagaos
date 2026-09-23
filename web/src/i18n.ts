@@ -14,7 +14,9 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'EN' },
   { code: 'zh', label: '中文' },
   { code: 'ta', label: 'தமிழ்' },
-  { code: 'ms', label: 'BM' },
+  // 2026-09-23 (live regression report, item 10a): "BM" (the initialism)
+  // read as unclear to some users — "Malay" is the name itself.
+  { code: 'ms', label: 'Malay' },
 ] as const
 
 export type LanguageCode = (typeof SUPPORTED_LANGUAGES)[number]['code']

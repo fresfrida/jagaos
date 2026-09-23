@@ -96,11 +96,6 @@
       "uploading": "Uploading…",
       "viewerCantUpload": "Viewers can't upload documents — ask an admin or owner.",
       "uploadReplacement": "Upload a replacement",
-      "lastResult": "Last upload result:",
-      "classifiedAs": "classified as {{lane}} / {{docType}} ({{confidence}}% confident)",
-      "injectionSuspected": "injection suspected",
-      "reviewShortLabel": "Needs review — see below.",
-      "quarantinedMessage": "Quarantined by the injection guardrail — obligation table untouched.",
       "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
     },
     "review": {
@@ -113,8 +108,7 @@
         "generatingCaption": "Generating caption…",
         "bucketLabel": "Bucket",
         "docTypeLabel": "Doc type",
-        "vendorNameLabel": "Vendor name",
-        "lowConfidenceFlag": "please check"
+        "vendorNameLabel": "Vendor name"
       },
       "extractedFieldsHeading": "Extracted fields",
       "expiredMessage": "This document can no longer be reviewed automatically.",
@@ -124,7 +118,34 @@
       "acceptAsIs": "Accept as-is",
       "acceptWithCorrections": "Accept with corrections",
       "reject": "Reject",
-      "onlyAdminCanResolve": "Only an admin or owner can resolve this."
+      "onlyAdminCanResolve": "Only an admin or owner can resolve this.",
+      "reasons": {
+        "clean": "No issues found. Please confirm the extracted fields below are correct before filing.",
+        "fileMissing": "File missing — delete or re-upload this document.",
+        "prefix": "Please confirm: {{reasons}}",
+        "injectionSuspected": "the model flagged this document as possibly containing injected instructions — please confirm it's safe before it proceeds",
+        "extractionError": "extraction error: {{detail}}",
+        "zeroAmounts": "subtotal, GST and total are all zero — this looks like a failed read, not a real zero-value invoice",
+        "gstMismatch": "GST {{gst}} is not ~9% of subtotal {{subtotal}} (expected ~{{expectedGst}})",
+        "totalMismatch": "subtotal + GST ({{subtotalPlusGst}}) does not equal total ({{total}})",
+        "amountsNotInText": "the extracted amounts weren't found anywhere in the document's text — please double-check these against the image before confirming",
+        "missingRequiredFields": "missing required field(s): {{fields}}",
+        "missingArithmeticFields": "missing subtotal/GST/total — cannot verify arithmetic",
+        "descriptionSignalsProblem": "the description signals a possible extraction problem (\"{{word}}\") — please check this document was read correctly"
+      },
+      "fieldLabel": {
+        "vendor": "Vendor",
+        "gstRegNo": "GST reg. no.",
+        "invoiceNo": "Invoice no.",
+        "issuedOn": "Date issued",
+        "subtotal": "Subtotal",
+        "gst": "GST",
+        "total": "Total",
+        "docType": "Doc type",
+        "referenceNo": "Reference no.",
+        "dueOn": "Due date",
+        "subject": "Subject"
+      }
     },
     "companyFiles": {
       "heading": "Company Files"
@@ -196,8 +217,6 @@
       "recordCaption": "Record a caption by voice"
     },
     "pictureToggle": {
-      "label": "This is a picture, not a document",
-      "alreadyMarked": "(already marked)",
       "reducesAccuracy": "Reduces the accuracy of data detected from this file.",
       "docTypeLocked": "Doc type is fixed to Photo while this is marked a picture."
     },

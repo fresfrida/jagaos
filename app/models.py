@@ -114,13 +114,26 @@ class ProposedEvent(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
+class ReviewReason(BaseModel):
+    """One structured reason a document needs review: a stable `code`
+    naming an `ops.review.reasons.<code>` i18n key on the frontend, plus
+    the interpolation values it needs (coerced to str — i18n interpolation
+    deals in strings, not Decimals/dates). Supersedes a pre-joined English
+    sentence built here server-side (2026-09-23, live regression report
+    items 7/8/10b): this file has no notion of the caller's language, so a
+    ready-made sentence could never actually be translated — the frontend
+    now owns the phrasing instead, this just carries what it needs to."""
+
+    code: str
+    params: dict[str, str] = Field(default_factory=dict)
+
+
 class VerifyResult(BaseModel):
     """Deterministic — no LLM. app/graph/verify.py."""
 
     ok: bool
-    reasons: list[str] = Field(default_factory=list)
+    reasons: list[ReviewReason] = Field(default_factory=list)
     needs_review: bool = False
-    review_question: str | None = None
 
 
 class DocumentEditRequest(BaseModel):

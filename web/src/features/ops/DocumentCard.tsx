@@ -14,7 +14,6 @@ import { formatShortDate, localeFor } from '../../lib/dates'
 import {
   BucketField,
   FIELD_CLASS,
-  PictureToggleField,
   StatusPill,
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
@@ -142,10 +141,6 @@ export function DocumentCard({
   const [docType, setDocType] = useState(doc.doc_type ?? '')
   const [vendorName, setVendorName] = useState(doc.vendor_name ?? '')
   const [filename, setFilename] = useState(doc.filename)
-  // 2026-09-23 (DECISIONS #52): see PictureToggleField's docstring —
-  // same one-directional "correct into memory lane" control as the
-  // review card, grouped with the other editable fields here too.
-  const [isPictureToggle, setIsPictureToggle] = useState(doc.lane === 'memory')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showMenu, setShowMenu] = useState(false)
@@ -171,13 +166,18 @@ export function DocumentCard({
     setBusy(true)
     setError(null)
     try {
+      // 2026-09-23 (live regression report, item 6): picking "Photo" from
+      // the Doc Type pills is now the only control for this — see
+      // ReviewQueueCard.tsx's identical resolve() change for the full
+      // reasoning. is_picture:true triggers the same server-side
+      // lane/doc_type/bucket correction the old separate checkbox did.
+      const wantsPictureCorrection = docType === 'photo' && !isPictureLane
       await opsApi.editDocument(doc.id, {
         description,
         bucket: (bucket || undefined) as Bucket | undefined,
-        doc_type: docType,
         vendor_name: vendorName,
         filename,
-        ...(isPictureToggle && !isPictureLane ? { is_picture: true } : {}),
+        ...(wantsPictureCorrection ? { is_picture: true } : { doc_type: docType }),
       })
       setEditing(false)
       onSaved()
@@ -265,18 +265,17 @@ export function DocumentCard({
             />
           </div>
           <div className="sm:col-span-3">
-            {/* Locked whenever the picture toggle is checked (2026-09-23,
-               live regression report) — a real, confirmed contradiction:
-               this pill picker had zero relationship to the picture
-               toggle, so a reviewer could freely select "Invoice" on a
-               document already marked/being marked as a picture, with
-               nothing preventing or even flagging it. Server-side,
-               is_picture=true already deterministically overrides
-               doc_type to 'photo' on save (DocumentEditRequest's
-               docstring) — disabling the field here just makes the UI
-               stop lying about there being a real choice. */}
-            <DocTypeField lane={doc.lane} value={docType} disabled={isPictureToggle} onChange={setDocType} className={FIELD_CLASS} />
-            {isPictureToggle && <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
+            {/* 2026-09-23 (live regression report, item 6): the separate
+               "is this a picture?" checkbox is gone — picking "Photo" from
+               these pills now IS the correction (save()'s
+               wantsPictureCorrection sends is_picture:true), same as
+               ReviewQueueCard.tsx. Still locks once already in memory
+               lane, same one-directional correction as before. */}
+            <DocTypeField lane={doc.lane} value={docType} disabled={isPictureLane} onChange={setDocType} className={FIELD_CLASS} />
+            {isPictureLane && <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
+            {docType === 'photo' && !isPictureLane && (
+              <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.reducesAccuracy')}</p>
+            )}
           </div>
           <input
             value={vendorName}
@@ -284,12 +283,6 @@ export function DocumentCard({
             placeholder={t('ops.documents.vendorNamePlaceholder')}
             list={VENDOR_NAMES_DATALIST_ID}
             className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
-          />
-          <PictureToggleField
-            checked={isPictureToggle}
-            locked={isPictureLane}
-            disabled={false}
-            onChange={setIsPictureToggle}
           />
           {error && <p className="text-[12px] text-red-700 sm:col-span-3">{error}</p>}
           <div className="flex gap-2 sm:col-span-3">

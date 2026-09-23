@@ -12,8 +12,14 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { ApiError } from '../../lib/apiClient'
 import {
   BucketField,
+  DATE_FIELD_NAMES,
+  dmyToIso,
   FIELD_CLASS,
-  PictureToggleField,
+  fieldLabel,
+  isFileMissingReason,
+  isoToDmy,
+  parseReviewReasons,
+  reasonText,
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
@@ -107,15 +113,14 @@ export function ReviewQueueCard({
   // 2026-09-22 (DECISIONS #40): every document now needs review, even a
   // clean one, so the card must read differently for "routine confirm" vs
   // "actual flag" or every single upload looks like something went wrong.
-  // Checked against `reason` (an internal category, never rendered) rather
-  // than parsing `question` (the human-facing text) — keeps the two
-  // concerns independent, so wording can change without touching this.
-  const isRoutine = item.reason === 'clean extraction'
-  // 2026-09-23 (live regression report, items 1/2/6) — same exact-match
-  // pattern as isRoutine above, mirroring app/graph/verify.py's
-  // FILE_MISSING_REASON constant (kept in sync by hand, same convention
-  // 'clean extraction' already established rather than a new mechanism).
-  const isFileMissing = item.reason === 'the source file is missing from storage'
+  // 2026-09-23 (live regression report, items 7/8/10b): item.question is
+  // now JSON-encoded structured reasons, not a sentence to substring-match
+  // — parsed once here, isRoutine/isFileMissing derived from the array's
+  // shape (empty / a lone file_missing entry) instead of exact-matching
+  // item.reason's debug string.
+  const reasons = parseReviewReasons(item.question)
+  const isRoutine = reasons.length === 0
+  const isFileMissing = isFileMissingReason(reasons)
 
   const [edits, setEdits] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {}
@@ -149,13 +154,6 @@ export function ReviewQueueCard({
   const proposedVendorValue = isProvenance(proposedVendor) && typeof proposedVendor.value === 'string' ? proposedVendor.value : null
   const [vendorName, setVendorName] = useState(proposedVendorValue ?? item.document_vendor_name ?? '')
   const [filename, setFilename] = useState(item.document_filename)
-  // 2026-09-23 (DECISIONS #52): "picture, not a document" correction,
-  // available after upload too, not just at the moment of it — grouped
-  // with the fields above rather than a separate control. One-directional
-  // (see DocumentEditRequest's docstring): once the saved lane is already
-  // 'memory' there's nothing left to correct, so the checkbox locks in
-  // that state rather than pretending an un-correction is supported.
-  const [isPictureToggle, setIsPictureToggle] = useState(item.document_lane === 'memory')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expired, setExpired] = useState(false)
@@ -249,10 +247,22 @@ export function ReviewQueueCard({
         } = {}
         if (description !== (item.document_description ?? '')) documentEdits.description = description
         if (bucket && bucket !== (item.document_bucket ?? '')) documentEdits.bucket = bucket as Bucket
-        if (docType !== (item.document_doc_type ?? '')) documentEdits.doc_type = docType
+        // 2026-09-23 (live regression report, item 6): picking "Photo" from
+        // the Doc Type pills is now the only control for this — the
+        // separate "is this a picture?" checkbox is gone (it answered the
+        // exact same question DOC_TYPES' own 'photo' pill already did).
+        // Sent as is_picture:true, not doc_type:'photo' — is_picture
+        // already deterministically sets lane/doc_type/bucket together
+        // server-side (DocumentEditRequest's docstring), so this triggers
+        // that path rather than a plain doc_type update.
+        const wantsPictureCorrection = docType === 'photo' && !isPictureLane
+        if (wantsPictureCorrection) {
+          documentEdits.is_picture = true
+        } else if (docType !== (item.document_doc_type ?? '')) {
+          documentEdits.doc_type = docType
+        }
         if (vendorName !== (item.document_vendor_name ?? '')) documentEdits.vendor_name = vendorName
         if (filename !== item.document_filename) documentEdits.filename = filename
-        if (isPictureToggle && !isPictureLane) documentEdits.is_picture = true
         if (Object.keys(documentEdits).length > 0) {
           await opsApi.editDocument(item.document_id, documentEdits)
         }
@@ -273,10 +283,30 @@ export function ReviewQueueCard({
       if (e instanceof ApiError && e.status === 410) {
         // The in-memory LangGraph checkpoint is gone (server restart since
         // upload — docs/HANDOFF.md's known MemorySaver limitation). Accept
-        // and Reject would both just fail again the same way. Archive is
-        // the only way out now that it exists (2026-09-22, DECISIONS #37)
-        // — the raw "backend restarted... checkpoint is gone" detail stays
-        // in the network response for debugging, not shown to the user.
+        // and Reject would both just fail again the same way.
+        //
+        // 2026-09-23 (live regression report, item 1): reject auto-completes
+        // instead of showing the manual fallback prompt below — reject's
+        // whole intent is "make this gone," so there's no reason to make
+        // someone click a second button to finish what they already asked
+        // for. Reuses the same archive endpoint the manual fallback calls,
+        // just without waiting for another click. Confirm keeps the manual
+        // fallback (setExpired below) — a corrected confirm can't be
+        // silently auto-completed the same way, the correction itself
+        // would be lost. The raw "backend restarted... checkpoint is gone"
+        // detail stays in the network response for debugging either way,
+        // never shown to the user.
+        if (action === 'reject') {
+          try {
+            await opsApi.archiveDocument(item.document_id)
+            onRejected(item.document_filename)
+            onResolved()
+          } catch (archiveError) {
+            setError(archiveError instanceof Error ? archiveError.message : String(archiveError))
+          }
+          setBusy(false)
+          return
+        }
         setExpired(true)
         setBusy(false)
         return
@@ -316,7 +346,7 @@ export function ReviewQueueCard({
          app/graph/verify.py's file_missing check overrides every other
          reason rather than joining them. */}
       <p className={`text-[13px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}>
-        {item.question}
+        {reasonText(t, reasons)}
       </p>
 
       <DocumentPreview documentId={item.document_id} mediaType={item.document_media_type} filename={item.document_filename} />
@@ -388,17 +418,26 @@ export function ReviewQueueCard({
             </label>
             <label className="text-[12px] text-muted sm:col-span-3">
               {t('ops.review.document.docTypeLabel')}
-              {/* Locked whenever the picture toggle is checked (2026-09-23,
-                 live regression report — same fix, same reasoning, as
-                 DocumentCard.tsx's identical two-independent-controls bug). */}
+              {/* 2026-09-23 (live regression report, item 6): the separate
+                 "is this a picture, not a document?" checkbox is gone —
+                 it was a second control answering the exact same question
+                 the Doc Type pills' own "Photo" option already does
+                 (DOC_TYPES includes 'photo'). Picking Photo here now IS
+                 the correction (resolve()'s wantsPictureCorrection sends
+                 is_picture:true on save). Still locks once already in
+                 memory lane — that part is unchanged, same one-directional
+                 correction DocumentEditRequest's docstring describes. */}
               <DocTypeField
                 lane={item.document_lane}
                 value={docType}
-                disabled={!canResolve || isPictureToggle}
+                disabled={!canResolve || isPictureLane}
                 onChange={setDocType}
                 className={`mt-1 ${FIELD_CLASS}`}
               />
-              {isPictureToggle && <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
+              {isPictureLane && <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
+              {docType === 'photo' && !isPictureLane && (
+                <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.reducesAccuracy')}</p>
+              )}
             </label>
             <label className="text-[12px] text-muted">
               {t('ops.review.document.vendorNameLabel')}
@@ -411,12 +450,6 @@ export function ReviewQueueCard({
                 className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
               />
             </label>
-            <PictureToggleField
-              checked={isPictureToggle}
-              locked={isPictureLane}
-              disabled={!canResolve}
-              onChange={setIsPictureToggle}
-            />
           </div>
         </div>
       )}
@@ -426,33 +459,53 @@ export function ReviewQueueCard({
           <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">{t('ops.review.extractedFieldsHeading')}</h3>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {fieldNames.map((name) => {
-              const field = proposed[name]
-              const confidence = isProvenance(field) ? field.confidence : null
+              // 2026-09-23 (live regression report, item 9): the raw
+              // confidence percentage/flag next to each field ("87%", or
+              // the "(please check)" flag below the floor) is gone
+              // entirely — no confidence-tied wording anywhere the user
+              // sees, matching item 7/8's same call on verify.py's
+              // reasons. Confidence still exists in the data and still
+              // drives review (DECISIONS #40's unconditional
+              // needs_review) — this only ever changed what's displayed.
+              //
+              // 2026-09-23 (item 4): a date-shaped field (issued_on/
+              // due_on) gets a masked DD/MM/YYYY input instead of the raw
+              // ISO string a plain text box would show — a native
+              // <input type="date"> can't guarantee that display format
+              // across browsers/OSes (HTML5 only guarantees the
+              // underlying value is ISO), so this is a real custom input,
+              // not the native control.
+              const isDateField = DATE_FIELD_NAMES.has(name)
               return (
                 <label key={name} className="text-[12px] text-muted">
-                  {name}
-                  {/* 2026-09-23 (live regression report, item 9): the raw
-                     confidence percentage next to every field ("87%") was
-                     a debug-tool number with no obvious action for a
-                     non-technical reviewer to take on it — removed
-                     entirely. Confidence still drives which fields get
-                     this flag (unchanged: the same < 0.6 floor
-                     CONFIDENCE_FLOOR already uses server-side,
-                     app/graph/verify.py's _low_confidence_fields) and
-                     still needs a review either way (DECISIONS #40's
-                     unconditional needs_review) — just without printing
-                     the number itself. No badge at all above the floor,
-                     same "no badge = nothing wrong" convention StatusPill
-                     already established (opsShared.tsx). */}
-                  {confidence !== null && confidence < 0.6 && (
-                    <span className="ml-1 text-red-600">({t('ops.review.document.lowConfidenceFlag')})</span>
+                  {fieldLabel(t, name)}
+                  {isDateField ? (
+                    <input
+                      value={isoToDmy(edits[name] ?? '')}
+                      disabled={!canResolve}
+                      placeholder="DD/MM/YYYY"
+                      onChange={(e) => {
+                        const text = e.target.value
+                        const iso = dmyToIso(text)
+                        // Commits the parsed ISO once the text is a
+                        // complete, valid DD/MM/YYYY — otherwise the input
+                        // still shows exactly what was typed (via the
+                        // isoToDmy(edits[name]) round-trip above only
+                        // reflecting the last committed value would fight
+                        // the user mid-keystroke), so store the raw text
+                        // directly whenever it doesn't parse yet.
+                        setEdits((prev) => ({ ...prev, [name]: iso ?? text }))
+                      }}
+                      className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+                    />
+                  ) : (
+                    <input
+                      value={edits[name]}
+                      disabled={!canResolve}
+                      onChange={(e) => setEdits((prev) => ({ ...prev, [name]: e.target.value }))}
+                      className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+                    />
                   )}
-                  <input
-                    value={edits[name]}
-                    disabled={!canResolve}
-                    onChange={(e) => setEdits((prev) => ({ ...prev, [name]: e.target.value }))}
-                    className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
-                  />
                 </label>
               )
             })}
@@ -486,7 +539,7 @@ export function ReviewQueueCard({
              clicking. Routine "no issues found" confirms have nothing to
              repeat, so this stays gated on !isRoutine like the top copy. */}
           {!isRoutine && (
-            <p className={`mb-2 text-[13px] ${isFileMissing ? 'text-red-700' : 'text-amber-800'}`}>{item.question}</p>
+            <p className={`mb-2 text-[13px] ${isFileMissing ? 'text-red-700' : 'text-amber-800'}`}>{reasonText(t, reasons)}</p>
           )}
           <div className="flex gap-2">
             <Button size="sm" onClick={() => void resolve('confirm')} disabled={busy} icon={<Check size={14} />}>

@@ -2,6 +2,7 @@
 Run: pytest tests/test_rules_smoke.py -v
 """
 
+import json
 import tempfile
 from datetime import date
 from pathlib import Path
@@ -117,7 +118,10 @@ def test_verify_model_only_injection_flag_routes_to_needs_review_not_quarantine(
 
     assert result["needs_review"] is True
     assert result["ok"] is False
-    assert "injected instructions" in result["review_question"]
+    # 2026-09-23 (items 7/8/10b): reasons are now {code, params} dicts, not
+    # pre-joined English sentences — the frontend owns the translated
+    # phrasing (ops.review.reasons.injectionSuspected) from the code alone.
+    assert result["reasons"] == [{"code": "injection_suspected", "params": {}}]
 
     with get_conn() as conn:
         doc = conn.execute(
@@ -130,7 +134,9 @@ def test_verify_model_only_injection_flag_routes_to_needs_review_not_quarantine(
             (document_id,),
         ).fetchone()
         assert review_item is not None, "expected a review_item, document must not be a dead end"
-        assert "confirm it's safe" in review_item["question"]
+        # question is now the JSON-encoded reasons array (2026-09-23) —
+        # round-trips exactly what verify() returned, not a sentence.
+        assert json.loads(review_item["question"]) == [{"code": "injection_suspected", "params": {}}]
 
         security_events = conn.execute(
             "SELECT id FROM security_event WHERE document_id = ?", (document_id,)
@@ -228,16 +234,17 @@ def test_verify_clean_extraction_still_needs_review_not_filed():
             (document_id,),
         ).fetchone()
         assert review_item is not None, "a clean document still needs a review_item to confirm"
-        # Distinctly not "Please confirm: " + nothing — that would read oddly.
-        assert review_item["question"] == (
-            "No issues found. Please confirm the extracted fields below are correct before filing."
-        )
+        # 2026-09-23 (items 7/8/10b): an empty reasons array — the frontend
+        # renders this as "No issues found..." (ops.review.reasons.clean),
+        # not a stored sentence.
+        assert json.loads(review_item["question"]) == []
 
 
-def test_verify_flagged_extraction_keeps_the_please_confirm_question():
+def test_verify_flagged_extraction_produces_a_structured_gst_mismatch_reason():
     # Behavior for a genuinely flagged document is unchanged by DECISIONS
-    # #40 — still needs_review, still the same "Please confirm: " + reasons
-    # question it always was.
+    # #40 — still needs_review. 2026-09-23 (items 7/8/10b): what changed is
+    # the shape of the reason itself — a {code, params} dict the frontend
+    # translates, not a pre-joined "Please confirm: ..." sentence.
     from app.graph.verify import verify
 
     document_id = _seed_company_and_document("flaggedverifysha")
@@ -258,8 +265,7 @@ def test_verify_flagged_extraction_keeps_the_please_confirm_question():
 
     assert result["ok"] is False
     assert result["needs_review"] is True
-    assert result["reasons"], "expected a GST-mismatch reason"
-    assert result["review_question"] == "Please confirm: " + "; ".join(result["reasons"])
+    assert any(r["code"] == "gst_mismatch" for r in result["reasons"]), result["reasons"]
 
     with get_conn() as conn:
         doc = conn.execute(
@@ -268,10 +274,14 @@ def test_verify_flagged_extraction_keeps_the_please_confirm_question():
         assert doc["status"] == "needs_review"
 
         review_item = conn.execute(
-            "SELECT question FROM review_item WHERE document_id = ? AND status = 'open'",
+            "SELECT reason, question FROM review_item WHERE document_id = ? AND status = 'open'",
             (document_id,),
         ).fetchone()
-        assert review_item["question"].startswith("Please confirm: ")
+        # reason (debug/trace column): codes joined, e.g. "gst_mismatch".
+        assert "gst_mismatch" in review_item["reason"]
+        # question (frontend-facing): the exact same structured reasons,
+        # JSON round-tripped.
+        assert json.loads(review_item["question"]) == result["reasons"]
 
 
 def test_verify_flags_amounts_not_found_anywhere_in_source_text():
@@ -304,11 +314,11 @@ def test_verify_flags_amounts_not_found_anywhere_in_source_text():
 
     assert result["ok"] is False
     assert result["needs_review"] is True
-    assert any("weren't found anywhere in the document's text" in r for r in result["reasons"]), result["reasons"]
+    assert any(r["code"] == "amounts_not_in_text" for r in result["reasons"]), result["reasons"]
     # The fabricated numbers ARE internally self-consistent (440 x 1.09 =
     # 479.6) — confirms this reproduction is caught by the new text-match
     # check specifically, not by the pre-existing arithmetic check.
-    assert not any("is not ~9% of subtotal" in r for r in result["reasons"]), (
+    assert not any(r["code"] == "gst_mismatch" for r in result["reasons"]), (
         f"this reproduction's numbers should pass the arithmetic check on their own - "
         f"got {result['reasons']}"
     )
@@ -455,16 +465,24 @@ def test_obligation_transition_rejects_open_to_satisfied_directly_is_allowed_but
     assert raised
 
 
-def test_verify_flags_a_document_that_never_reached_extraction_low_classify_confidence():
-    # 2026-09-23 (live regression report): a document that lands on
-    # lane='memory' (classify.py's own no-OCR-text fallback,
+def test_verify_low_classify_confidence_alone_no_longer_produces_a_reason():
+    # 2026-09-23 (live regression report, round 1): a document that lands
+    # on lane='memory' (classify.py's own no-OCR-text fallback,
     # confidence=0.3, description='Untitled photo' — reproduced exactly,
     # same shape as test_classify_empty_text_falls_back_to_memory_lane_
     # bucket_and_photo_doc_type above) never reaches extract_result at
-    # all, so before this fix nothing in verify() was capable of noticing
-    # — it filed with "no issues found" on a document nobody ever
-    # actually read. Confirmed by reading verify() in full before adding
-    # the check this reproduces.
+    # all; verify() used to have nothing capable of noticing, and a
+    # _check_classify_confidence check was added to flag it.
+    #
+    # 2026-09-23 (round 2, items 7/8): that check's contribution to
+    # reasons/question was deliberately removed — needs_review is already
+    # unconditional (DECISIONS #40), so this document still gets reviewed
+    # exactly the same either way; a document whose only issue was low
+    # classification confidence now correctly falls through to the same
+    # "no issues found" path as any other document, rather than a message
+    # naming a raw percentage. _check_classify_confidence itself still
+    # exists and is still exercised directly by evals/run.py's
+    # unreadable-document eval — only verify()'s call site is gone.
     from app.graph.verify import verify
 
     document_id = _seed_company_and_document("neverextractedsha")
@@ -479,9 +497,9 @@ def test_verify_flags_a_document_that_never_reached_extraction_low_classify_conf
     }
     result = verify(state)["verify_result"]
 
-    assert result["ok"] is False
-    assert result["needs_review"] is True
-    assert any("low-confidence classification" in r for r in result["reasons"]), result["reasons"]
+    assert result["ok"] is True, result["reasons"]
+    assert result["needs_review"] is True, "DECISIONS #40 — still unconditional regardless"
+    assert result["reasons"] == []
 
 
 def test_verify_flags_a_description_that_admits_the_document_could_not_be_read():
@@ -505,7 +523,7 @@ def test_verify_flags_a_description_that_admits_the_document_could_not_be_read()
     result = verify(state)["verify_result"]
 
     assert result["ok"] is False
-    assert any("possible extraction problem" in r for r in result["reasons"]), result["reasons"]
+    assert any(r["code"] == "description_signals_problem" for r in result["reasons"]), result["reasons"]
 
 
 def test_verify_flags_invoice_missing_a_required_field_even_with_clean_arithmetic():
@@ -535,7 +553,10 @@ def test_verify_flags_invoice_missing_a_required_field_even_with_clean_arithmeti
     result = verify(state)["verify_result"]
 
     assert result["ok"] is False
-    assert any("missing required field(s): vendor" in r for r in result["reasons"]), result["reasons"]
+    assert any(
+        r["code"] == "missing_required_fields" and "vendor" in r["params"].get("fields", "")
+        for r in result["reasons"]
+    ), result["reasons"]
 
 
 def test_verify_flags_a_missing_source_file_and_it_overrides_everything_else():
@@ -546,7 +567,7 @@ def test_verify_flags_a_missing_source_file_and_it_overrides_everything_else():
     # arithmetic, real amounts in text) specifically to prove file_missing
     # overrides every other signal rather than just adding to a joined
     # list — "file missing" and "no issues found" must never coexist.
-    from app.graph.verify import FILE_MISSING_REASON, verify
+    from app.graph.verify import FILE_MISSING_CODE, verify
 
     document_id = _seed_company_and_document("missingfilesha", file_exists=False)
     state = {
@@ -566,17 +587,17 @@ def test_verify_flags_a_missing_source_file_and_it_overrides_everything_else():
     result = verify(state)["verify_result"]
 
     assert result["ok"] is False
-    assert result["reasons"] == [FILE_MISSING_REASON]
-    assert result["review_question"] == "File missing — delete or re-upload this document."
+    assert result["reasons"] == [{"code": FILE_MISSING_CODE, "params": {}}]
 
     with get_conn() as conn:
         review_item = conn.execute(
-            "SELECT reason FROM review_item WHERE document_id = ? AND status = 'open'",
+            "SELECT reason, question FROM review_item WHERE document_id = ? AND status = 'open'",
             (document_id,),
         ).fetchone()
         # Exact match, not a substring — ReviewQueueCard.tsx's frontend
-        # check mirrors this exact string (isFileMissing).
-        assert review_item["reason"] == FILE_MISSING_REASON
+        # check mirrors this exact code (isFileMissing).
+        assert review_item["reason"] == FILE_MISSING_CODE
+        assert json.loads(review_item["question"]) == [{"code": FILE_MISSING_CODE, "params": {}}]
 
 
 def test_verify_flags_an_all_zero_invoice_as_implausible():
@@ -604,7 +625,7 @@ def test_verify_flags_an_all_zero_invoice_as_implausible():
     result = verify(state)["verify_result"]
 
     assert result["ok"] is False
-    assert any("all zero" in r for r in result["reasons"]), result["reasons"]
+    assert any(r["code"] == "zero_amounts" for r in result["reasons"]), result["reasons"]
 
 
 if __name__ == "__main__":

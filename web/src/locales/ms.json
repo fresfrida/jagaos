@@ -96,11 +96,6 @@
       "uploading": "Sedang memuat naik…",
       "viewerCantUpload": "Pelihat tidak boleh memuat naik dokumen — hubungi admin atau pemilik.",
       "uploadReplacement": "Muat naik gantian",
-      "lastResult": "Keputusan muat naik terakhir:",
-      "classifiedAs": "dikelaskan sebagai {{lane}} / {{docType}} ({{confidence}}% yakin)",
-      "injectionSuspected": "disyaki suntikan arahan",
-      "reviewShortLabel": "Perlu disemak — lihat di bawah.",
-      "quarantinedMessage": "Dikuarantin oleh sekatan suntikan — jadual kewajipan tidak terjejas.",
       "rejectedPromptSuffix": "ditolak dan dipadam. Muat naik gantian?"
     },
     "review": {
@@ -113,8 +108,7 @@
         "generatingCaption": "Menjana kapsyen…",
         "bucketLabel": "Kategori",
         "docTypeLabel": "Jenis dokumen",
-        "vendorNameLabel": "Nama pembekal",
-        "lowConfidenceFlag": "sila semak"
+        "vendorNameLabel": "Nama pembekal"
       },
       "extractedFieldsHeading": "Medan yang diekstrak",
       "expiredMessage": "Dokumen ini tidak lagi boleh disemak secara automatik.",
@@ -124,7 +118,34 @@
       "onlyAdminCanResolve": "Hanya admin atau pemilik boleh menyelesaikan ini.",
       "deleteButton": "Padam",
       "deleteOrReupload": "atau muat naik semula dokumen untuk cuba menyemak sekali lagi.",
-      "onlyAdminCanDelete": "Hanya admin atau pemilik boleh memadam ini — atau muat naik semula dokumen untuk cuba menyemak sekali lagi."
+      "onlyAdminCanDelete": "Hanya admin atau pemilik boleh memadam ini — atau muat naik semula dokumen untuk cuba menyemak sekali lagi.",
+      "reasons": {
+        "clean": "Tiada isu ditemui. Sila sahkan medan yang diekstrak di bawah adalah betul sebelum difailkan.",
+        "fileMissing": "Fail hilang — padam atau muat naik semula dokumen ini.",
+        "prefix": "Sila sahkan: {{reasons}}",
+        "injectionSuspected": "model menandakan dokumen ini mungkin mengandungi arahan yang disuntik — sila sahkan ia selamat sebelum diteruskan",
+        "extractionError": "ralat pengekstrakan: {{detail}}",
+        "zeroAmounts": "subjumlah, GST dan jumlah kesemuanya sifar — ini kelihatan seperti bacaan yang gagal, bukan invois bernilai sifar yang sebenar",
+        "gstMismatch": "GST {{gst}} bukan ~9% daripada subjumlah {{subtotal}} (dijangka ~{{expectedGst}})",
+        "totalMismatch": "subjumlah + GST ({{subtotalPlusGst}}) tidak sama dengan jumlah ({{total}})",
+        "amountsNotInText": "jumlah yang diekstrak tidak ditemui di mana-mana dalam teks dokumen — sila semak semula dengan imej sebelum mengesahkan",
+        "missingRequiredFields": "medan wajib hilang: {{fields}}",
+        "missingArithmeticFields": "subjumlah/GST/jumlah tiada — tidak dapat mengesahkan pengiraan",
+        "descriptionSignalsProblem": "penerangan menunjukkan kemungkinan masalah pengekstrakan (\"{{word}}\") — sila semak dokumen ini dibaca dengan betul"
+      },
+      "fieldLabel": {
+        "vendor": "Vendor",
+        "gstRegNo": "No. pendaftaran GST",
+        "invoiceNo": "No. invois",
+        "issuedOn": "Tarikh dikeluarkan",
+        "subtotal": "Subjumlah",
+        "gst": "GST",
+        "total": "Jumlah",
+        "docType": "Jenis dokumen",
+        "referenceNo": "No. rujukan",
+        "dueOn": "Tarikh akhir",
+        "subject": "Perkara"
+      }
     },
     "companyFiles": {
       "heading": "Fail Syarikat"
@@ -196,8 +217,6 @@
       "recordCaption": "Rakam kapsyen dengan suara"
     },
     "pictureToggle": {
-      "label": "Ini gambar, bukan dokumen",
-      "alreadyMarked": "(sudah ditanda)",
       "reducesAccuracy": "Mengurangkan ketepatan data yang dikesan daripada fail ini.",
       "docTypeLocked": "Jenis dokumen tetap sebagai Gambar semasa ini ditandakan sebagai gambar."
     },

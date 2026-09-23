@@ -1,6 +1,6 @@
 # Eval report
 
-Run at 2026-09-23T12:17:40.516099+00:00
+Run at 2026-09-23T13:30:01.722334+00:00
 
 ## Adversarial — injection guardrail (app.guards.injection.scan)
 
@@ -19,16 +19,16 @@ Run at 2026-09-23T12:17:40.516099+00:00
 | Case | Result | Detail |
 |---|---|---|
 | gst_correct | PASS | [] |
-| gst_wrong_rate | PASS | ['GST 7.00 is not ~9% of subtotal 100.00 (expected ~9.00)'] |
-| gst_total_mismatch | PASS | ['subtotal + GST (109.00) != total (110.50)'] |
+| gst_wrong_rate | PASS | [{'code': 'gst_mismatch', 'params': {'gst': '7.00', 'subtotal': '100.00', 'expectedGst': '9.00'}}] |
+| gst_total_mismatch | PASS | [{'code': 'total_mismatch', 'params': {'subtotalPlusGst': '109.00', 'total': '110.50'}}] |
 
 ## Adversarial — unreadable/corrupted documents (app.graph.verify._check_classify_confidence / _check_description_signals_problem)
 
 | Case | Result | Detail |
 |---|---|---|
-| low_confidence_classification | PASS | ['low-confidence classification (30%) — the document type/description may not be reliable, please check'] |
-| description_admits_unreadable | PASS | ['description signals a possible extraction problem ("unreadable") — please check this document was read correctly'] |
-| description_admits_illegible | PASS | ['description signals a possible extraction problem ("illegible") — please check this document was read correctly'] |
+| low_confidence_classification | PASS | [{'code': 'low_confidence_classification', 'params': {'confidence': '30%'}}] |
+| description_admits_unreadable | PASS | [{'code': 'description_signals_problem', 'params': {'word': 'unreadable'}}] |
+| description_admits_illegible | PASS | [{'code': 'description_signals_problem', 'params': {'word': 'illegible'}}] |
 | clean_confident_classification | PASS | [] |
 
 ## Golden path

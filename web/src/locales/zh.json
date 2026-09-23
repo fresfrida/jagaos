@@ -96,11 +96,6 @@
       "uploading": "正在上传…",
       "viewerCantUpload": "查看者无法上传文件 — 请联系管理员或所有者。",
       "uploadReplacement": "上传替换文件",
-      "lastResult": "最近上传结果：",
-      "classifiedAs": "分类为 {{lane}} / {{docType}}（置信度 {{confidence}}%）",
-      "injectionSuspected": "疑似注入攻击",
-      "reviewShortLabel": "需要审核 — 详见下方。",
-      "quarantinedMessage": "已被注入防护机制隔离 — 义务表未受影响。",
       "rejectedPromptSuffix": "已拒绝并删除。要上传替换文件吗？"
     },
     "review": {
@@ -113,8 +108,7 @@
         "generatingCaption": "正在生成说明…",
         "bucketLabel": "分类",
         "docTypeLabel": "文件类型",
-        "vendorNameLabel": "供应商名称",
-        "lowConfidenceFlag": "请核实"
+        "vendorNameLabel": "供应商名称"
       },
       "extractedFieldsHeading": "提取的字段",
       "expiredMessage": "此文件已无法自动审核。",
@@ -124,7 +118,34 @@
       "onlyAdminCanResolve": "只有管理员或所有者才能处理此项。",
       "deleteButton": "删除",
       "deleteOrReupload": "或重新上传文件以再次尝试审核。",
-      "onlyAdminCanDelete": "只有管理员或所有者才能删除此项 — 或重新上传文件以再次尝试审核。"
+      "onlyAdminCanDelete": "只有管理员或所有者才能删除此项 — 或重新上传文件以再次尝试审核。",
+      "reasons": {
+        "clean": "未发现问题。请确认以下提取的字段无误后再归档。",
+        "fileMissing": "文件缺失 — 请删除或重新上传此文件。",
+        "prefix": "请确认：{{reasons}}",
+        "injectionSuspected": "模型标记此文件可能包含注入指令 — 请确认安全后再继续",
+        "extractionError": "提取错误：{{detail}}",
+        "zeroAmounts": "小计、消费税和总额均为零 — 这很可能是读取失败，而非真实的零金额发票",
+        "gstMismatch": "消费税 {{gst}} 与小计 {{subtotal}} 的约9%不符（预期约 {{expectedGst}}）",
+        "totalMismatch": "小计 + 消费税（{{subtotalPlusGst}}）与总额（{{total}}）不符",
+        "amountsNotInText": "提取的金额在文件文本中均未找到 — 请在确认前对照图片仔细核实",
+        "missingRequiredFields": "缺少必填字段：{{fields}}",
+        "missingArithmeticFields": "缺少小计/消费税/总额 — 无法核实算术",
+        "descriptionSignalsProblem": "描述提示可能存在提取问题（\"{{word}}\"）— 请检查此文件是否读取正确"
+      },
+      "fieldLabel": {
+        "vendor": "供应商",
+        "gstRegNo": "消费税注册号",
+        "invoiceNo": "发票号",
+        "issuedOn": "开具日期",
+        "subtotal": "小计",
+        "gst": "消费税",
+        "total": "总额",
+        "docType": "文件类型",
+        "referenceNo": "参考编号",
+        "dueOn": "到期日",
+        "subject": "主题"
+      }
     },
     "companyFiles": {
       "heading": "公司文件"
@@ -196,8 +217,6 @@
       "recordCaption": "语音录制说明"
     },
     "pictureToggle": {
-      "label": "这是照片，不是文件",
-      "alreadyMarked": "（已标记）",
       "reducesAccuracy": "会降低此文件数据检测的准确性。",
       "docTypeLocked": "标记为照片时，文件类型固定为「照片」。"
     },

@@ -18,24 +18,24 @@ GST_RATE = Decimal("0.09")
 GST_TOLERANCE = Decimal("0.02")  # 2% tolerance for rounding
 IMPLAUSIBLE_ZERO_TOLERANCE = Decimal("0.005")  # treat as "exactly 0" for float noise
 
-# 2026-09-23 (live regression report, items 1/2/6): the exact literal
-# reasons[] string when the source file itself is missing — kept short
-# and stable (not the full user-facing sentence) so the frontend can
-# exact-match on it the same way it already does for "clean extraction"
-# (ReviewQueueCard.tsx's isRoutine). A missing file overrides every other
+# 2026-09-23 (live regression report, items 1/2/6): the stable reasons[]
+# code when the source file itself is missing — a code, not a sentence
+# (2026-09-23, items 7/8/10b restructure), so the frontend can exact-match
+# it the same way it already did for the old literal string (ReviewQueueCard
+# .tsx's isRoutine/isFileMissing). A missing file overrides every other
 # check's result rather than joining them (see verify() below) — nothing
 # else in this function is meaningful to report if there's no file to
 # check it against, and this is what makes "file missing" and "no issues
 # found" structurally unable to coexist, not just unlikely to.
-FILE_MISSING_REASON = "the source file is missing from storage"
+FILE_MISSING_CODE = "file_missing"
 
 
-def _check_file_exists(document_id: int, db_path: str = DB_PATH) -> list[str]:
+def _check_file_exists(document_id: int, db_path: str = DB_PATH) -> list[dict]:
     """A stored_path that doesn't exist on disk anymore (2026-09-23, live
     regression report items 1/2/6) — confirmed live that a review card
     could show "no issues found" for a document whose file was gone,
     because nothing in this pipeline had ever checked "does the file
-    still exist" as its own condition. Returns FILE_MISSING_REASON alone
+    still exist" as its own condition. Returns FILE_MISSING_CODE alone
     (not appended to other reasons) so verify() can treat it as an
     override, not just one more item in a joined list."""
     with get_conn(db_path) as conn:
@@ -43,18 +43,18 @@ def _check_file_exists(document_id: int, db_path: str = DB_PATH) -> list[str]:
             "SELECT stored_path FROM document WHERE id = ?", (document_id,)
         ).fetchone()
     if row is not None and not Path(row["stored_path"]).exists():
-        return [FILE_MISSING_REASON]
+        return [{"code": FILE_MISSING_CODE, "params": {}}]
     return []
 
 
-def _check_invoice_arithmetic(fields: dict) -> list[str]:
-    reasons = []
+def _check_invoice_arithmetic(fields: dict) -> list[dict]:
+    reasons: list[dict] = []
     try:
         subtotal = Decimal(str(fields["subtotal"]["value"]))
         gst = Decimal(str(fields["gst"]["value"]))
         total = Decimal(str(fields["total"]["value"]))
     except (KeyError, TypeError):
-        return ["missing subtotal/gst/total — cannot verify arithmetic"]
+        return [{"code": "missing_arithmetic_fields", "params": {}}]
 
     # 2026-09-23 (live regression report, item 4): all-zero amounts pass
     # _check_required_invoice_fields (added last round) as "present" —
@@ -63,23 +63,18 @@ def _check_invoice_arithmetic(fields: dict) -> list[str]:
     # zero-total invoice. Checked here, alongside the existing arithmetic
     # check, since it needs the same three parsed Decimal values.
     if subtotal <= IMPLAUSIBLE_ZERO_TOLERANCE and gst <= IMPLAUSIBLE_ZERO_TOLERANCE and total <= IMPLAUSIBLE_ZERO_TOLERANCE:
-        reasons.append("subtotal/GST/total are all zero — this looks like a failed read, not a real zero-value invoice")
+        reasons.append({"code": "zero_amounts", "params": {}})
 
     expected_gst = (subtotal * GST_RATE).quantize(Decimal("0.01"))
     if abs(gst - expected_gst) > (expected_gst * GST_TOLERANCE + Decimal("0.05")):
-        reasons.append(f"GST {gst} is not ~9% of subtotal {subtotal} (expected ~{expected_gst})")
+        reasons.append({"code": "gst_mismatch", "params": {
+            "gst": str(gst), "subtotal": str(subtotal), "expectedGst": str(expected_gst),
+        }})
     if abs((subtotal + gst) - total) > Decimal("0.02"):
-        reasons.append(f"subtotal + GST ({subtotal + gst}) != total ({total})")
+        reasons.append({"code": "total_mismatch", "params": {
+            "subtotalPlusGst": str(subtotal + gst), "total": str(total),
+        }})
     return reasons
-
-
-def _low_confidence_fields(fields: dict, floor: float = CONFIDENCE_FLOOR) -> list[str]:
-    low = []
-    for name, value in fields.items():
-        if isinstance(value, dict) and "confidence" in value:
-            if value["confidence"] < floor:
-                low.append(name)
-    return low
 
 
 def _amount_strings(value: float) -> set[str]:
@@ -96,7 +91,7 @@ def _amount_strings(value: float) -> set[str]:
     return forms
 
 
-def _check_amounts_in_text(fields: dict, text: str) -> list[str]:
+def _check_amounts_in_text(fields: dict, text: str) -> list[dict]:
     """Deterministic cross-check, independent of what the model claims:
     subtotal/gst/total's extracted VALUES, not just their confidence, need
     to actually appear somewhere in the source text. Confirmed live
@@ -128,10 +123,7 @@ def _check_amounts_in_text(fields: dict, text: str) -> list[str]:
     any_found = any(candidate in text for value in values for candidate in _amount_strings(value))
     if any_found:
         return []
-    return [
-        "extracted amounts weren't found anywhere in the document's text "
-        "— please double-check these against the image before confirming"
-    ]
+    return [{"code": "amounts_not_in_text", "params": {}}]
 
 
 # 2026-09-23 (live regression report): none of the checks above notice
@@ -150,19 +142,28 @@ _DESCRIPTION_PROBLEM_WORDS = (
 )
 
 
-def _check_classify_confidence(classify: dict, floor: float = CONFIDENCE_FLOOR) -> list[str]:
+def _check_classify_confidence(classify: dict, floor: float = CONFIDENCE_FLOOR) -> list[dict]:
     """Catches classify.py's own deterministic no-OCR-text fallback
     (confidence=0.3, description='Untitled photo') — the exact mechanism
     a sideways/unreadable photo falls into. `classify_result['confidence']`
-    was never checked anywhere in this file before this; only extract's
-    per-field confidences were (_low_confidence_fields below)."""
+    was never checked anywhere in this file before this.
+
+    2026-09-23 (live regression report, items 7/8): no longer called from
+    verify() below — needs_review is already unconditional for every
+    document (DECISIONS #40), so a document whose only issue was low
+    classification confidence still gets reviewed exactly the same either
+    way; the only thing removing this call site changes is that the
+    message stops naming a raw percentage. The function itself stays
+    (evals/run.py's unreadable-document eval exercises this detection
+    logic directly, independent of whether verify() ever surfaces its
+    text) — only its former call site in verify() is gone."""
     confidence = classify.get("confidence")
     if confidence is not None and confidence < floor:
-        return [f"low-confidence classification ({confidence:.0%}) — the document type/description may not be reliable, please check"]
+        return [{"code": "low_confidence_classification", "params": {"confidence": f"{confidence:.0%}"}}]
     return []
 
 
-def _check_description_signals_problem(description: str | None) -> list[str]:
+def _check_description_signals_problem(description: str | None) -> list[dict]:
     """Plain-text heuristic, not a re-run of the LLM: classify.py's own
     system prompt explicitly instructs the model never to comment on OCR
     quality in its description ("a description like 'invoice with
@@ -171,17 +172,21 @@ def _check_description_signals_problem(description: str | None) -> list[str]:
     engineer a live model this repo can't test without a real gateway
     call, this catches the cases where it still happens, deterministically,
     after the fact — the same "never silently trust the model" posture
-    the injection/arithmetic checks above already take."""
+    the injection/arithmetic checks above already take. Kept as a live
+    reasons/question contributor (2026-09-23, items 7/8/10b) — unlike the
+    two confidence-scoring checks, this is a content check on the model's
+    own words, not a numeric score, so it stays in scope for the same
+    reason the GST-mismatch/zero-amount/file-missing reasons do."""
     if not description:
         return []
     lowered = description.lower()
     hit = next((w for w in _DESCRIPTION_PROBLEM_WORDS if w in lowered), None)
     if hit:
-        return [f"description signals a possible extraction problem (\"{hit}\") — please check this document was read correctly"]
+        return [{"code": "description_signals_problem", "params": {"word": hit}}]
     return []
 
 
-def _check_required_invoice_fields(fields: dict) -> list[str]:
+def _check_required_invoice_fields(fields: dict) -> list[dict]:
     """Defensive: InvoiceFields' vendor/issued_on/total are non-optional
     Provenance fields today, so a genuinely absent value would already
     fail Pydantic validation and route through the existing
@@ -190,7 +195,7 @@ def _check_required_invoice_fields(fields: dict) -> list[str]:
     near-zero cost to add now rather than after it's needed."""
     missing = [name for name in ("vendor", "issued_on", "total") if not fields.get(name) or fields[name].get("value") is None]
     if missing:
-        return [f"missing required field(s): {', '.join(missing)}"]
+        return [{"code": "missing_required_fields", "params": {"fields": ", ".join(missing)}}]
     return []
 
 
@@ -200,7 +205,7 @@ def verify(state: PipelineState) -> PipelineState:
     extract = state.get("extract_result", {})
     text = state.get("text", "")
 
-    reasons: list[str] = []
+    reasons: list[dict] = []
     injection_hits = scan(text)
     model_flagged = bool(classify.get("injection_suspected") or extract.get("injection_suspected"))
 
@@ -209,7 +214,11 @@ def verify(state: PipelineState) -> PipelineState:
         # so this stays a hard, unconditional quarantine (unchanged).
         detail = f"regex={injection_hits}, model_flag={model_flagged}"
         quarantine(document_id, detail, DB_PATH)
-        result = VerifyResult(ok=False, reasons=[f"injection suspected: {detail}"], needs_review=False)
+        result = VerifyResult(
+            ok=False,
+            reasons=[{"code": "injection_suspected_hard", "params": {"detail": detail}}],
+            needs_review=False,
+        )
         with get_conn(DB_PATH) as conn:
             conn.execute(
                 "INSERT INTO trace (run_id, company_id, document_id, node, decision) "
@@ -226,32 +235,28 @@ def verify(state: PipelineState) -> PipelineState:
         # this file's own docstring above, which already claimed the model's
         # self-report alone is never trusted. Route to the same reviewable
         # path as the GST/low-confidence checks below instead of a dead end.
-        reasons.append(
-            "the model flagged this document as possibly containing "
-            "injected instructions — please confirm it's safe before it proceeds"
-        )
+        reasons.append({"code": "injection_suspected", "params": {}})
 
     if extract.get("error"):
         # extract.py caught a schema-validation failure instead of crashing
         # — that's still an extraction we can't trust, so it must not fall
         # through to "filed" the way a clean skip (extract.get("skipped"))
         # legitimately does.
-        reasons.append(f"extraction error: {extract['reason']}")
+        reasons.append({"code": "extraction_error", "params": {"detail": str(extract.get("reason", ""))}})
 
     if classify.get("lane") == "invoice" and extract and not extract.get("skipped") and not extract.get("error"):
         reasons.extend(_check_invoice_arithmetic(extract))
         reasons.extend(_check_amounts_in_text(extract, text))
         reasons.extend(_check_required_invoice_fields(extract))
 
-    low_conf = _low_confidence_fields(extract) if extract else []
-    if low_conf:
-        reasons.append(f"low-confidence fields: {', '.join(low_conf)}")
-
-    # Unconditional, unlike the block above — these two catch a document
-    # that never reached extract_result at all (lane='memory'), which is
-    # exactly the "renders like a generic picture, nothing extracted"
-    # regression this was added for (2026-09-23).
-    reasons.extend(_check_classify_confidence(classify))
+    # 2026-09-23 (live regression report, items 7/8): _check_classify_confidence's
+    # contribution removed here — needs_review is already unconditional
+    # (DECISIONS #40), so a document whose only issue was low confidence
+    # (classify's or a per-field extract confidence) now correctly falls
+    # through to the same "no issues found" path as any other document,
+    # rather than a message naming a raw percentage or specific field
+    # names. _check_description_signals_problem stays: unlike a numeric
+    # confidence score, it's a content check on the model's own words.
     reasons.extend(_check_description_signals_problem(classify.get("description")))
 
     # 2026-09-23 (live regression report, items 1/2/6): checked last and
@@ -275,29 +280,32 @@ def verify(state: PipelineState) -> PipelineState:
     # not a re-entry burden.
     needs_review = True
     ok = not bool(reasons)
-    if file_missing:
-        # Distinct headline (2026-09-23), not folded into the generic
-        # "Please confirm: " phrasing — ReviewQueueCard.tsx exact-matches
-        # review_item.reason against FILE_MISSING_REASON (mirrors the
-        # existing isRoutine === 'clean extraction' pattern) to give this
-        # its own, more severe visual treatment instead of the routine
-        # amber "please confirm" styling.
-        question = "File missing — delete or re-upload this document."
-    elif reasons:
-        question = "Please confirm: " + "; ".join(reasons)
-    else:
-        question = "No issues found. Please confirm the extracted fields below are correct before filing."
 
-    result = VerifyResult(ok=ok, reasons=reasons, needs_review=needs_review,
-                           review_question=question)
+    result = VerifyResult(ok=ok, reasons=reasons, needs_review=needs_review)
 
     with get_conn(DB_PATH) as conn:
         conn.execute("UPDATE document SET status = 'needs_review' WHERE id = ?", (document_id,))
         conn.execute(
             "INSERT INTO review_item (company_id, document_id, reason, question, proposed_json, status) "
             "VALUES (?, ?, ?, ?, ?, 'open')",
-            (state["company_id"], document_id, "; ".join(reasons) if reasons else "clean extraction",
-             question, json.dumps(extract)),
+            (
+                state["company_id"], document_id,
+                # reason (2026-09-23): a short, stable debug/trace string —
+                # codes joined, not the old full English sentence — kept
+                # for anyone grepping the DB/trace directly. No longer
+                # load-bearing for the frontend (see question below).
+                "; ".join(r["code"] for r in reasons) if reasons else "clean",
+                # question (2026-09-23, items 7/8/10b): now the structured
+                # reasons themselves, JSON-encoded — the frontend parses
+                # this and owns the translated phrasing via
+                # ops.review.reasons.* i18n keys, since this backend has no
+                # notion of the caller's language. Empty list = "no issues
+                # found"; a lone {"code": "file_missing"} = the distinct
+                # red file-missing headline — both derived by the frontend
+                # from this array's shape, not a separate stored sentence.
+                json.dumps(reasons),
+                json.dumps(extract),
+            ),
         )
         conn.execute(
             "INSERT INTO trace (run_id, company_id, document_id, node, decision) "

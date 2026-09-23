@@ -28,7 +28,13 @@ def human_review(state: PipelineState) -> PipelineState:
     resolution = interrupt(
         {
             "document_id": state["document_id"],
-            "question": state["verify_result"].get("review_question"),
+            # 2026-09-23 (items 7/8/10b): review_question (a pre-joined
+            # English sentence) is gone from VerifyResult — reasons alone
+            # (now structured {code, params} dicts) carries this. Nothing
+            # downstream reads this interrupt() payload directly (it's
+            # just LangGraph's pause signal, resumed via Command(resume=...)
+            # instead — see app/main.py's resolve_review), so this is a
+            # free rename, not a behavior change.
             "reasons": state["verify_result"].get("reasons"),
             "proposed": state.get("extract_result"),
         }
