@@ -416,11 +416,18 @@ def list_obligations(
 def list_documents(
     membership: Annotated[CurrentMembership, Depends(get_current_membership)],
 ) -> list[dict]:
+    """No role floor beyond an authenticated member — deliberately open to
+    viewer too, so the `!= 'archived'` exclusion below is the only thing
+    keeping archived documents out of the app entirely (2026-09-23,
+    DECISIONS #53). Unconditional, no parameter, no role exception: an
+    archived document is recoverable only via direct DB access on the
+    Lightsail box, never through this API, for any role including owner."""
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT id, filename, media_type, lane, doc_type, status, received_at, "
             "description, bucket, vendor_name, occurred_on "
-            "FROM document WHERE company_id = ? ORDER BY received_at DESC",
+            "FROM document WHERE company_id = ? AND status != 'archived' "
+            "ORDER BY received_at DESC",
             (membership.company_id,),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -456,9 +463,15 @@ def search_documents(
         placeholders = ",".join("?" * len(ordered_ids))
         # Same shape as list_documents's rows so the frontend can render
         # both with one type/component, no special-casing search results.
+        # `status != 'archived'` (2026-09-23, DECISIONS #53): document_search
+        # has no status column of its own, so an archived document's FTS5
+        # row still matches on text — this join-back is where it actually
+        # gets excluded from what the caller ever sees, same as
+        # list_documents's exclusion just below it in this file.
         docs = conn.execute(
             f"SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            f"description, bucket, vendor_name, occurred_on FROM document WHERE id IN ({placeholders})",
+            f"description, bucket, vendor_name, occurred_on FROM document "
+            f"WHERE id IN ({placeholders}) AND status != 'archived'",
             ordered_ids,
         ).fetchall()
         docs_by_id = {d["id"]: dict(d) for d in docs}

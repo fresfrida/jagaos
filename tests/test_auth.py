@@ -346,3 +346,63 @@ def test_search_and_edit_are_tenant_isolated_and_edit_updates_bucket_vendor_file
             "SELECT description FROM document WHERE id = ?", (a_doc_id,)
         ).fetchone()["description"]
     assert still_a_description == "Renamed invoice"
+
+
+def test_archived_documents_never_appear_in_list_or_search_for_any_role():
+    # 2026-09-23 (DECISIONS #53): GET /api/documents had no role floor at
+    # all (get_current_membership, not require_role) and never excluded
+    # status='archived' — any authenticated member, including viewer,
+    # could already see an archived document; the Documents tab's "Show
+    # archived" checkbox (OpsConsole.tsx) was a client-side-only filter
+    # over data the server already sent, not an access control. GET
+    # /api/search had the same gap via its join back to `document`.
+    # Decision: no app role, not even owner, should ever see an archived
+    # document through the app — archived data is recoverable only via
+    # direct DB access on the box that operates the infrastructure. This
+    # checks own-company data for two roles (owner, viewer), not just
+    # tenant isolation (already covered by the archive endpoint's own test
+    # above) — the bug here was never about crossing companies.
+    from app.db import get_conn, reindex_document_search
+
+    owner = _signup("archivelist-owner@example.com", "Archive List Co")
+    add = client.post(
+        f"/api/companies/{owner['company']['id']}/members",
+        json={"email": "archivelist-viewer@example.com", "role": "viewer"},
+        headers=_auth_headers(owner["token"]),
+    )
+    assert add.status_code == 200, add.text
+    viewer_token = client.post(
+        "/api/auth/dev-login", json={"email": "archivelist-viewer@example.com"}
+    ).json()["token"]
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status, description) VALUES "
+            "(?, 'archivelistsha-archived', 'archived-doc.pdf', 'application/pdf', 1, "
+            "'/tmp/archived-doc.pdf', 'web', 'archived', 'A findable secret nobody should see now')",
+            (owner["company"]["id"],),
+        )
+        archived_doc_id = cur.lastrowid
+        # Positive control — a live document in the same company, so the
+        # exclusion is proven to be specific to status='archived', not an
+        # accidental "nothing comes back at all" bug.
+        cur = conn.execute(
+            "INSERT INTO document (company_id, sha256, filename, media_type, bytes, "
+            "stored_path, source_channel, status, description) VALUES "
+            "(?, 'archivelistsha-live', 'live-doc.pdf', 'application/pdf', 1, "
+            "'/tmp/live-doc.pdf', 'web', 'filed', 'A findable live document')",
+            (owner["company"]["id"],),
+        )
+        live_doc_id = cur.lastrowid
+    reindex_document_search(archived_doc_id)
+    reindex_document_search(live_doc_id)
+
+    for token in (owner["token"], viewer_token):
+        doc_ids = [d["id"] for d in client.get("/api/documents", headers=_auth_headers(token)).json()]
+        assert archived_doc_id not in doc_ids, doc_ids
+        assert live_doc_id in doc_ids, doc_ids
+
+        search_ids = [d["id"] for d in client.get("/api/search?q=findable", headers=_auth_headers(token)).json()]
+        assert archived_doc_id not in search_ids, search_ids
+        assert live_doc_id in search_ids, search_ids

@@ -778,7 +778,10 @@ function DocumentCard({
             Edit
           </button>
         )}
-        {canArchive && doc.status !== 'archived' && (
+        {/* No doc.status !== 'archived' guard needed (2026-09-23, DECISIONS
+           #53) — the server never sends an archived document to this list
+           at all anymore, so every doc rendered here is guaranteed live. */}
+        {canArchive && (
           <button onClick={onArchive} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-red-700">
             Archive
           </button>
@@ -940,7 +943,6 @@ export function OpsConsole() {
   const [lastUpload, setLastUpload] = useState<UploadResult | null>(null)
   const [trace, setTrace] = useState<{ documentId: number; report: TraceReport } | null>(null)
   const [activeTab, setActiveTab] = useState<OpsTab>('review')
-  const [showArchived, setShowArchived] = useState(false)
   // Real search (2026-09-22) — searchResults===null means "not searching,
   // show the normal list"; an array (even empty) means "showing search
   // results instead". Kept separate from `documents` rather than
@@ -1068,19 +1070,18 @@ export function OpsConsole() {
   // ReviewQueueCard already makes (isRoutine, DECISIONS #40) — a clean
   // upload's badge shouldn't read as "something's wrong" here either.
   const isRoutineUpload = lastUpload?.status === 'needs_review' && lastUpload.review?.reason === 'clean extraction'
-  // search/bucket filters apply on top of whichever base list is active;
-  // "show archived" always applies first, same ordering as before bucket
-  // replaced tags — so bucket chip counts match what's actually shown
-  // when a filter is clicked, whether or not a search is also active.
+  // Bucket filter applies on top of whichever base list is active. No
+  // archived-status filtering here anymore (2026-09-23, DECISIONS #53) —
+  // the server never sends an archived document to any role in the first
+  // place (GET /api/documents, GET /api/search both exclude it
+  // unconditionally), so there's nothing left for the client to hide.
   const baseDocuments = searchResults ?? documents
-  const archivedCount = documents.filter((d) => d.status === 'archived').length
-  const archivedFiltered = showArchived ? baseDocuments : baseDocuments.filter((d) => d.status !== 'archived')
   const bucketCounts = Object.fromEntries(
-    BUCKETS.map((b) => [b, archivedFiltered.filter((d) => d.bucket === b).length]),
+    BUCKETS.map((b) => [b, baseDocuments.filter((d) => d.bucket === b).length]),
   ) as Record<Bucket, number>
   const visibleDocuments = activeBucketFilter
-    ? archivedFiltered.filter((d) => d.bucket === activeBucketFilter)
-    : archivedFiltered
+    ? baseDocuments.filter((d) => d.bucket === activeBucketFilter)
+    : baseDocuments
   // 2026-09-22 (DECISIONS #45): vendor_name autocomplete source — distinct
   // values already on this company's documents, no new endpoint. Sourced
   // from the full `documents` list (not search/bucket-filtered) so the
@@ -1287,16 +1288,6 @@ export function OpsConsole() {
               <h2 className="text-[11px] font-mono uppercase tracking-wide text-muted">
                 Documents ({visibleDocuments.length})
               </h2>
-              {archivedCount > 0 && (
-                <label className="flex items-center gap-1.5 text-[12px] text-muted">
-                  <input
-                    type="checkbox"
-                    checked={showArchived}
-                    onChange={(e) => setShowArchived(e.target.checked)}
-                  />
-                  Show archived ({archivedCount})
-                </label>
-              )}
             </div>
 
             {/* Real search (2026-09-22, DECISIONS #40) — tenant-scoped
@@ -1416,7 +1407,9 @@ export function OpsConsole() {
 
       {activeTab === 'dates' && (
         <div role="tabpanel" id="ops-panel-dates" aria-labelledby="ops-tab-dates">
-          <DatesView documents={documents.filter((d) => d.status !== 'archived')} />
+          {/* No archived-status filter needed (2026-09-23, DECISIONS #53)
+             — `documents` (GET /api/documents) never contains one. */}
+          <DatesView documents={documents} />
         </div>
       )}
 

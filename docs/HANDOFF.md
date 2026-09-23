@@ -457,6 +457,44 @@ unchecked) still works. Screenshots:
 `ops-document-card-picture-editing.png`,
 `ops-review-card-filename-decluttered.png`.
 
+**Archived documents are now actually inaccessible through the app, for
+every role including owner — a real access-control fix, not a cosmetic
+one (2026-09-23, DECISIONS #53).** `GET /api/documents` had no role floor
+(`get_current_membership`, not `require_role`) and never excluded
+`status = 'archived'` from its query — any authenticated member, viewer
+included, could already see an archived document by calling the endpoint
+directly; the Documents tab's "Show archived" checkbox (`OpsConsole.tsx`)
+only hid the row visually, it never controlled access. `GET /api/search`
+had the identical gap in its join back to `document` after the FTS5
+match. Both now add `AND status != 'archived'` unconditionally — no
+parameter, no role exception, no way to opt back in from either endpoint.
+`POST /api/documents/{id}/archive` is unchanged (still admin+, still
+`transition_document()`-routed) — archiving now genuinely means gone from
+the app, for the admin/owner who archived it too. `showArchived`,
+`archivedFiltered`, and the checkbox were removed entirely from
+`OpsConsole.tsx`; two more now-dead defensive `status !== 'archived'`
+checks (a per-row Archive-button visibility guard, the Dates tab's
+document filter) were found and simplified while double-checking rather
+than assumed clean — both were provably-always-true once the server-side
+fix landed. `list_review_items` was checked too and found already correct
+(`archive_document` dismisses any open `review_item`, so an archived
+document was never reachable through the review queue). New test:
+`tests/test_auth.py::test_archived_documents_never_appear_in_list_or_search_for_any_role`
+(own-company data for owner and viewer, not just tenant isolation — a
+positive-control live document confirms the exclusion is specific, not a
+"returns nothing" bug). Full suite 35/35, typecheck + build clean.
+Verified live (real archive of a real seeded `filed` document through the
+real UI): the Documents tab shows no archived-related control anywhere,
+the document count drops immediately, re-searching its exact filename
+afterward returns nothing. **Found, not fixed here (added to
+`docs/KANBAN.md` Backlog)**: `GET /api/documents/{id}/file` and `GET
+/api/trace/{document_id}` still don't exclude archived documents when
+fetched directly by a known ID — narrower than the fixed gap (needs prior
+knowledge of the ID) but the same class of issue, out of this task's
+stated scope. Screenshots:
+`docs/screenshots/ops-documents-no-show-archived-control.png`,
+`ops-documents-after-archive-fully-hidden.png`.
+
 **Known gaps, in the order they'll bite:**
 - **The banner's classify-confidence line ("classified as X/Y, N% confident") has silently never rendered since DECISIONS #40** — found 2026-09-22 while verifying the fix above. `upload_document`'s two live return branches don't include a `classify` key; only the removed "processed" branch ever did. `docs/KANBAN.md` Backlog has the fix.
 - **The hallucination guard (DECISIONS #48) only catches values absent from the text entirely** — a wrong-but-present value (or a fabricated number that happens to substring-match something else in the document) isn't caught. Stated as a known limitation in DECISIONS #48, not a bug to silently work around.
@@ -467,6 +505,7 @@ unchecked) still works. Screenshots:
 - `app/rules/statutory.py`'s Form C-S/C due date (30 Nov) is a working approximation, flagged in its own docstring — confirm before citing a specific date in `docs/WRITEUP.md`
 - `app/llm.py`'s per-token pricing is Anthropic list pricing, not confirmed as the gateway's actual billed rate
 - **`document.sha256` is UNIQUE globally, not per-company** — found live 2026-09-22 seeding a second test company; a byte-identical file can never be uploaded to two different companies. `docs/KANBAN.md` backlog; needs a table rebuild in SQLite, not a one-line fix.
+- **`GET /api/documents/{id}/file` and `GET /api/trace/{document_id}` still don't exclude archived documents** — found 2026-09-23 (DECISIONS #53) while fixing the same gap in `list_documents`/`search_documents`. Both fetch by a known document ID directly with no `status='archived'` check; narrower exposure than the fixed endpoints (needs the ID in hand already) but the same class of issue. `docs/KANBAN.md` Backlog has the fix.
 
 ## Auth (added 2026-09-22, DECISIONS #28-31)
 
