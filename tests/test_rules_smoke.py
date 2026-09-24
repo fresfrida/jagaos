@@ -823,9 +823,9 @@ def test_classify_prompt_does_not_presuppose_a_document_for_unreadable_text():
     # "document". This gateway is text-only (MDs/GAPS.md §8), so the honest
     # instruction is "say nothing was readable and set low confidence",
     # never a guess about what the picture shows.
-    from app.graph.classify import SYSTEM_TEMPLATE, UNREADABLE_EXAMPLE_EN
+    from app.graph.classify import UNREADABLE_EXAMPLE_EN, render_system_prompt
 
-    prompt = SYSTEM_TEMPLATE.format(language_name="Malay", unreadable_example=UNREADABLE_EXAMPLE_EN)
+    prompt = render_system_prompt("Malay")
 
     assert "Photo of a document" not in prompt
     assert "document" not in UNREADABLE_EXAMPLE_EN.lower()

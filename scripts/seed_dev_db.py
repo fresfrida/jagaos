@@ -30,9 +30,16 @@ COMPANY_NAME = "Try Demo Pte Ltd"
 # does a viewer see" doesn't need hand-creating a membership every time.
 # (role, email, display name) — owner is handled separately above/below,
 # it's the one dev-login can create a company with in a single call.
+#
+# user1/user2 (2026-09-24, round 11) are two peers of the same role: a `user`
+# may only edit documents they uploaded themselves, and with a single `user`
+# account that rule (user vs. someone else's file) could only ever be
+# exercised against a higher role, never against a peer.
 ROLE_ACCOUNTS = [
     ("admin", "admin@try-demo.test", "Demo Admin"),
     ("user", "user@try-demo.test", "Demo User"),
+    ("user", "user1@try-demo.test", "Demo User 1"),
+    ("user", "user2@try-demo.test", "Demo User 2"),
     ("viewer", "viewer@try-demo.test", "Demo Viewer"),
 ]
 

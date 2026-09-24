@@ -10,6 +10,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { ApiError } from '../../lib/apiClient'
 import { formatShortDate, localeFor } from '../../lib/dates'
 import {
   BucketField,
@@ -193,7 +194,16 @@ export function DocumentCard({
       setEditing(false)
       onSaved()
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      // 403 = the server refused this caller (app/auth.py::may_edit_document).
+      // The Edit button is already hidden when the list said can_edit is
+      // false, so this is only a race (ownership/role changed after the
+      // page loaded) — but the server's message is English-only, so show a
+      // translated one rather than an English sentence inside a Malay page.
+      setError(
+        e instanceof ApiError && e.status === 403
+          ? t('ops.documents.editForbidden')
+          : e instanceof Error ? e.message : String(e),
+      )
     } finally {
       setBusy(false)
     }

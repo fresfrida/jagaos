@@ -16,10 +16,10 @@ import { authHeaders } from '../auth/authApi'
 // 2026-09-22 (DECISIONS #42): fixed taxonomy, supersedes the tag table —
 // "only upgrade to a real tags table if users later need to invent their
 // own." Shared here so the Company Files page's bucket-filter chips, the
-// Tags landing page's six buttons, and the bucket dropdown editors in
+// Tags landing page's bucket buttons, and the bucket dropdown editors in
 // DocumentCard/ReviewQueueCard all read from one list, not several copies.
 export const BUCKETS = [
-  'Receivables', 'Expenses', 'Statutory', 'Operations', 'Memory Lane', 'Miscellaneous',
+  'Receivables', 'Expenses', 'Statutory', 'Operations', 'Contracts', 'Memory Lane', 'Miscellaneous',
 ] as const
 export type Bucket = (typeof BUCKETS)[number]
 
@@ -62,7 +62,7 @@ export interface ProvenanceValue {
 // interpolation values. Supersedes a pre-joined English sentence the
 // backend used to build (it has no notion of the caller's language); the
 // frontend now owns the translated phrasing. See opsShared.tsx's
-// reasonText().
+// reasonDisplay().
 export interface ReviewReason {
   code: string
   params: Record<string, string>
@@ -114,6 +114,11 @@ export interface DocumentRow {
   // vs received_at's upload timestamp — null whenever the source document
   // has no discoverable date of its own (2026-09-22, DECISIONS #43).
   occurred_on: string | null
+  // 2026-09-24 (round 11): the server's own answer (app/auth.py::
+  // may_edit_document) for THIS caller — a `user` can only edit documents
+  // they uploaded, so an Edit button on someone else's would only ever
+  // 403. Always trust this over re-deriving the rule from the role here.
+  can_edit: boolean
 }
 
 export interface Expectation {

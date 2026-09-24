@@ -1718,8 +1718,8 @@ nothing is being pushed this round. Full per-item detail:
 `docs/KANBAN.md` Done (2026-09-24), `docs/DECISIONS.md` #70-#72.
 
 **Round 10 (5-item follow-up on round 9's language work + one cosmetic) —
-built and verified, uncommitted, awaiting a go-ahead (DECISIONS #73,
-2026-09-24).** Two of the request's premises did not survive checking against
+built and verified; committed and pushed as `304c49e` by someone other than the
+building session (DECISIONS #73, 2026-09-24).** Two of the request's premises did not survive checking against
 the running app, and the docs record what was actually found. **Generation
 (item 1):** verified independently, not re-investigated — a real upload with
 `language=ms` stored `{"en": ..., "ms": ...}` with a native Malay sentence;
@@ -1757,8 +1757,43 @@ no change made. **Checks:** `pytest tests/` 59/59, `python evals/run.py`
 14/14, `npm run test` 8/8, `npm run typecheck` and `npm run build` clean.
 Screenshots: `docs/screenshots/round10-*.png`.
 
+**Round 11 (11-item batch) — items 6, 7, 9, 10 built and verified; items 1-5 and
+the cosmetic confirmed, not rebuilt; items 8 and 11 assessed only. Uncommitted,
+awaiting a go-ahead (DECISIONS #74, #75, `docs/PERMISSIONS.md`, 2026-09-24).**
+**Confirmations (1-5):** the round-9/10 tests (`tests/test_upload_language.py`,
+`DocumentCard.i18n.test.tsx`) still pass and were not duplicated; the classify
+prompt was re-verified live after this round edited it (a real temple photo still
+reads "Image with no clear readable text", both signals fire). **Item 6:** a
+Malay/Chinese/Tamil review card no longer carries English fragments — chose
+option (a), dropping the interpolated matched word; the same bug class was wider
+than named (extract.py's raw pydantic error in `extractionError`), so that was
+dropped too, and `missingRequiredFields`' field names now go through
+`fieldLabel`. Also found: three messages still said "GST" after round 9's
+gst-to-tax rename — now "tax". **Item 7:** display-layer only — two signals for
+one problem show once, distinct reasons stack as a list (`reasonDisplay()` +
+`ReviewReasons`); the backend still emits both signals. **Item 9:** user1/user2
+seeded; the ownership rule is one function, `auth.may_edit_document`, shared by
+the PATCH check and a new per-caller `can_edit` on list/search, so the UI hides
+Edit where the server would refuse; 26 tests with real uploads and logins,
+mutation-checked, plus a live HTTP matrix and a UI check at 375px for each role.
+No user-vs-user hole was found. **Item 10:** Contracts bucket — the request named
+two places, but `BucketName` in `app/models.py` also validates edits and classify
+output (without it, edits 422); the prompt list is now derived from it and
+`tests/test_buckets.py` guards the frontend/backend copies; a routing rule
+(lease/contract to Contracts) was needed for the bucket to ever be chosen and is
+flagged as a product call. **Items 8/11 (assessment):** `docs/PERMISSIONS.md` — the
+matrix re-verified live, and **`GET /api/companies` found readable by an anonymous
+caller (all 23 companies)**; DECISIONS #75 — multi-image upload, where the
+request's two premises were wrong: an image-only PDF already 500s today (and
+orphans a file), and rasterizing PDF pages needs no new dependency (pypdfium2 ships
+with pdfplumber). Parked, not built. **Checks:** `pytest tests/` 88/88,
+`python evals/run.py` 14/14, `npm run test` 23/23, `npm run typecheck` and
+`npm run build` clean. Screenshots: `docs/screenshots/round11-*.png`.
+
 **Known gaps, in the order they'll bite:**
-- **⚠ Lightsail needs a redeploy to pick up round 9's changes (items 2, 5/6, 7, 9/10) as well as DECISIONS #69's fix** (2026-09-24) — company-timezone dates, bilingual descriptions, session-purge, currency/locality-aware tax all live only in this checkout; round 9 is committed and pushed (`1c43ffe`) but, as far as this session can verify, not redeployed to the box (DECISIONS #72); round 10's changes (DECISIONS #73) are still uncommitted. The extract.py/classify.py 500-on-zero-tool-calls bug and the schema-mismatch trace-insert crash from DECISIONS #69 are separately already pushed but still await their own redeploy. Redeploy needs the user's own explicit go-ahead, not a peer's, per this project's standing rule.
+- **⚠ Lightsail needs a redeploy to pick up rounds 9, 10 and 11 as well as DECISIONS #69's fix** (2026-09-24) — rounds 9 and 10 are committed and pushed (`1c43ffe`, `304c49e`), round 11 is not yet; none is redeployed as far as this session can verify. Original round-9 note: — company-timezone dates, bilingual descriptions, session-purge, currency/locality-aware tax all live only in this checkout; round 9 is committed and pushed (`1c43ffe`) but, as far as this session can verify, not redeployed to the box (DECISIONS #72); round 10's changes (DECISIONS #73) are still uncommitted. The extract.py/classify.py 500-on-zero-tool-calls bug and the schema-mismatch trace-insert crash from DECISIONS #69 are separately already pushed but still await their own redeploy. Redeploy needs the user's own explicit go-ahead, not a peer's, per this project's standing rule.
+- **⚠ `GET /api/companies` is readable by an anonymous caller** (verified live 2026-09-24: HTTP 200, all 23 companies with name, `uen`, FYE, GST flag; `POST /api/companies` is equally open) — nothing calls either; on the internet-reachable box it lists every tenant. `docs/PERMISSIONS.md`, `docs/KANBAN.md` Backlog. Needs an explicit call (delete the handlers or gate them).
+- **⚠ An image-only (scanned) PDF upload returns HTTP 500 and leaves an orphaned file in `data/docs`** (verified live 2026-09-24, DECISIONS #75) — `ocr.extract_text` cannot open a PDF, and `ingest` has already copied the file. Small fix, no new dependency; independent of multi-image upload.
 - **Sparse OCR noise on a non-document photo still reaches the LLM** (round 10, DECISIONS #73) — `app/graph/ingest.py` treats image OCR under 10 characters as "no text" (deterministic, no LLM call, "Untitled photo"), but four real non-document photos measured 3, 5, 5 and 17 alphanumeric characters: the 17-character one still went to the model. The new prompt handles it honestly and both review reasons fire, so this is a consistency/cost option (raise the threshold, count alphanumerics), not a bug — at the price of false alarms on genuinely tiny text images. Not changed.
 - **The unreadable-image review reason quotes the English detector phrase inside a translated sentence** (round 10) — `description_signals_problem`'s `{{word}}` is the matched English phrase, shown as-is in the zh/ms/ta sentence (visible in `docs/screenshots/round10-locked-text-review-ta.png`). Pre-existing for every matched word; more visible now that the phrase is longer. Redundant with the plain "we couldn't read this file" reason shown beside it.
 - **`GET /api/documents` is genuinely unpaginated** (confirmed by grep, DECISIONS #70) — returns every non-archived row for the company on every call; `useOpsData.ts` already refetches on every route navigation by design. Verified this, not FTS5 search, is the first real bottleneck as a company's own document history grows. No urgency at today's real row counts.
@@ -1875,6 +1910,8 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Reusable UI | `components/ui/*` (Button, Badge, Card, Container, Reveal, EmptyState, MemoryCard, SourceLabel, Logo) |
 | Upload-outcome toast — non-blocking, 4s auto-dismiss, i18n from the start (2026-09-24, item 1) | `components/ui/Toast.tsx` (`useToast()`), wired in `pages/UploadPage.tsx` |
 | Description edit-field state that follows the selected language until the user types (2026-09-24, round 10) — shared by both cards so they cannot drift; regression tests | `features/ops/useEditableDescription.ts`, `features/ops/DocumentCard.i18n.test.tsx` |
+| A review card's flagged-reason block: dedupe of two signals for one problem, a sentence or a list, translated field names, no interpolated English (2026-09-24, round 11) — pure logic + a small component used at both places the card shows it | `features/ops/opsShared.tsx` (`dedupeReasons`, `reasonDisplay`), `features/ops/ReviewReasons.tsx`, `features/ops/ReviewReasons.test.tsx` |
+| Who may edit a document — one rule shared by the PATCH check and the per-caller `can_edit` on list/search (2026-09-24, round 11) | `app/auth.py` (`may_edit_document`), `app/main.py`, `tests/test_document_permissions.py` |
 | Session state, login/logout, role helpers, company-settings save/refresh (2026-09-23, `refreshCompany()`) | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
 | Session-gate-and-redirect guard shared by every real-app page (2026-09-23, DECISIONS #59) | `features/auth/RequireSession.tsx` |
 | Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
@@ -1890,7 +1927,7 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Cross-tree "trigger the file picker" signal (bottom-nav FAB → the upload page's dropzone, `window.CustomEvent`, 2026-09-23, DECISIONS #66) | `lib/uploadTrigger.ts` |
 | Every document, bucket-filterable (reads `?bucket=` for deep links) — `/company-files` | `pages/CompanyFilesPage.tsx`, `features/ops/DocumentCard.tsx`, `features/ops/DocumentResultsList.tsx` |
 | Real, session-scoped full-text search — `/search` | `pages/SearchPage.tsx` |
-| Signed-in Calendar hub (dates/obligations/gap analysis merged) and Tags landing (six bucket buttons into Company Files) — same URLs as the marketing `/calendar`/`/tags`, session-branched in `Page.tsx`; Dates renders a real month grid, not a flat list (2026-09-23, DECISIONS #62) | `features/calendar/CalendarHub.tsx`, `features/calendar/DatesView.tsx`, `features/calendar/MonthGrid.tsx`, `features/tags/TagsLanding.tsx` |
+| Signed-in Calendar hub (dates/obligations/gap analysis merged) and Tags landing (one button per bucket, into Company Files) — same URLs as the marketing `/calendar`/`/tags`, session-branched in `Page.tsx`; Dates renders a real month grid, not a flat list (2026-09-23, DECISIONS #62) | `features/calendar/CalendarHub.tsx`, `features/calendar/DatesView.tsx`, `features/calendar/MonthGrid.tsx`, `features/tags/TagsLanding.tsx` |
 | Shared "vendor — doc type / description / doc type" document label + file-type icon, used by Calendar's day list only — not (yet) Company Files, see `docs/KANBAN.md` Backlog (2026-09-23, DECISIONS #62) | `features/ops/opsShared.tsx` (`formatDocumentLabel`, `DocumentTypeIcon`) |
 | Login form | `pages/LoginPage.tsx` |
 
@@ -1907,7 +1944,7 @@ remember the deployed site won't reflect that iteration until it's pushed.
 npm install
 npm run dev          # local iteration only — http://localhost:5173, not what's tested on the phone
 npm run typecheck    # tsc, strict (there is no lint yet)
-npm run test         # vitest + jsdom + Testing Library (added 2026-09-24, round 10 — one test file so far: DocumentCard.i18n.test.tsx)
+npm run test         # vitest + jsdom + Testing Library (added 2026-09-24, round 10 — two test files: DocumentCard.i18n.test.tsx, ReviewReasons.test.tsx)
 npm run build        # typecheck + production build to web/dist
 npm run preview      # serve dist on :4173
 ```
@@ -1948,4 +1985,4 @@ see the callout below on why that matters for `/ops` specifically.
 2. Start both servers: `uvicorn app.main:app --reload` from repo root (backend), `cd web && npm run dev` (frontend, local iteration — the deployed `https://jagaos.vercel.app` is what actually gets checked on the phone, per the Commands section above).
 3. `python scripts/seed_dev_db.py` (idempotent — safe to re-run) to get a company with data and one account per role — prints `owner@`/`admin@`/`user@`/`viewer@try-demo.test` and each one's dev-login token — rather than starting from an empty `/login` signup.
 4. Log in at `/login`, land on `/upload`, upload a document, watch it get classified/extracted, resolve anything flagged, then check `/calendar` (dates/obligations/gap analysis), `/company-files`, `/search`, and — owner/admin only — `/company-settings` (2026-09-23, DECISIONS #59/#64 — six real pages, not one tabbed `/ops`; the old URL still works, redirecting to `/upload`). Log in as each seeded role to see the nav/permission differences firsthand. That loop working, end to end, in the browser, is the current bar — not another backend node.
-5. Next real milestones, in the order they'd bite: **review round 10's uncommitted batch** (DECISIONS #73, `docs/KANBAN.md` Done 2026-09-24 — held back pending a go-ahead; round 9, DECISIONS #70-#72, is already pushed as `1c43ffe`), then member-management UI (backend's done, no frontend), a product frame with its own styling instead of `/ops`'s debug-console look, deploying this round's and DECISIONS #69's backend changes to Lightsail (`docs/KANBAN.md` Backlog has the full list).
+5. Next real milestones, in the order they'd bite: **review round 11's uncommitted batch** (DECISIONS #74/#75, `docs/PERMISSIONS.md`, `docs/KANBAN.md` Done 2026-09-24 — held back pending a go-ahead; rounds 9 and 10 are already pushed as `1c43ffe` and `304c49e`), and decide the two ⚠ Backlog items it found (anonymous `GET /api/companies`; scanned-PDF 500), then member-management UI (backend's done, no frontend), a product frame with its own styling instead of `/ops`'s debug-console look, deploying this round's and DECISIONS #69's backend changes to Lightsail (`docs/KANBAN.md` Backlog has the full list).

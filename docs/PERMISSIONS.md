@@ -42,6 +42,37 @@ UI affordances):
   a second `owner` is a 409 regardless of caller role.
 - `PATCH /api/companies/{id}` — **new this round**, `require_role("owner")`.
 
+### Read access and every other endpoint — verified live 2026-09-24
+
+Re-checked by mapping every route in `app/main.py` and calling each with a
+viewer token against the running server, not from the docs above:
+
+| Endpoint | Floor actually enforced |
+|---|---|
+| `GET /api/documents`, `/api/search`, `/api/review`, `/api/expectations`, `/api/obligations`, `/api/trace/{id}`, `/api/documents/{id}/file`, `/api/auth/me` | any authenticated member — **viewer included** (all 200 for a viewer) |
+| `GET /api/companies/{id}/members` | any authenticated member of that company — so a viewer can list teammates' emails and roles |
+| `POST /api/documents` | `user` |
+| `PATCH /api/documents/{id}` | `user`, plus `auth.may_edit_document` (below) |
+| `POST /api/review/{id}/resolve`, `POST /api/documents/{id}/archive`, `POST /api/companies/{id}/members` | `admin` |
+| `PATCH /api/companies/{id}` | `owner` |
+| `GET /api/companies`, `POST /api/companies` | **none — see "Found, not fixed"** |
+
+Read access is uniform; only writes are gated. Cross-company access is
+refused everywhere by scoping every query to `membership.company_id`, never a
+client-supplied id.
+
+**The document-edit rule is now one function** (2026-09-24, round 11):
+`auth.may_edit_document(membership, uploaded_by_user_id)` — viewer never;
+admin/owner any; `user` only what they uploaded themselves (a document with no
+recorded uploader stays editable by a `user`). `PATCH` enforces it, and
+`GET /api/documents` / `GET /api/search` return a per-caller `can_edit` from the
+same function, so the frontend hides Edit exactly where the server would refuse
+(a refused save that still happens shows a translated message). Covered by
+`tests/test_document_permissions.py` — 26 tests with real uploads and logins,
+including the case that had never been exercised: two accounts of the same role
+(`user1`, `user2`) against each other's files. Delete (`archive`) is `admin` with
+no per-uploader carve-out, so a `user` cannot delete even their own upload.
+
 ## Flagged decisions (resolved, not silently picked)
 
 **1. Does "user can caption/edit only their own uploads" extend to
@@ -86,7 +117,10 @@ to show a form the current values with.
 ## Found, not fixed
 
 **`GET /api/companies` and `POST /api/companies` have no session/role
-check at all** — confirmed live and by grep: no `Depends(...)` on either
+check at all** — **re-verified live 2026-09-24: an anonymous request (no
+Authorization header) returned HTTP 200 with all 23 companies in the dev
+database — id, name, `uen`, FYE, GST flag. On the internet-reachable Lightsail
+box that is every tenant's company list, to anyone.** Confirmed by grep: no `Depends(...)` on either
 handler, and neither is called from anywhere in the frontend, a script, or
 a test. Pre-existing (not introduced this round), genuinely unauthenticated
 company creation/listing sitting in the API surface. Not touched this
@@ -99,7 +133,9 @@ than asked for. Flagged in `docs/KANBAN.md` Backlog for an explicit call.
 
 `python scripts/seed_dev_db.py` (idempotent, safe to re-run) now creates
 one account per role — `owner@try-demo.test`, `admin@try-demo.test`,
-`user@try-demo.test`, `viewer@try-demo.test` — printing each one's dev-login
-token. Email is the only "credential" this auth model has (`dev-login` is
+`user@try-demo.test`, `viewer@try-demo.test` — plus, since 2026-09-24,
+`user1@try-demo.test` and `user2@try-demo.test` (two peers of the same role, so
+"a user cannot edit another user's file" can be tried against a real peer) —
+printing each one's dev-login token. Email is the only "credential" this auth model has (`dev-login` is
 a placeholder for real magic-link email, `app/auth.py`'s docstring) — there
 is no password.

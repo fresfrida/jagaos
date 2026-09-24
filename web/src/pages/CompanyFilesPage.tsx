@@ -3,7 +3,7 @@
  * restructure). The search box that used to live at the top of this tab
  * moved out to its own Search page (per that restructure's explicit
  * mapping); everything else here is unchanged. Reads an optional
- * `?bucket=` query param on load so the Tags landing page's six bucket
+ * `?bucket=` query param on load so the Tags landing page's bucket
  * buttons can deep-link straight into a pre-filtered view. */
 
 import { useState } from 'react'

@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS document (
                                      -- editable by the user afterward
     -- 2026-09-22 (DECISIONS #42): supersedes the tag/document_tag tables —
     -- fixed taxonomy, no join tables. bucket is one of exactly Receivables|
-    -- Expenses|Statutory|Operations|Memory Lane|Miscellaneous (enforced in
+    -- Expenses|Statutory|Operations|Contracts|Memory Lane|Miscellaneous (enforced in
     -- app code/prompt, not a SQL CHECK — a human can always correct it in
     -- review, same as every other field).
     bucket TEXT,

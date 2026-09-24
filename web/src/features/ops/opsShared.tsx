@@ -23,6 +23,7 @@ const BUCKET_LABEL_KEY: Record<string, string> = {
   Expenses: 'ops.bucket.expenses',
   Statutory: 'ops.bucket.statutory',
   Operations: 'ops.bucket.operations',
+  Contracts: 'ops.bucket.contracts',
   'Memory Lane': 'ops.bucket.memoryLane',
   Miscellaneous: 'ops.bucket.miscellaneous',
 }
@@ -137,28 +138,96 @@ export function isInjectionBlockedReason(reasons: ReviewReason[]): boolean {
   return reasons.length === 1 && reasons[0]?.code === 'injection_suspected_blocked'
 }
 
-/** The full human-facing sentence for a review card's headline, built
- * from translated per-reason text — never a raw code, and never a stored
- * English sentence (that's the whole point of this restructure: this
- * backend has no notion of the caller's language, so a ready-made
- * sentence could never actually be translated). */
-export function reasonText(t: TFunction, reasons: ReviewReason[]): string {
-  if (isFileMissingReason(reasons)) return t('ops.review.reasons.fileMissing')
+// 2026-09-24 (round 11): two reasons that describe the same underlying
+// problem — key = the more technical signal, value = the plainer one that
+// already covers it. When both are present only the plain one is shown.
+// Display-only: verify.py keeps emitting both on purpose (two independent
+// detectors — the model's own low confidence, and its description matching
+// a problem phrase — is defense in depth, DECISIONS #67/#68), and the
+// stored review_item still records both.
+const COVERED_BY: Record<string, string> = {
+  description_signals_problem: 'could_not_read_document',
+}
+
+// Reasons whose translated text is already a complete sentence, not a
+// fragment meant to follow "Please confirm:" (same reasoning as file_missing
+// and injection_suspected_blocked above) — shown bare when they are the
+// only reason.
+const STANDALONE_WHEN_ALONE = new Set(['could_not_read_document'])
+
+export function dedupeReasons(reasons: ReviewReason[]): ReviewReason[] {
+  const present = new Set(reasons.map((r) => r.code))
+  return reasons.filter((r) => {
+    const coveredBy = COVERED_BY[r.code]
+    return !(coveredBy && present.has(coveredBy))
+  })
+}
+
+/** verify.py joins raw extract-field names ("vendor, issued_on") into one
+ * param; translate each through the same label table the Extracted fields
+ * grid uses, so a Malay sentence never carries English field names. */
+function translateFieldNames(t: TFunction, joined: string): string {
+  return joined
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .map((name) => fieldLabel(t, name))
+    .join(', ')
+}
+
+/** One reason as a sentence fragment. Only params that are language-neutral
+ * (amounts) or translated here (field names) are interpolated — the
+ * detector's matched English word and extract.py's raw validation error are
+ * deliberately not, they would put English inside a Malay/Chinese/Tamil
+ * sentence (both still ride along in the stored params, for debugging). */
+function reasonSentence(t: TFunction, reason: ReviewReason): string {
+  const key = REASON_LABEL_KEY[reason.code]
+  if (!key) return reason.code
+  if (reason.code === 'missing_required_fields') {
+    return t(key, { fields: translateFieldNames(t, reason.params.fields ?? '') })
+  }
+  return t(key, reason.params)
+}
+
+function capitalizeFirst(text: string): string {
+  return text.charAt(0).toLocaleUpperCase() + text.slice(1)
+}
+
+export type ReasonDisplay =
+  | { layout: 'text'; text: string }
+  | { layout: 'list'; heading: string; items: string[] }
+
+/** What a review card's flagged-reason block should show, built from
+ * translated per-reason text — never a raw code, and never a stored English
+ * sentence (this backend has no notion of the caller's language, so a
+ * ready-made sentence could never actually be translated). A single reason
+ * reads as one sentence; several distinct reasons stack as a list instead of
+ * one run-on joined with semicolons. */
+export function reasonDisplay(t: TFunction, reasons: ReviewReason[]): ReasonDisplay {
+  if (isFileMissingReason(reasons)) return { layout: 'text', text: t('ops.review.reasons.fileMissing') }
   // 2026-09-23 (DECISIONS #68): same reasoning as file_missing above —
   // its own translated string is already a complete, standalone
   // statement ("...Delete it, or upload a different copy."), not a
   // fragment meant to follow "Please confirm:" (there's nothing to
   // confirm when Accept isn't even offered — caught live, the wrapped
   // version read as nonsensical).
-  if (isInjectionBlockedReason(reasons)) return t('ops.review.reasons.injectionSuspectedBlocked')
-  if (reasons.length === 0) return t('ops.review.reasons.clean')
-  const joined = reasons
-    .map((r) => {
-      const key = REASON_LABEL_KEY[r.code]
-      return key ? t(key, r.params) : r.code
-    })
-    .join('; ')
-  return t('ops.review.reasons.prefix', { reasons: joined })
+  if (isInjectionBlockedReason(reasons)) return { layout: 'text', text: t('ops.review.reasons.injectionSuspectedBlocked') }
+  if (reasons.length === 0) return { layout: 'text', text: t('ops.review.reasons.clean') }
+
+  const shown = dedupeReasons(reasons)
+  const [only] = shown
+  if (shown.length === 1 && only) {
+    const sentence = reasonSentence(t, only)
+    return {
+      layout: 'text',
+      text: STANDALONE_WHEN_ALONE.has(only.code) ? sentence : t('ops.review.reasons.prefix', { reasons: sentence }),
+    }
+  }
+  return {
+    layout: 'list',
+    heading: t('ops.review.reasons.prefixList'),
+    items: shown.map((r) => capitalizeFirst(reasonSentence(t, r))),
+  }
 }
 
 // The generic "Extracted fields" grid (ReviewQueueCard.tsx) renders every

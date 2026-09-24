@@ -21,13 +21,13 @@ import {
   isInjectionBlockedReason,
   isoToDmy,
   parseReviewReasons,
-  reasonText,
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type ReviewItem } from './opsApi'
+import { ReviewReasons } from './ReviewReasons'
 import { useEditableDescription } from './useEditableDescription'
 
 /** One field from a review_item.proposed_json blob — matches
@@ -352,9 +352,10 @@ export function ReviewQueueCard({
          render alongside a "no issues found"/isRoutine state, since
          app/graph/verify.py's file_missing check overrides every other
          reason rather than joining them. */}
-      <p className={`text-[13px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}>
-        {reasonText(t, reasons)}
-      </p>
+      <ReviewReasons
+        reasons={reasons}
+        className={`text-[13px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}
+      />
 
       <DocumentPreview documentId={item.document_id} mediaType={item.document_media_type} filename={item.document_filename} />
 
@@ -549,7 +550,7 @@ export function ReviewQueueCard({
              clicking. Routine "no issues found" confirms have nothing to
              repeat, so this stays gated on !isRoutine like the top copy. */}
           {!isRoutine && (
-            <p className={`mb-2 text-[13px] ${isFileMissing ? 'text-red-700' : 'text-amber-800'}`}>{reasonText(t, reasons)}</p>
+            <ReviewReasons reasons={reasons} className={`mb-2 text-[13px] ${isFileMissing ? 'text-red-700' : 'text-amber-800'}`} />
           )}
           <div className="flex gap-2">
             {/* 2026-09-23 (DECISIONS #68): no Accept for a hard-quarantined

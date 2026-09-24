@@ -64,7 +64,7 @@ export function DocumentResultsList({
             <DocumentCard
               key={doc.id}
               doc={doc}
-              canEdit={canEdit}
+              canEdit={canEdit && doc.can_edit}
               canArchive={canArchive}
               onView={() => setViewingDocument(doc)}
               onTrace={() => void viewTrace(doc.id)}

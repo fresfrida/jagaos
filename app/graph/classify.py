@@ -21,6 +21,7 @@ the LLM call entirely and sets lane/doc_type/bucket by fixed rule instead
 that case; the human's toggle already is the answer."""
 
 import json
+from typing import get_args
 
 from pydantic import ValidationError
 
@@ -28,7 +29,7 @@ from app.db import DB_PATH, get_conn, reindex_document_search
 from app.graph.state import PipelineState
 from app.guards.injection import UNTRUSTED_TEMPLATE, scan
 from app.llm import MODEL_NAME, call
-from app.models import ClassifyResult, to_tool
+from app.models import BucketName, ClassifyResult, to_tool
 
 TOOL = to_tool(
     ClassifyResult,
@@ -87,11 +88,11 @@ doc_type:
 - For lane=invoice, important, or memory: pick exactly one of invoice,
   receipt, PO, quotation, delivery_order, contract, photo, other.
 
-bucket — pick exactly one of Receivables, Expenses, Statutory, Operations,
-"Memory Lane", Miscellaneous:
+bucket — pick exactly one of {bucket_names}:
 - lane=statutory -> Statutory
 - lane=memory -> "Memory Lane"
-- lane=important -> Operations
+- lane=important -> Contracts if it is a contract, lease, or agreement
+  (doc_type contract); otherwise Operations (e.g. an insurance policy)
 - lane=invoice -> Expenses (this is provisional — always use Expenses
   here even if the invoice looks like this company issued it; a
   deterministic check downstream corrects it to Receivables if so)
@@ -124,6 +125,22 @@ Also write:
   transliterate it, regardless of what language `description` is in.
 
 Call classify_document with your answer."""
+
+
+# Quoted when a name has a space, matching how the prompt has always written
+# "Memory Lane". Built from the BucketName type so the prompt cannot list a
+# bucket the model's answer would then fail validation against.
+BUCKET_NAMES_FOR_PROMPT = ", ".join(
+    f'"{name}"' if " " in name else name for name in get_args(BucketName)
+)
+
+
+def render_system_prompt(language_name: str) -> str:
+    return SYSTEM_TEMPLATE.format(
+        language_name=language_name,
+        unreadable_example=UNREADABLE_EXAMPLE_EN,
+        bucket_names=BUCKET_NAMES_FOR_PROMPT,
+    )
 
 
 def classify(state: PipelineState) -> PipelineState:
@@ -163,9 +180,7 @@ def classify(state: PipelineState) -> PipelineState:
                    "bucket": "Memory Lane", "vendor_name": None}
     else:
         user = UNTRUSTED_TEMPLATE.format(document_text=text[:12000])
-        system = SYSTEM_TEMPLATE.format(
-            language_name=language_name, unreadable_example=UNREADABLE_EXAMPLE_EN,
-        )
+        system = render_system_prompt(language_name)
         # "haiku" is rejected by the gateway for this team's key — confirmed
         # live 2026-09-21 (GAPS.md's new §11): "Only the approved model is
         # allowed". sonnet4.5 is the only callable model; no cheap-routing

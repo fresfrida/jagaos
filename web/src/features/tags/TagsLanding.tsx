@@ -1,6 +1,6 @@
 /** The real, signed-in Tags page: a fast visual entry point into Company
  * Files by category — not a new data view (2026-09-23, header/nav
- * restructure, explicit mapping). Six buttons over the same fixed bucket
+ * restructure, explicit mapping). One button per bucket over the same fixed bucket
  * taxonomy the rest of the app already uses (BUCKETS, opsApi.ts),
  * each linking to Company Files pre-filtered to that bucket via a
  * `?bucket=` query param. Only ever mounted once a session is confirmed —

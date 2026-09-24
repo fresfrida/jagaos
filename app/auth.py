@@ -120,6 +120,25 @@ def get_current_membership(authorization: str | None = Header(default=None)) -> 
     return _membership_from_token(authorization.removeprefix("Bearer ").strip())
 
 
+def may_edit_document(membership: CurrentMembership, uploaded_by_user_id: int | None) -> bool:
+    """The one rule for "can this caller edit this document" (2026-09-24,
+    round 11) — used by PATCH /api/documents/{id} to enforce it and by the
+    list/search endpoints to tell the frontend, so what the UI offers can
+    never disagree with what the server allows.
+
+    viewer: never. admin/owner: any document in their company. user: only a
+    document they uploaded themselves. A document with no recorded uploader
+    (uploaded_by_user_id IS NULL — direct-SQL fixtures, or a future
+    non-web ingestion path such as Telegram) is deliberately editable by a
+    `user`: there is no real uploader to protect it from (see
+    edit_document's docstring for the original reasoning)."""
+    if ROLE_ORDER[membership.role] < ROLE_ORDER["user"]:
+        return False
+    if membership.role == "user" and uploaded_by_user_id is not None:
+        return uploaded_by_user_id == membership.user_id
+    return True
+
+
 def require_role(min_role: Role):
     """Dependency factory: `Depends(require_role("admin"))`. Raises 403 if
     the caller's role ranks below min_role. Reuses get_current_membership

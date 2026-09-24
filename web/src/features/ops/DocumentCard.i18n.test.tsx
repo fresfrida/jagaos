@@ -4,11 +4,12 @@
  * without any re-upload or re-fetch — and must never overwrite text the
  * user has typed into the edit form. */
 
-import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../../i18n'
+import { ApiError } from '../../lib/apiClient'
 import { DocumentCard } from './DocumentCard'
-import type { DocumentRow } from './opsApi'
+import { opsApi, type DocumentRow } from './opsApi'
 import { useEditableDescription } from './useEditableDescription'
 
 const EN = 'Invoice from Acme Engineering for consulting services, $396'
@@ -29,6 +30,7 @@ const doc: DocumentRow = {
   bucket: 'Expenses',
   vendor_name: 'Acme Engineering',
   occurred_on: '2026-09-12',
+  can_edit: true,
 }
 
 const renderCard = () =>
@@ -128,5 +130,21 @@ describe('useEditableDescription (shared by DocumentCard and ReviewQueueCard)', 
     const { result } = renderHook(() => useEditableDescription(null))
     act(() => result.current.setDescription('Typing before the caption arrives'))
     expect(result.current.description).toBe('Typing before the caption arrives')
+  })
+})
+
+describe('a refused save', () => {
+  it('shows a translated permission message, not the server\'s English sentence', async () => {
+    vi.spyOn(opsApi, 'editDocument').mockRejectedValue(new ApiError(403, 'You can only edit documents you uploaded yourself'))
+    await switchLanguage('ms')
+    renderCard()
+
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('ops.documents.edit') }))
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('common.buttons.save') }))
+
+    const message = i18n.t('ops.documents.editForbidden')
+    await waitFor(() => expect(screen.getByText(message)).toBeTruthy())
+    expect(screen.queryByText(/You can only edit/)).toBeNull()
+    vi.mocked(opsApi.editDocument).mockRestore()
   })
 })

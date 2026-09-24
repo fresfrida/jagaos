@@ -36,8 +36,14 @@ class Provenance(BaseModel, Generic[T]):
     char_end: int | None = None
 
 
+# The backend's copy of the fixed bucket taxonomy (DECISIONS #42). Validates
+# ClassifyResult and DocumentEditRequest, and app/graph/classify.py builds
+# its prompt's bucket list from this — so a bucket added here is
+# automatically offered to the model. The one other hand-kept copy is the
+# frontend's BUCKETS (web/src/features/ops/opsApi.ts); tests/test_buckets.py
+# fails if the two drift. "Contracts" added 2026-09-24 (round 11).
 BucketName = Literal[
-    "Receivables", "Expenses", "Statutory", "Operations", "Memory Lane", "Miscellaneous",
+    "Receivables", "Expenses", "Statutory", "Operations", "Contracts", "Memory Lane", "Miscellaneous",
 ]
 
 

@@ -9,6 +9,7 @@ smallest slice of PLATFORM.md's model that makes that true, with a simpler
 
 import json
 import os
+import sqlite3
 import tempfile
 from pathlib import Path
 from typing import Annotated
@@ -24,7 +25,14 @@ from langgraph.types import Command
 
 load_dotenv()
 
-from app.auth import CurrentMembership, get_current_membership, hash_token, issue_session, require_role  # noqa: E402
+from app.auth import (  # noqa: E402
+    CurrentMembership,
+    get_current_membership,
+    hash_token,
+    issue_session,
+    may_edit_document,
+    require_role,
+)
 from app.db import (  # noqa: E402
     DB_PATH,
     build_fts5_query,
@@ -614,6 +622,16 @@ def list_obligations(
         return [dict(r) for r in rows]
 
 
+def _document_row_for(membership: CurrentMembership, row: sqlite3.Row) -> dict:
+    """A document as list/search return it: the row minus the uploader's
+    user id (the client never needs it), plus `can_edit` — the caller's own
+    answer from auth.may_edit_document, so the UI does not offer an Edit
+    that the server would refuse."""
+    doc = dict(row)
+    doc["can_edit"] = may_edit_document(membership, doc.pop("uploaded_by_user_id"))
+    return doc
+
+
 @app.get("/api/documents")
 def list_documents(
     membership: Annotated[CurrentMembership, Depends(get_current_membership)],
@@ -627,12 +645,12 @@ def list_documents(
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            "description, bucket, vendor_name, occurred_on "
+            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id "
             "FROM document WHERE company_id = ? AND status != 'archived' "
             "ORDER BY received_at DESC",
             (membership.company_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [_document_row_for(membership, r) for r in rows]
 
 
 @app.get("/api/search")
@@ -672,11 +690,11 @@ def search_documents(
         # list_documents's exclusion just below it in this file.
         docs = conn.execute(
             f"SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            f"description, bucket, vendor_name, occurred_on FROM document "
+            f"description, bucket, vendor_name, occurred_on, uploaded_by_user_id FROM document "
             f"WHERE id IN ({placeholders}) AND status != 'archived'",
             ordered_ids,
         ).fetchall()
-        docs_by_id = {d["id"]: dict(d) for d in docs}
+        docs_by_id = {d["id"]: _document_row_for(membership, d) for d in docs}
     # FTS5's rank order (relevance), not the IN-clause's arbitrary order.
     return [docs_by_id[doc_id] for doc_id in ordered_ids if doc_id in docs_by_id]
 
@@ -721,11 +739,7 @@ def edit_document(
         ).fetchone()
     if doc is None or doc["company_id"] != membership.company_id:
         raise HTTPException(404, "document not found")
-    if (
-        membership.role == "user"
-        and doc["uploaded_by_user_id"] is not None
-        and doc["uploaded_by_user_id"] != membership.user_id
-    ):
+    if not may_edit_document(membership, doc["uploaded_by_user_id"]):
         raise HTTPException(403, "You can only edit documents you uploaded yourself")
 
     updates: dict[str, object] = {}
