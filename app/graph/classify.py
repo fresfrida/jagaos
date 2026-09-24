@@ -31,6 +31,7 @@ from app.graph.state import PipelineState
 from app.guards.injection import scan, untrusted_prompt
 from app.llm import MODEL_NAME, call
 from app.models import BucketName, ClassifyResult, to_tool
+from app.rules.grounding import ground_classification
 
 TOOL = to_tool(
     ClassifyResult,
@@ -78,16 +79,25 @@ UNTITLED_PHOTO_BY_LANGUAGE = {
 UNREADABLE_EXAMPLE_EN = "Image with no clear readable text"
 
 SYSTEM_TEMPLATE = """You classify Singapore SME documents into one of four lanes:
-statutory (ACRA/IRAS letters, notices, filings), invoice (bills, receipts),
-important (contracts, leases, insurance), or memory (photos, notes with no
-formal filing purpose).
+statutory (letters, notices and filings from a company registry, regulator or
+tax authority), invoice (bills, receipts), important (contracts, leases,
+insurance), or memory (photos, notes with no formal filing purpose).
+
+Ground everything in the text. Every organisation, person, place and product
+name in description, description_en, doc_type and vendor_name must appear in
+the document text below. Never say who issued a document unless the text says
+so, and never name a registry, ministry or agency because documents of that
+kind usually come from one: if the text does not name it, leave it out. A short
+plain description is better than a fuller one that names something the page
+does not.
 
 doc_type:
 - For lane=statutory: a specific free-text type naming the actual filing
-  (e.g. "ACRA Certificate of Incorporation", "Notice of Change of
-  Registered Office"). A company's own business profile or BizFile — the
-  ACRA printout stating its registered name, UEN, registered address and
-  officers — is statutory with doc_type exactly "{company_profile_doc_type}".
+  (e.g. "Certificate of Incorporation", "Notice of Change of Registered
+  Office"). Do not put an authority's name or acronym in it unless the text
+  prints it. A company's own business profile or BizFile, a printout stating
+  its registered name, UEN, registered address and officers, is statutory
+  with doc_type exactly "{company_profile_doc_type}".
 - For lane=invoice, important, or memory: pick exactly one of invoice,
   receipt, PO, quotation, delivery_order, contract, photo, other.
 
@@ -121,24 +131,35 @@ Also write:
 - description_en: the exact same description, in English, regardless of
   what language you wrote `description` in above. If {language_name} is
   already English, write the identical sentence in both fields.
-- vendor_name: the counterparty this document is from/about (vendor,
-  landlord, issuer) if identifiable from the text, e.g. "Acme Engineering
-  Technology Pte Ltd". Leave it null if you can't tell — don't guess.
-  This is a proper name copied exactly as printed — never translate or
-  transliterate it, regardless of what language `description` is in.
+- vendor_name: the party that ISSUED or SOLD this document (vendor,
+  landlord, sender), if the text names it, e.g. "Acme Engineering
+  Technology Pte Ltd". The company a document is merely ABOUT is its
+  subject, not its vendor: for a business profile, a registry printout, a
+  certificate or a notice about a company, leave vendor_name null unless the
+  text names a different issuer. Never fill it with the only company name in
+  the text. Leave it null if the text does not say. This is a proper name
+  copied exactly as printed, never translated or transliterated, regardless
+  of what language `description` is in.
 
 Call classify_document with your answer."""
 
 
 # 2026-09-24 (round 12, DECISIONS #79): the statutory doc_type for a company's
-# OWN identity document (an ACRA business profile / BizFile). doc_type is free
+# OWN identity document (a business profile / BizFile). doc_type is free
 # text in the statutory lane (DECISIONS #45), so this is a convention the
 # prompt asks for and is_company_profile_doc_type() matches leniently — the
 # model may write "ACRA BizFile business profile" and still route correctly.
+#
+# Round 15 (DECISIONS #89): this was "ACRA Business Profile". The constant is
+# put in front of the model verbatim, so a profile whose page never says "ACRA"
+# still got an ACRA-labelled doc_type and an ACRA-flavoured description — the
+# label was ours, not the page's. It names the document, not an issuer. Rows
+# already stored as "ACRA Business Profile" still match (the test is a slug
+# containing "business_profile").
 # Defined once here and imported by app/graph/extract.py (which picks the
 # extraction shape by it) and app/rules/company_profile.py (which decides who
 # may pre-fill company settings from it), so the phrase cannot drift.
-COMPANY_PROFILE_DOC_TYPE = "ACRA Business Profile"
+COMPANY_PROFILE_DOC_TYPE = "Business Profile"
 _COMPANY_PROFILE_SLUGS = ("business_profile", "bizfile")
 
 
@@ -241,6 +262,20 @@ def classify(state: PipelineState) -> PipelineState:
                 "vendor_name": None,
             }
 
+        # Round 15 (DECISIONS #89): what the model WROTE about this document may only
+        # name things the document itself names. Done here, before anything is
+        # persisted, so an invented name is never stored or full-text indexed (a
+        # check in verify.py would run after the description was already written).
+        # Deterministic; app/rules/grounding.py has the rules and why they are
+        # narrow. The raw doc_type decides "this kind of document has no vendor",
+        # so it is read before the check trims it.
+        with get_conn(DB_PATH) as conn:
+            company = conn.execute("SELECT name FROM company WHERE id = ?", (state["company_id"],)).fetchone()
+        result, grounding_notes = ground_classification(
+            result, text, company_name=company["name"] if company else None,
+            subject_only=is_company_profile_doc_type(result.get("doc_type")),
+        )
+
         with get_conn(DB_PATH) as conn:
             conn.execute(
                 "INSERT INTO trace (run_id, company_id, document_id, node, model, "
@@ -251,6 +286,14 @@ def classify(state: PipelineState) -> PipelineState:
                  llm_result.cost_usd, llm_result.latency_ms,
                  f"{result['lane']}/{result['doc_type']}", result["confidence"]),
             )
+            if grounding_notes:
+                # Visible in the trace panel, so "why does this description read so
+                # plainly" has an answer without reading the code.
+                conn.execute(
+                    "INSERT INTO trace (run_id, company_id, document_id, node, decision) "
+                    "VALUES (?, ?, ?, 'classify_grounding', ?)",
+                    (state["run_id"], state["company_id"], state["document_id"], "; ".join(grounding_notes)[:1000]),
+                )
 
     if regex_hits or result.get("injection_suspected"):
         result["injection_suspected"] = True
@@ -264,8 +307,12 @@ def classify(state: PipelineState) -> PipelineState:
     # rather than storing the same sentence under two keys.
     description_json = None
     if result.get("description") is not None:
-        by_language = {"en": result.get("description_en") or result["description"]}
-        if language != "en":
+        english = result.get("description_en") or result["description"]
+        by_language = {"en": english}
+        # Only a translation that IS different is stored: grounding may replace
+        # both languages with one English sentence (round 15), and a second key
+        # holding the same English text would claim a translation that is not one.
+        if language != "en" and result["description"] != english:
             by_language[language] = result["description"]
         description_json = json.dumps(by_language)
 

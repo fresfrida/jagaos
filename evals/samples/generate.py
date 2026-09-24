@@ -6,6 +6,8 @@ evals/demo_corpus/generate.py). Run: python evals/samples/generate.py
   acra_business_profile.pdf      — every field a profile can carry
   acra_business_profile_sparse.pdf — no financial year end and no GST line, to
                                     exercise "a real profile can omit a value"
+  business_profile_no_authority.pdf — a business profile that never names an
+                                    authority (the round 15 hallucination case)
   multipage_invoice_p1..p3.jpg   — three phone-style photos of ONE invoice: the
                                     line items run over pages 1-2 and the
                                     subtotal / tax / total appear only on page 3,
@@ -61,6 +63,27 @@ def write_pdf(name: str, lines: list[str]) -> None:
     c.save()
     print(f"wrote {OUT / name}")
 
+
+# The exact shape of a real failure (round 15, DECISIONS #89): a company's
+# business profile whose printed text is headed "BUSINESS PROFILE SUMMARY" and
+# names no issuing authority anywhere. A model asked to describe it wrote
+# "ACRA Business Profile for ...", supplying an authority from what such
+# documents usually look like. Fictional company, fictional UEN.
+PROFILE_NO_AUTHORITY_LINES = [
+    "BUSINESS PROFILE SUMMARY",
+    "",
+    "Entity Name: SUNBIRD CATERING SERVICES PTE. LTD.",
+    "Unique Entity Number: 202398765M",
+    "Entity Type: Private Company Limited by Shares",
+    "Status: Live",
+    "Date of Incorporation: 4 September 2023",
+    "Registered Office: 55 TIONG BAHRU ROAD #03-11 SINGAPORE 160055",
+    "Principal Activity: Catering services",
+    "",
+    "Officers",
+    "Director: LEE MEI LING",
+    "Director: RAJAN KUMAR",
+]
 
 INVOICE_PAGES = [
     [
@@ -120,5 +143,6 @@ def write_photo(name: str, lines: list[str], seed: int) -> None:
 if __name__ == "__main__":
     write_pdf("acra_business_profile.pdf", PROFILE_LINES)
     write_pdf("acra_business_profile_sparse.pdf", SPARSE_PROFILE_LINES)
+    write_pdf("business_profile_no_authority.pdf", PROFILE_NO_AUTHORITY_LINES)
     for number, page in enumerate(INVOICE_PAGES, start=1):
         write_photo(f"multipage_invoice_p{number}.jpg", page, seed=number)

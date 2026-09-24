@@ -323,3 +323,62 @@ def test_a_confirmed_statutory_notice_produces_an_event_through_the_real_gateway
     assert ran == ["proposed"], f"derive_events did not run and propose: {ran}"
     assert events and events[0]["kind"] == "office_move" and events[0]["source_document_id"] == document_id, events
     assert events[0]["occurred_on"] == "2026-03-01"
+
+
+# --- round 15 (DECISIONS #89): what the model writes may only name what the page names ---
+
+
+def _upload_real(pdf_path, email: str, company: str = "Grounding Live Pte Ltd") -> tuple[dict, dict]:
+    """Uploads a real file through POST /api/documents (real ingest, real gateway
+    classify + extract, verify); returns (the stored document row, its review item)."""
+    from fastapi.testclient import TestClient
+
+    from app.db import get_conn
+    from app.main import app
+
+    client = TestClient(app)
+    owner = client.post(
+        "/api/auth/dev-login", json={"email": email, "company_name": company, "fye_month": 12, "fye_day": 31},
+    ).json()
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+    resp = client.post("/api/documents", headers=headers,
+                       files={"file": (pdf_path.name, pdf_path.read_bytes(), "application/pdf")})
+    assert resp.status_code == 200, resp.text
+    document_id = resp.json()["document_id"]
+    with get_conn() as conn:
+        doc = dict(conn.execute("SELECT * FROM document WHERE id = ?", (document_id,)).fetchone())
+    item = next(i for i in client.get("/api/review", headers=headers).json() if i["document_id"] == document_id)
+    return doc, item
+
+
+def test_a_profile_that_names_no_authority_is_described_only_with_what_it_says():
+    from pathlib import Path
+
+    from app.db import parse_description
+    from app.rules.grounding import Source, ungrounded_names
+
+    sample = Path(__file__).parent.parent / "evals" / "samples" / "files" / "business_profile_no_authority.pdf"
+    doc, item = _upload_real(sample, "livegrounding@example.com")
+
+    assert "ACRA" not in doc["extracted_text"], "the fixture must not name the authority, or this proves nothing"
+    descriptions = parse_description(doc["description"])
+    assert descriptions, "a description was still produced"
+    for text in descriptions.values():
+        assert "ACRA" not in text, text
+        assert ungrounded_names(text, Source.of(doc["extracted_text"])) == [], text
+    assert "ACRA" not in (doc["doc_type"] or "")
+    assert doc["vendor_name"] is None, "the company a business profile is about is not its vendor"
+    assert item["document_vendor_name"] is None
+
+
+def test_a_correct_invoice_still_extracts_and_verifies_cleanly_with_the_grounding_check_in_place():
+    from pathlib import Path
+
+    from app.db import parse_description
+
+    invoice = Path(__file__).parent.parent / "evals" / "demo_corpus" / "files" / "05_invoice_clean.pdf"
+    doc, item = _upload_real(invoice, "liveinvoicegrounding@example.com", company="Invoice Live Pte Ltd")
+
+    assert "Straits Print" in parse_description(doc["description"])["en"], doc["description"]
+    assert doc["vendor_name"] and "Straits Print" in doc["vendor_name"]
+    assert doc["lane"] == "invoice" and item["reason"] == "clean", item["reason"]
