@@ -9,7 +9,7 @@
   },
   "home": {
     "heading": "欢迎使用 JagaOS",
-    "subheading": "为成长中的团队打造的公司记忆 — 捕捉文件、决策与截止日期，几秒内即可找回。",
+    "subheading": "为成长中的团队打造的公司记忆。捕捉文件、决策与截止日期，几秒内即可找回。",
     "signIn": "登录",
     "getStarted": "开始使用"
   },
@@ -18,13 +18,13 @@
     "nameLabel": "公司名称",
     "fyeMonthLabel": "财政年度结束月份",
     "fyeDayLabel": "财政年度结束日期",
-    "readOnlyNotice": "只有所有者可以更改这些设置 — 如需更新请联系所有者。",
+    "readOnlyNotice": "只有所有者可以更改这些设置。如需更新请联系所有者。",
     "saved": "已保存。",
     "uenLabel": "UEN",
     "gstLabel": "已注册 GST",
     "addressLabel": "注册地址",
     "prefill": {
-      "banner": "已根据 {{filename}} 预填。尚未保存 — 请核对各项，修改有误之处，然后点击保存。",
+      "banner": "已根据 {{filename}} 预填。尚未保存。请核对各项，修改有误之处，然后点击保存。",
       "loading": "正在读取商业档案…",
       "failed": "无法根据该文件预填。",
       "discard": "放弃预填"
@@ -50,7 +50,7 @@
   "auth": {
     "login": {
       "title": "登录",
-      "subtitle": "暂无需密码 — 输入邮箱即可继续。",
+      "subtitle": "暂无需密码。输入邮箱即可继续。",
       "emailLabel": "邮箱",
       "newCompanyCheckbox": "我正在设立新公司",
       "companyNameLabel": "公司名称",
@@ -84,7 +84,7 @@
     "backend": {
       "checking": "正在检查后端…",
       "reachable": "后端可连接",
-      "unreachable": "无法连接后端 — 请在 app/ 目录下运行 `uvicorn app.main:app --reload` 启动"
+      "unreachable": "无法连接后端。请在 app/ 目录下运行 `uvicorn app.main:app --reload` 启动"
     },
     "session": {
       "checking": "正在检查您的登录状态…",
@@ -101,28 +101,28 @@
     "upload": {
       "pictureQuestion": "你要上传什么？",
       "uploading": "正在上传…",
-      "viewerCantUpload": "查看者无法上传文件 — 请联系管理员或所有者。",
+      "viewerCantUpload": "查看者无法上传文件。请联系管理员或所有者。",
       "uploadReplacement": "上传替换文件",
       "rejectedPromptSuffix": "已拒绝并删除。要上传替换文件吗？",
       "toast": {
-        "clean": "已收到上传文件。未发现问题——请在下方确认。",
-        "needsReview": "已收到上传文件。已标记待审核——详见下方。",
-        "quarantined": "出于安全考虑已拦截此次上传——详见下方。",
+        "clean": "已收到上传文件。未发现问题。请在下方确认。",
+        "needsReview": "已收到上传文件。已标记待审核，详见下方。",
+        "quarantined": "出于安全考虑已拦截此次上传，详见下方。",
         "duplicate": "该文件已上传过。"
       },
       "choice": {
         "document": {
           "title": "文件",
-          "hint": "发票、收据、信函、合同 — PDF 或各页照片。"
+          "hint": "发票、收据、合同"
         },
         "photo": {
           "title": "照片",
-          "hint": "地点、物品或人物 — 非文书。仅生成说明，不提取数据。"
+          "hint": "地点、物品或人物，仅生成说明"
         }
       },
       "pages": {
         "heading": "同一份文件的 {{count}} 页",
-        "hint": "请确认顺序 — 将合并为一份文件，第 1 页在前。",
+        "hint": "请确认顺序。将合并为一份文件，第 1 页在前。",
         "pageLabel": "第 {{n}} 页",
         "moveUp": "将第 {{n}} 页上移",
         "moveDown": "将第 {{n}} 页下移",
@@ -130,13 +130,9 @@
         "addMore": "添加更多页",
         "submit": "将 {{count}} 页作为一份文件上传",
         "error": {
-          "mixed": "请选择一个 PDF 或多张照片 — PDF 无法与照片合并。",
+          "mixed": "请选择一个 PDF 或多张照片。PDF 无法与照片合并。",
           "tooMany": "一份文件最多 {{max}} 页。"
         }
-      },
-      "visibility": {
-        "label": "仅自己可见",
-        "hint": "只有你能看到 — 管理员和所有者也看不到。"
       }
     },
     "review": {
@@ -145,7 +141,7 @@
         "heading": "文件信息",
         "filenameLabel": "文件名",
         "descriptionLabel": "说明",
-        "descriptionPendingPlaceholder": "暂无说明 — 点击麦克风或手动输入",
+        "descriptionPendingPlaceholder": "暂无说明。点击麦克风或手动输入",
         "generatingCaption": "正在生成说明…",
         "bucketLabel": "分类",
         "docTypeLabel": "文件类型",
@@ -159,22 +155,22 @@
       "onlyAdminCanResolve": "只有管理员或所有者才能处理此项。",
       "deleteButton": "删除",
       "deleteOrReupload": "或重新上传文件以再次尝试审核。",
-      "onlyAdminCanDelete": "只有管理员或所有者才能删除此项 — 或重新上传文件以再次尝试审核。",
+      "onlyAdminCanDelete": "只有管理员或所有者才能删除此项，或重新上传文件以再次尝试审核。",
       "reasons": {
         "clean": "未发现问题。请确认以下提取的字段无误后再归档。",
-        "fileMissing": "文件缺失 — 请删除或重新上传此文件。",
+        "fileMissing": "文件缺失。请删除或重新上传此文件。",
         "prefix": "请确认：{{reasons}}",
         "prefixList": "请确认：",
-        "injectionSuspected": "模型标记此文件可能包含注入指令 — 请确认安全后再继续",
+        "injectionSuspected": "模型标记此文件可能包含注入指令。请确认安全后再继续",
         "injectionSuspectedBlocked": "我们无法安全处理此文件，因此未从中提取任何内容。请删除它，或上传其他文件。",
-        "extractionError": "无法可靠地提取字段 — 请在确认前自行核对",
-        "zeroAmounts": "小计、税额和总额均为零 — 这很可能是读取失败，而非真实的零金额发票",
+        "extractionError": "无法可靠地提取字段。请在确认前自行核对",
+        "zeroAmounts": "小计、税额和总额均为零。这很可能是读取失败，而非真实的零金额发票",
         "gstMismatch": "消费税 {{gst}} 与小计 {{subtotal}} 的约9%不符（预期约 {{expectedGst}}）",
         "totalMismatch": "小计 + 税额（{{subtotalPlusGst}}）与总额（{{total}}）不符",
-        "amountsNotInText": "提取的金额在文件文本中均未找到 — 请在确认前对照图片仔细核实",
+        "amountsNotInText": "提取的金额在文件文本中均未找到。请在确认前对照图片仔细核实",
         "missingRequiredFields": "缺少必填字段：{{fields}}",
-        "missingArithmeticFields": "缺少小计/税额/总额 — 无法核实算术",
-        "descriptionSignalsProblem": "描述表明此文件可能未被正确读取 — 请检查",
+        "missingArithmeticFields": "缺少小计/税额/总额，无法核实算术",
+        "descriptionSignalsProblem": "描述表明此文件可能未被正确读取。请检查",
         "couldNotReadDocument": "我们无法读取此文件。请尝试更清晰的照片或其他文件。"
       },
       "fieldLabel": {
@@ -231,7 +227,7 @@
       "delete": "删除",
       "deleteConfirmMessage": "删除 {{filename}}？此操作无法撤销。",
       "moreActions": "更多操作",
-      "traceHeading": "追踪记录 — 文件 #{{documentId}} · 总计 ${{cost}}",
+      "traceHeading": "追踪记录：文件 #{{documentId}} · 总计 ${{cost}}",
       "traceTable": {
         "node": "节点",
         "model": "模型",
@@ -253,8 +249,8 @@
       "noneOnDay": "这一天没有文件。"
     },
     "gaps": {
-      "heading": "差距分析 — 已持有 {{satisfied}} / {{total}}",
-      "empty": "暂无预期项目 — 请上传能识别为公司事件（如注册成立、公司秘书变更）的法定文件。"
+      "heading": "差距分析：已持有 {{satisfied}} / {{total}}",
+      "empty": "暂无预期项目。请上传能识别为公司事件（如注册成立、公司秘书变更）的法定文件。"
     },
     "obligations": {
       "heading": "义务 ({{count}})",
@@ -311,7 +307,10 @@
       "low": "低"
     },
     "visibility": {
-      "onlyMe": "仅自己可见"
+      "onlyYou": "仅你可见",
+      "makePrivate": "设为私密。只有你能看到。",
+      "shareWithCompany": "只有你能看到此文件。点按可再次与公司共享。",
+      "uploaderOnly": "只有上传此文件的人才能更改谁可以看到它。"
     }
   }
 }

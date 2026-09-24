@@ -336,7 +336,7 @@ export function formatDocumentLabel(
   doc: Pick<DocumentRow, 'vendor_name' | 'doc_type' | 'description'>,
   language: string,
 ): string {
-  if (doc.vendor_name) return doc.doc_type ? `${doc.vendor_name} — ${doc.doc_type}` : doc.vendor_name
+  if (doc.vendor_name) return doc.doc_type ? `${doc.vendor_name} · ${doc.doc_type}` : doc.vendor_name
   const description = descriptionFor(doc.description, language)
   if (description) return description
   if (doc.doc_type) return doc.doc_type
@@ -654,17 +654,19 @@ export function StatusPill({ status }: { status: string }) {
   )
 }
 
-/** "Only me" marker for a personal file (2026-09-24, round 13, DECISIONS
- * #85). Only the uploader is ever sent such a document, so this is a reminder
- * of why nobody else in the team can see it, not a filter. Same pill shape as
- * StatusPill so the two read as a pair on a card. */
+/** Read-only "Only you" marker for a personal file (2026-09-24, round 13,
+ * DECISIONS #85). Only the uploader is ever sent such a document, and the
+ * uploader normally gets the lock TOGGLE (VisibilityToggle) instead; this is
+ * the fallback for the rare caller who can see a personal file but may not
+ * change it (a backend older than the toggle, or an uploader since demoted to
+ * viewer). Same pill shape as StatusPill. */
 export function PersonalFileBadge({ className }: { className?: string }) {
   const { t } = useTranslation()
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-md bg-canvas px-2 py-0.5 text-[11px] font-mono uppercase tracking-wide text-ink ${className ?? ''}`}
     >
-      <Lock size={11} aria-hidden="true" /> {t('ops.visibility.onlyMe')}
+      <Lock size={11} aria-hidden="true" /> {t('ops.visibility.onlyYou')}
     </span>
   )
 }

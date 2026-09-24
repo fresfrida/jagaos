@@ -1,48 +1,34 @@
-import { CircleUserRound } from 'lucide-react'
-import { useEffect, useState } from 'react'
+/** The site header. Signed out: logo, Calendar, Tags, language, Log In, Get
+ * Started (the marketing header, unchanged). Signed in (2026-09-24, round 14,
+ * DECISIONS #88), desktop:
+ *
+ *   [logo] Calendar  Company Files            language  company  (user)  [Upload]
+ *
+ * Five things beside the logo plus one button, nothing wraps, nothing overlaps
+ * at any width from a phone to a wide desktop (measured, not assumed). Tags,
+ * Search and Company Settings live in the user menu; the solid black Upload
+ * button takes the slot Get Started had, and Get Started is gone once signed in.
+ * On a phone the inline nav and the button are hidden: BottomNav carries the
+ * destinations and its raised centre button is Upload. */
+
 import { useTranslation } from 'react-i18next'
-import { Badge } from '../components/ui/Badge'
-import { Container } from '../components/ui/Container'
 import { ButtonLink } from '../components/ui/ButtonLink'
+import { Container } from '../components/ui/Container'
 import { Logo } from '../components/ui/Logo'
 import { useAuth } from '../features/auth/AuthContext'
-import { roleAtLeast, type Role } from '../features/auth/authApi'
 import { CompanySwitcher } from '../features/auth/CompanySwitcher'
-import { useMyCompanies } from '../features/auth/MyCompaniesContext'
-import { hasSwitchableCompanies } from '../features/auth/companySwitcherModel'
-import { roleLabel } from '../features/ops/opsShared'
 import { useScrolled } from '../hooks/useScrolled'
 import { cn } from '../lib/cn'
 import { SUPPORTED_LANGUAGES, setLanguage, type LanguageCode } from '../i18n'
-import { navigate } from '../router/navigate'
 import { Link } from '../router/Link'
-import { NAV_LABEL_KEYS, OPS_NAV_ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
-
-/** Which signed-in nav items this role should see (2026-09-23, role/
- * permission work). Two real gaps this closes, both confirmed live before
- * the fix: every role saw all five OPS_NAV_ROUTES items unconditionally,
- * including Upload for a viewer (who the backend already 403s on upload —
- * app/auth.py's require_role("user") on POST /api/documents — the nav
- * item just shouldn't have been there to begin with); and there was no
- * nav entry at all for the new company-settings page. Resolves a real
- * contradiction in the original ask (docs/DECISIONS.md has the full
- * write-up): "admin sees it read-only" only makes sense if admin can
- * reach the page, so the entry is visible to owner + admin, not owner
- * alone — the fields themselves are still owner-only editable, enforced
- * both in CompanySettingsPage.tsx and (the real check) app/main.py. */
-function visibleNavRoutes(role: Role | null): readonly RouteId[] {
-  return [
-    ...OPS_NAV_ROUTES.filter((id) => id !== 'upload' || role !== 'viewer'),
-    ...(role !== null && roleAtLeast(role, 'admin') ? (['company-settings'] as const) : []),
-  ]
-}
+import { NAV_LABEL_KEYS, SIGNED_IN_NAV_ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
+import { canOfferUpload } from './headerNav'
+import { UserMenu } from './UserMenu'
 
 /** Compact language switcher — a plain <select>, not a custom dropdown
  * widget, per the "keep the control itself simple" brief. Persists via
  * setLanguage (web/src/i18n.ts, localStorage) so the choice survives a
- * reload. zh/ta/ms now hold real Chinese/Malay/Tamil translations (see
- * i18n.ts's own docstring) — DECISIONS #57 shipped them as English-value
- * stubs first, superseded once the real translations landed. */
+ * reload. */
 function LanguageSwitcher() {
   const { i18n, t } = useTranslation()
   return (
@@ -59,108 +45,39 @@ function LanguageSwitcher() {
   )
 }
 
-/** Collapses company/email/role + Log Out behind one button on phones
- * (2026-09-23, mobile-first header fix) — there is no room to spell out
- * "Try Demo Pte Ltd · owner@… · OWNER · Log Out" as flat text at 375px,
- * confirmed by a real Android Chrome screenshot where the top bar's items
- * overlapped. Desktop keeps the existing inline email + Log Out
- * (`sm:hidden` on this component's own wrapper in Header below) —
- * unchanged there, this is additive for small screens only. Same
- * click-outside-closes pattern as `DocumentCard.tsx`'s overflow menu. */
-function UserMenu() {
+function PrimaryNav({ routes, current, phoneHidden }: { routes: readonly RouteId[]; current: ResolvedRoute; phoneHidden: boolean }) {
   const { t } = useTranslation()
-  const { user, company, role, logout } = useAuth()
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    const onDocClick = () => setOpen(false)
-    document.addEventListener('click', onDocClick)
-    return () => document.removeEventListener('click', onDocClick)
-  }, [open])
-
-  if (!user) return null
-
   return (
-    <div className="relative flex items-center gap-1.5">
-      {/* Persistent role chip (2026-09-23, role/permission work) — the
-         role Badge below used to only be visible after opening the
-         dropdown; the ask wants it visible at a glance, next to the
-         avatar button, without opening anything. */}
-      {role && <Badge mono>{roleLabel(t, role)}</Badge>}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          setOpen((o) => !o)
-        }}
-        aria-label={t('header.accountMenu')}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-muted hover:border-ink/40 hover:text-ink"
-      >
-        <CircleUserRound size={19} />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-card border border-line bg-white py-2 shadow-lg"
-        >
-          <div className="border-b border-line px-3 pb-2">
-            {company && <p className="truncate text-[13px] font-medium text-ink">{company.name}</p>}
-            <p className="truncate text-[12px] text-muted">{user.email}</p>
-            {role && <Badge mono className="mt-1">{roleLabel(t, role)}</Badge>}
-          </div>
-          {/* Company switcher (2026-09-24, round 12): renders nothing for
-             anyone with fewer than two companies, so the menu is unchanged
-             for nearly everyone. The phone's only home for it — there is no
-             room in the top bar at 375px. */}
-          <CompanySwitcher className="border-b border-line px-3 py-2" />
-          {/* Company Settings (2026-09-23): the desktop inline nav already
-             gets this entry (visibleNavRoutes below); the bottom nav
-             (mobile, signed-in) has no room for a sixth fixed slot, so
-             this dropdown — already the mobile account surface — is where
-             a mobile owner/admin actually reaches the page. owner+admin
-             only, same gate as the desktop nav entry. */}
-          {role && roleAtLeast(role, 'admin') && (
-            <Link
-              href={routeHref('company-settings')}
-              onClick={() => setOpen(false)}
-              className="block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-canvas"
-            >
-              {t('header.nav.companySettings')}
-            </Link>
-          )}
-          <button
-            role="menuitem"
-            onClick={() => {
-              setOpen(false)
-              void logout().then(() => navigate(routeHref('home')))
-            }}
-            className="block w-full px-3 pt-2 text-left text-[13px] text-ink hover:bg-canvas"
-          >
-            {t('header.logOut')}
-          </button>
-        </div>
-      )}
-    </div>
+    <nav aria-label={t('header.primaryNav')} className={phoneHidden ? 'hidden sm:block' : 'block'}>
+      <ul className="flex items-center gap-0.5">
+        {routes.map((id) => {
+          const active = current === id
+          return (
+            <li key={id}>
+              <Link
+                href={routeHref(id)}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'block whitespace-nowrap rounded-md px-2.5 py-2 text-sm transition-colors sm:px-3',
+                  // Same font weight in both states: a bolder active tab is wider and nudges its neighbour.
+                  active ? 'bg-canvas text-ink' : 'text-muted hover:text-ink',
+                )}
+              >
+                {t(NAV_LABEL_KEYS[id] ?? '')}
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
   )
 }
 
 export function Header({ current }: { current: ResolvedRoute }) {
   const scrolled = useScrolled()
-  const { status, user, role, logout } = useAuth()
+  const { status, user, role } = useAuth()
   const { t } = useTranslation()
-  const navRoutes = status === 'signed-in' ? visibleNavRoutes(role) : TAB_ROUTES
-  // Someone who can switch company gets the compact account menu (the switcher
-  // lives in it) below xl instead of the inline name + Log Out, and the inline
-  // switcher itself only from xl up. The desktop header is already full at
-  // tablet widths without a switcher (a six-item nav for admin/owner overlaps
-  // the language select and Get Started between ~640 and ~900px — found
-  // 2026-09-24, not fixed here); a 180px select inline would have pushed a
-  // multi-company owner's header into overlap up to 1024px too.
-  const switchable = hasSwitchableCompanies(useMyCompanies())
+  const signedIn = status === 'signed-in' && user !== null
 
   return (
     <header
@@ -169,77 +86,52 @@ export function Header({ current }: { current: ResolvedRoute }) {
         scrolled ? 'border-line bg-white/80 backdrop-blur-md' : 'border-transparent bg-white',
       )}
     >
-      <Container className="flex h-16 items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-3 sm:gap-8">
+      <Container className="flex h-16 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-6">
           <Logo />
-          {/* Signed-in: the bottom nav (BottomNav.tsx) carries these five
-             items on phones, so the inline list only needs to render from
-             sm: up. Signed-out: just two items (Calendar, Tags), light
-             enough to keep inline at every width — no bottom nav exists
-             for the logged-out marketing pages. */}
-          <nav aria-label={t('header.primaryNav')} className={status === 'signed-in' ? 'hidden sm:block' : 'block'}>
-            <ul className="flex items-center gap-0.5">
-              {/* Signed-in nav is the real-app items in their specified
-                 order, filtered by role (visibleNavRoutes above);
-                 Calendar/Tags are the same two paths as the logged-out
-                 marketing nav (Page.tsx branches on session state to
-                 decide what renders at each). */}
-              {navRoutes.map((id) => {
-                const active = current === id
-                return (
-                  <li key={id}>
-                    <Link
-                      href={routeHref(id)}
-                      aria-current={active ? 'page' : undefined}
-                      className={cn(
-                        'rounded-md px-2.5 py-2 text-sm transition-colors sm:px-3',
-                        // Same font weight in both states: a bolder active tab is wider and nudges its neighbour.
-                        active ? 'bg-canvas text-ink' : 'text-muted hover:text-ink',
-                      )}
-                    >
-                      {t(NAV_LABEL_KEYS[id] ?? '')}
-                    </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          </nav>
+          <PrimaryNav routes={signedIn ? SIGNED_IN_NAV_ROUTES : TAB_ROUTES} current={current} phoneHidden={signedIn} />
         </div>
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <LanguageSwitcher />
-          {status === 'signed-in' && user ? (
+          {signedIn ? (
             <>
-              {/* Wide-desktop home of the company switcher (narrower screens
-                 use the account menu) — nothing renders for a one-company
-                 user. */}
-              <CompanySwitcher className="hidden max-w-[180px] xl:block" />
-              <Link
-                href={routeHref('upload')}
-                className={cn('hidden truncate text-[13px] text-muted sm:max-w-[160px]', switchable ? 'xl:block' : 'sm:block')}
-              >
-                {user.name || user.email}
-              </Link>
-              <button
-                onClick={() => void logout().then(() => navigate(routeHref('home')))}
-                className={cn('hidden rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3', switchable ? 'xl:block' : 'sm:block')}
-              >
-                {t('header.logOut')}
-              </button>
-              <span className={switchable ? 'xl:hidden' : 'sm:hidden'}>
-                <UserMenu />
-              </span>
+              {/* Inline from `lg`; narrower, the same control is in the user
+                 menu (an inline select does not fit beside the rest). Renders
+                 nothing for anyone with fewer than two companies. */}
+              <CompanySwitcher className="hidden max-w-[170px] lg:block" />
+              <UserMenu />
+              {/* The single solid button, in the slot Get Started had. Not on
+                 a phone (the bottom nav's centre button is Upload) and not for
+                 a viewer (the server refuses their upload). */}
+              {canOfferUpload(role) && (
+                // A wrapper decides visibility: ButtonLink's own classes set
+                // `display: inline-flex`, which a `hidden` on the link itself
+                // does not reliably beat.
+                <span className="hidden sm:block">
+                  <ButtonLink
+                    href={routeHref('upload')}
+                    size="sm"
+                    aria-current={current === 'upload' ? 'page' : undefined}
+                    className="whitespace-nowrap"
+                  >
+                    {t(NAV_LABEL_KEYS.upload ?? '')}
+                  </ButtonLink>
+                </span>
+              )}
             </>
           ) : (
-            <Link href={routeHref('login')} className="rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3">
-              {t('header.logIn')}
-            </Link>
+            <>
+              <Link href={routeHref('login')} className="whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3">
+                {t('header.logIn')}
+              </Link>
+              {/* Hidden on phones: it duplicates the Calendar tab and the row would not fit. */}
+              <span className="hidden sm:block">
+                <ButtonLink href={routeHref('calendar')} size="sm" className="whitespace-nowrap">
+                  {t('header.getStarted')}
+                </ButtonLink>
+              </span>
+            </>
           )}
-          {/* Hidden on phones: it duplicates the Calendar tab and the row would not fit. */}
-          <span className="hidden sm:block">
-            <ButtonLink href={routeHref('calendar')} size="sm">
-              {t('header.getStarted')}
-            </ButtonLink>
-          </span>
         </div>
       </Container>
     </header>

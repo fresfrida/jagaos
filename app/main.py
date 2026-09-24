@@ -31,6 +31,7 @@ from app.auth import (  # noqa: E402
     hash_token,
     issue_session,
     list_memberships,
+    may_change_visibility,
     may_edit_document,
     may_resolve_review_item,
     may_see_document,
@@ -187,7 +188,7 @@ def dev_login(body: DevLoginRequest) -> AuthResponse:
             ).fetchone()
             if membership is None:
                 raise HTTPException(
-                    400, "No company membership yet — provide company_name to create one"
+                    400, "No company membership yet. Provide company_name to create one."
                 )
             company_id, role = membership["company_id"], membership["role"]
 
@@ -554,6 +555,9 @@ async def upload_document(
     # 2026-09-24 (round 13, DECISIONS #85): "company" (default — every existing
     # caller) or "only_me", a personal file only the uploader can ever see.
     # A Literal, so anything else is a 422, not a silently company-visible file.
+    # Round 14 (DECISIONS #86): the web UI no longer sends it — a file is made
+    # personal afterwards with the lock toggle (PATCH visibility) — but the
+    # parameter stays for any other client.
     visibility: Visibility = "company",
 ) -> dict:
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
@@ -601,7 +605,7 @@ async def upload_document_pages(
     known gap, docs/KANBAN.md); the web client downscales each photo before
     sending."""
     if len(files) < 2:
-        raise HTTPException(400, "Send at least 2 pages — a single file is an ordinary upload")
+        raise HTTPException(400, "Send at least 2 pages. A single file is an ordinary upload.")
     if len(files) > MAX_PDF_OCR_PAGES:
         raise HTTPException(400, f"At most {MAX_PDF_OCR_PAGES} pages per document, got {len(files)}")
 
@@ -740,7 +744,7 @@ def resolve_review(
         raise HTTPException(
             410,
             "This review session has expired (the backend restarted since this "
-            "document was uploaded — the in-memory checkpoint is gone). "
+            "document was uploaded, so the in-memory checkpoint is gone). "
             "Re-upload the document to get a fresh, resolvable review item.",
         ) from None
     with get_conn(DB_PATH) as conn:
@@ -807,6 +811,7 @@ def list_review_items(
             item["can_resolve"] = may_resolve_review_item(
                 membership, uploaded_by_user_id=uploader, visibility=item["document_visibility"],
             )
+            item["can_change_visibility"] = may_change_visibility(membership, uploaded_by_user_id=uploader)
             visible.append(item)
         return visible
 
@@ -843,7 +848,11 @@ def _document_row_for(membership: CurrentMembership, row: sqlite3.Row) -> dict:
     that the server would refuse — and `can_prefill_company`, likewise from
     rules.company_profile.may_prefill_company_from."""
     doc = dict(row)
-    doc["can_edit"] = may_edit_document(membership, doc.pop("uploaded_by_user_id"))
+    uploader = doc.pop("uploaded_by_user_id")
+    doc["can_edit"] = may_edit_document(membership, uploader)
+    # Round 14 (DECISIONS #86): whether the lock toggle is offered — the
+    # uploader only, so it is NOT the same answer as can_edit.
+    doc["can_change_visibility"] = may_change_visibility(membership, uploaded_by_user_id=uploader)
     # 2026-09-24 (round 12): same idea for the ACRA "pre-fill company
     # settings" action — the caller's own answer from one rule function.
     doc["can_prefill_company"] = may_prefill_company_from(membership.role, doc["doc_type"], doc["status"])
@@ -974,6 +983,13 @@ def edit_document(
     # (round 13) must not be confirmed to exist by a "you can't edit this".
     if _hidden_or_missing(membership, doc):
         raise HTTPException(404, "document not found")
+    # Round 14 (DECISIONS #86): who a file is visible to is the uploader's call
+    # alone, narrower than "may edit". Checked for the whole request before
+    # anything is written, so a refused change never half-applies.
+    if body.visibility is not None and not may_change_visibility(
+        membership, uploaded_by_user_id=doc["uploaded_by_user_id"],
+    ):
+        raise HTTPException(403, "Only the person who uploaded a file can change who can see it")
     if not may_edit_document(membership, doc["uploaded_by_user_id"]):
         raise HTTPException(403, "You can only edit documents you uploaded yourself")
 
@@ -1016,6 +1032,8 @@ def edit_document(
         updates["lane"] = "memory"
         updates["doc_type"] = "photo"
         updates["bucket"] = "Memory Lane"
+    if body.visibility is not None:
+        updates["visibility"] = body.visibility
 
     if updates:
         # Column names come from a fixed set of hardcoded keys above,

@@ -37,10 +37,15 @@ function AppContent({ route }: { route: ResolvedRoute }) {
       </a>
       <Header current={route} />
       {/* min-h keeps the footer below the fold while a page mounts, so it never jumps.
-         pb-24 (signed-in, phones only) keeps the fixed BottomNav below from
-         covering the last item on the page — sm:pb-0 since the bar itself
-         is sm:hidden. */}
-      <main id="main" tabIndex={-1} className={cn('min-h-[calc(100svh-65px)] outline-none', showBottomNav && 'pb-24 sm:pb-0')}>
+         The bottom padding (signed-in, phones only) keeps the fixed BottomNav
+         below from covering the last item on the page — sm:pb-0 since the bar
+         itself is sm:hidden. Round 14: 6.5rem (was 6rem) plus the same
+         env(safe-area-inset-bottom) the bar adds to ITS height, so the two
+         cannot drift apart. Measured beforehand, not assumed: at 375x812 the
+         last of 19 review cards already cleared the raised Upload button by 47px,
+         so this is margin for a larger system font or an inset, not a fix for a
+         defect that reproduced. */}
+      <main id="main" tabIndex={-1} className={cn('min-h-[calc(100svh-65px)] outline-none', showBottomNav && 'pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-0')}>
         {/* Swap instantly and fade the new page in (opacity only). An exit animation would leave a gap and move the layout. */}
         {/* Keyed on the active company too (2026-09-24, round 12, DECISIONS
            #77): switching company remounts the page, so every hook refetches

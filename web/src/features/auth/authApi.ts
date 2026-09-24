@@ -35,11 +35,6 @@ export interface Company {
   uen?: string | null
   gst_registered?: boolean
   registered_address?: string | null
-  // 2026-09-24 (round 13, DECISIONS #85): true from a backend that keeps a
-  // document private when asked. Absent from an older one, which would ignore
-  // the request and upload the file company-visible — so the "Only me" choice
-  // is offered only when this is true (DECISIONS #82).
-  private_documents?: boolean
 }
 
 /** One row of GET /api/auth/companies: a company the caller belongs to and

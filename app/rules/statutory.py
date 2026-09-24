@@ -51,7 +51,7 @@ RULES: list[ObligationRule] = [
         kind="annual_return",
         label="File Annual Return",
         citation=(
-            "Companies Act s197 — Annual Return due within 7 months of FYE. "
+            "Companies Act s197: Annual Return due within 7 months of FYE. "
             "Dormancy does not exempt this; AGM/FS exemption is separate "
             "(s175A dispensation, s201A audit exemption)."
         ),
@@ -63,7 +63,7 @@ RULES: list[ObligationRule] = [
         kind="corporate_tax_filing",
         label="File Form C-S/C",
         citation=(
-            "Income Tax Act — Form C-S/C due unless IRAS has granted a "
+            "Income Tax Act: Form C-S/C due unless IRAS has granted a "
             "filing waiver for the dormant company."
         ),
         lead_days=60,

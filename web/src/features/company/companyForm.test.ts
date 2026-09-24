@@ -73,7 +73,7 @@ describe('toUpdate', () => {
 })
 
 describe('backendHasIdentityFields', () => {
-  it('is true once the backend sends uen at all — even as null', () => {
+  it('is true once the backend sends uen at all, even as null', () => {
     expect(backendHasIdentityFields(company)).toBe(true)
     expect(backendHasIdentityFields({ ...company, uen: '202412345K' })).toBe(true)
   })

@@ -1,27 +1,33 @@
-/** The DOCUMENT / PHOTO fork on the Upload page (2026-09-24, round 12,
- * DECISIONS #78) — two equal, loud buttons that ARE the file pickers.
+/** The Document / Photo fork on the Upload page — two equal choices that ARE
+ * the file pickers (2026-09-24, round 12, DECISIONS #81; restyled in round 14,
+ * DECISIONS #88).
  *
- * It replaces a small two-segment toggle that defaulted to "Document" and sat
- * above a dropzone, easy to miss and easy to leave on the wrong side for the
- * next file. Here there is no default and no separate setting: tapping the
- * button that describes what you have both makes the choice and opens the
- * picker for it, so the choice cannot be skipped or left stale. Both buttons
- * share every class, so neither reads as the unstated default.
+ * It replaced a small two-segment toggle that defaulted to "Document" above a
+ * dropzone, easy to miss and easy to leave on the wrong side for the next
+ * file. Here there is no default and no separate setting: tapping the row that
+ * describes what you have both makes the choice and opens the picker for it, so
+ * the choice cannot be skipped or left stale. Both rows share every class, so
+ * neither reads as the unstated default.
+ *
+ * Round 14: two full-width rows separated by thin rules instead of two bordered
+ * all-caps cards — icon on the left, a normal-case title, one short line under
+ * it, a quiet chevron on the right to say "this opens something". Still equal
+ * in weight; the change is elegance, not emphasis.
  *
  * Presentational: it reports the files chosen and knows nothing about
- * uploading. DOCUMENT accepts several files (photos of one document's pages);
- * PHOTO accepts one image. */
+ * uploading. Document accepts several files (photos of one document's pages);
+ * Photo accepts one image. */
 
-import { Camera, FileText } from 'lucide-react'
+import { Camera, ChevronRight, FileText } from 'lucide-react'
 import { useRef, type ChangeEvent, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '../../lib/cn'
 
 const CHOICE_CLASS = cn(
-  'group flex min-h-[9.5rem] flex-col items-center justify-start gap-2 rounded-card border-2 border-ink bg-white px-3 pb-4 pt-5 text-center',
-  'transition-colors hover:bg-ink hover:text-white focus-visible:bg-ink focus-visible:text-white',
+  'group flex w-full items-center gap-4 px-1 py-5 text-left',
+  'transition-colors hover:bg-canvas focus-visible:bg-canvas',
   'outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2',
-  'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-ink',
+  'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent',
 )
 
 interface ChoiceProps {
@@ -35,9 +41,12 @@ interface ChoiceProps {
 function Choice({ icon: Icon, title, hint, disabled, onClick }: ChoiceProps) {
   return (
     <button type="button" disabled={disabled} onClick={onClick} className={CHOICE_CLASS}>
-      <Icon size={30} aria-hidden="true" />
-      <span className="text-base font-semibold uppercase tracking-[0.1em]">{title}</span>
-      <span className="text-[12px] leading-snug text-muted group-hover:text-white/80 group-focus-visible:text-white/80">{hint}</span>
+      <Icon size={28} strokeWidth={1.75} className="shrink-0 text-ink" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-base font-semibold text-ink">{title}</span>
+        <span className="mt-0.5 block text-[13px] leading-snug text-muted">{hint}</span>
+      </span>
+      <ChevronRight size={18} className="shrink-0 text-muted group-hover:text-ink" aria-hidden="true" />
     </button>
   )
 }
@@ -66,10 +75,10 @@ export function UploadChoice({
 
   return (
     <div ref={ref} role="group" aria-labelledby="upload-choice-heading">
-      <h2 id="upload-choice-heading" className="mb-3 text-[15px] font-medium text-ink">
+      <h2 id="upload-choice-heading" className="mb-1 text-[15px] font-medium text-ink">
         {t('ops.upload.pictureQuestion')}
       </h2>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="divide-y divide-line border-y border-line">
         <Choice
           icon={FileText}
           title={t('ops.upload.choice.document.title')}

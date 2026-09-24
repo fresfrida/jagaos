@@ -288,6 +288,13 @@ _MIGRATIONS = [
     # may_see_document). Anything other than 'company' is treated as private,
     # so a stray value fails closed.
     "ALTER TABLE document ADD COLUMN visibility TEXT NOT NULL DEFAULT 'company'",
+    # 2026-09-24 (round 14, DECISIONS #87): em dashes are banned from UI copy.
+    # obligation.citation is rule-derived text (app/rules/statutory.py) that the
+    # Calendar shows; rows written before the rule text was reworded keep the
+    # old punctuation. Idempotent: matches nothing once fixed, and only touches
+    # the exact two phrases the rules ever produced, never anything a person typed.
+    "UPDATE obligation SET citation = REPLACE(citation, 'Companies Act s197 \u2014 ', 'Companies Act s197: ') WHERE citation LIKE 'Companies Act s197 \u2014 %'",
+    "UPDATE obligation SET citation = REPLACE(citation, 'Income Tax Act \u2014 ', 'Income Tax Act: ') WHERE citation LIKE 'Income Tax Act \u2014 %'",
 ]
 
 

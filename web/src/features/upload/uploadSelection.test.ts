@@ -11,7 +11,7 @@ describe('interpretDocumentSelection', () => {
     expect(interpretDocumentSelection([])).toEqual({ kind: 'none' })
   })
 
-  it('treats one file — a PDF or a photo — as an ordinary upload', () => {
+  it('treats one file, a PDF or a photo, as an ordinary upload', () => {
     const file = pdf('a.pdf')
     expect(interpretDocumentSelection([file])).toEqual({ kind: 'single', file })
     const image = photo('a.jpg')

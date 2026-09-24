@@ -9,7 +9,7 @@
   },
   "home": {
     "heading": "Welcome to JagaOS",
-    "subheading": "Company memory for growing teams — capture documents, decisions and deadlines, then find them again in seconds.",
+    "subheading": "Company memory for growing teams. Capture documents, decisions and deadlines, then find them again in seconds.",
     "signIn": "Sign in",
     "getStarted": "Get started"
   },
@@ -35,13 +35,13 @@
     "nameLabel": "Company name",
     "fyeMonthLabel": "FYE month",
     "fyeDayLabel": "FYE day",
-    "readOnlyNotice": "Only the owner can change these — ask them if something needs updating.",
+    "readOnlyNotice": "Only the owner can change these. Ask them if something needs updating.",
     "saved": "Saved.",
     "uenLabel": "UEN",
     "gstLabel": "GST registered",
     "addressLabel": "Registered address",
     "prefill": {
-      "banner": "Pre-filled from {{filename}}. Nothing is saved yet — review the values, change anything that's wrong, then Save.",
+      "banner": "Pre-filled from {{filename}}. Nothing is saved yet. Review the values, change anything that's wrong, then Save.",
       "loading": "Reading the business profile…",
       "failed": "Couldn't pre-fill from that document.",
       "discard": "Discard pre-fill"
@@ -50,7 +50,7 @@
   "auth": {
     "login": {
       "title": "Log in",
-      "subtitle": "No password yet — enter your email to continue.",
+      "subtitle": "No password yet. Enter your email to continue.",
       "emailLabel": "Email",
       "newCompanyCheckbox": "I'm setting up a new company",
       "companyNameLabel": "Company name",
@@ -84,7 +84,7 @@
     "backend": {
       "checking": "Checking backend…",
       "reachable": "Backend reachable",
-      "unreachable": "Backend unreachable — start it with `uvicorn app.main:app --reload` in app/"
+      "unreachable": "Backend unreachable. Start it with `uvicorn app.main:app --reload` in app/"
     },
     "session": {
       "checking": "Checking your session…",
@@ -101,28 +101,28 @@
     "upload": {
       "pictureQuestion": "What are you uploading?",
       "uploading": "Uploading…",
-      "viewerCantUpload": "Viewers can't upload documents — ask an admin or owner.",
+      "viewerCantUpload": "Viewers can't upload documents. Ask an admin or owner.",
       "uploadReplacement": "Upload a replacement",
       "rejectedPromptSuffix": "rejected and archived. Upload a replacement?",
       "toast": {
-        "clean": "Upload received. No issues found — confirm below.",
-        "needsReview": "Upload received. Flagged for review — see below.",
-        "quarantined": "Upload blocked for safety review — see below.",
+        "clean": "Upload received. No issues found. Confirm below.",
+        "needsReview": "Upload received. Flagged for review, see below.",
+        "quarantined": "Upload blocked for safety review, see below.",
         "duplicate": "This file was already uploaded."
       },
       "choice": {
         "document": {
           "title": "Document",
-          "hint": "Invoices, receipts, letters, contracts — PDF or photos of the pages."
+          "hint": "Invoices, receipts, contracts"
         },
         "photo": {
           "title": "Photo",
-          "hint": "A place, thing or people — not paperwork. Caption only, no data extraction."
+          "hint": "A place, thing, or people, caption only"
         }
       },
       "pages": {
         "heading": "{{count}} pages in one document",
-        "hint": "Check the order — they'll be merged into a single document, page 1 first.",
+        "hint": "Check the order. They'll be merged into a single document, page 1 first.",
         "pageLabel": "Page {{n}}",
         "moveUp": "Move page {{n}} up",
         "moveDown": "Move page {{n}} down",
@@ -130,13 +130,9 @@
         "addMore": "Add more pages",
         "submit": "Upload {{count}} pages as one document",
         "error": {
-          "mixed": "Choose either one PDF or several photos — a PDF can't be combined with photos.",
+          "mixed": "Choose either one PDF or several photos. A PDF can't be combined with photos.",
           "tooMany": "A document can have at most {{max}} pages."
         }
-      },
-      "visibility": {
-        "label": "Only me",
-        "hint": "Only you can see it — not admins, not the owner."
       }
     },
     "review": {
@@ -145,7 +141,7 @@
         "heading": "Document",
         "filenameLabel": "Filename",
         "descriptionLabel": "Description",
-        "descriptionPendingPlaceholder": "No caption yet — tap the mic or type one",
+        "descriptionPendingPlaceholder": "No caption yet. Tap the mic or type one",
         "generatingCaption": "Generating caption…",
         "bucketLabel": "Bucket",
         "docTypeLabel": "Doc type",
@@ -155,26 +151,26 @@
       "expiredMessage": "This document can no longer be reviewed automatically.",
       "deleteButton": "Delete",
       "deleteOrReupload": "or re-upload the document to try reviewing it again.",
-      "onlyAdminCanDelete": "Only an admin or owner can delete this — or re-upload the document to try reviewing it again.",
+      "onlyAdminCanDelete": "Only an admin or owner can delete this, or re-upload the document to try reviewing it again.",
       "acceptAsIs": "Accept as-is",
       "acceptWithCorrections": "Accept with corrections",
       "reject": "Reject",
       "onlyAdminCanResolve": "Only an admin or owner can resolve this.",
       "reasons": {
         "clean": "No issues found. Please confirm the extracted fields below are correct before filing.",
-        "fileMissing": "File missing — delete or re-upload this document.",
+        "fileMissing": "File missing. Delete or re-upload this document.",
         "prefix": "Please confirm: {{reasons}}",
         "prefixList": "Please confirm:",
-        "injectionSuspected": "the model flagged this document as possibly containing injected instructions — please confirm it's safe before it proceeds",
+        "injectionSuspected": "the model flagged this document as possibly containing injected instructions. Please confirm it's safe before it proceeds",
         "injectionSuspectedBlocked": "We couldn't process this file safely, so nothing was extracted from it. Delete it, or upload a different copy.",
-        "extractionError": "the fields couldn't be extracted reliably — please check them yourself before confirming",
-        "zeroAmounts": "subtotal, tax and total are all zero — this looks like a failed read, not a real zero-value invoice",
+        "extractionError": "the fields couldn't be extracted reliably. Please check them yourself before confirming",
+        "zeroAmounts": "subtotal, tax and total are all zero. This looks like a failed read, not a real zero-value invoice",
         "gstMismatch": "GST {{gst}} is not ~9% of subtotal {{subtotal}} (expected ~{{expectedGst}})",
         "totalMismatch": "subtotal + tax ({{subtotalPlusGst}}) does not equal total ({{total}})",
-        "amountsNotInText": "the extracted amounts weren't found anywhere in the document's text — please double-check these against the image before confirming",
+        "amountsNotInText": "the extracted amounts weren't found anywhere in the document's text. Please double-check these against the image before confirming",
         "missingRequiredFields": "missing required field(s): {{fields}}",
-        "missingArithmeticFields": "missing subtotal/tax/total — cannot verify arithmetic",
-        "descriptionSignalsProblem": "the description suggests this document may not have been read correctly — please check it",
+        "missingArithmeticFields": "missing subtotal/tax/total, cannot verify arithmetic",
+        "descriptionSignalsProblem": "the description suggests this document may not have been read correctly. Please check it",
         "couldNotReadDocument": "We couldn't read this file. Try a clearer photo or a different file."
       },
       "fieldLabel": {
@@ -232,7 +228,7 @@
       "delete": "Delete",
       "deleteConfirmMessage": "Delete {{filename}}? This can't be undone.",
       "moreActions": "More actions",
-      "traceHeading": "Trace — document #{{documentId}} · total ${{cost}}",
+      "traceHeading": "Trace: document #{{documentId}} · total ${{cost}}",
       "traceTable": {
         "node": "Node",
         "model": "Model",
@@ -253,8 +249,8 @@
       "noneOnDay": "No documents on this day."
     },
     "gaps": {
-      "heading": "Gap analysis — {{satisfied}} of {{total}} held",
-      "empty": "No expectations yet — upload a statutory document that reads as a company event (incorporation, corp sec change)."
+      "heading": "Gap analysis: {{satisfied}} of {{total}} held",
+      "empty": "No expectations yet. Upload a statutory document that reads as a company event (incorporation, corp sec change)."
     },
     "obligations": {
       "heading": "Obligations ({{count}})",
@@ -311,7 +307,10 @@
       "low": "low"
     },
     "visibility": {
-      "onlyMe": "Only me"
+      "onlyYou": "Only you",
+      "makePrivate": "Make private. Only you will be able to see it.",
+      "shareWithCompany": "Only you can see this file. Tap to share it with the company again.",
+      "uploaderOnly": "Only the person who uploaded this file can change who can see it."
     }
   }
 }

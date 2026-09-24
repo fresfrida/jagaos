@@ -8,10 +8,11 @@
  * per icon+label, matching the reference "raised center action" pattern
  * the task pointed at — Upload is the single most common action, so it
  * gets the visually prominent center "+"-style button while the other
- * four sit two-and-two around it (desktop's OPS_NAV_ROUTES order is
- * Calendar/Tags/Search/Company-Files/Upload; this only ever pulls Upload
- * out of its slot into the middle, the other four keep their relative
- * order). Rendered only when signed in — App.tsx also adds bottom padding
+ * four sit two-and-two around it (the desktop nav's order was
+ * Calendar/Tags/Search/Company-Files/Upload at the time; this only ever
+ * pulls Upload out of its slot into the middle, the other four keep their
+ * relative order. The desktop header has since shrunk to Calendar and
+ * Company Files — round 14, DECISIONS #88 — and this bar is unchanged). Rendered only when signed in — App.tsx also adds bottom padding
  * to <main> in that case so this bar never covers the last item.
  *
  * **Role-aware since 2026-09-23** (role/permission work): a viewer never

@@ -139,6 +139,12 @@ export interface DocumentRow {
   // its uploader ever receives such a row, so this is for the badge, not a
   // filter. Absent from an older backend, which has no personal files.
   visibility?: Visibility
+  // 2026-09-24 (round 14, DECISIONS #86): the server's answer for THIS caller
+  // (auth.may_change_visibility) — true only for the uploader, NOT the same as
+  // can_edit (an admin may edit but may not decide who sees someone's file).
+  // Optional: an older backend sends none and the lock toggle is then not
+  // offered, which is what the app did before it existed.
+  can_change_visibility?: boolean
 }
 
 export interface Expectation {
@@ -179,6 +185,7 @@ export interface ReviewItem {
   // personal file. Both optional: an older backend sends neither, and the card
   // then falls back to the role check it always used.
   document_visibility?: Visibility
+  can_change_visibility?: boolean
   can_resolve?: boolean
   thread_id: string
   // reason: a short debug/trace string (codes joined, e.g. "gst_mismatch"),
@@ -227,13 +234,14 @@ export const opsApi = {
   // language (2026-09-24, item 5): the uploader's currently-selected UI
   // language (i18n.language) — read by classify.py to generate
   // description directly in that language instead of always English.
-  // visibility (2026-09-24, round 13): 'only_me' makes it a personal file.
-  uploadDocument: (file: File, isPicture: boolean, language: string, visibility: Visibility = 'company') => {
+  // Who a file is visible to is not chosen here (round 14, DECISIONS #86): every
+  // upload is a company file, and its uploader flips it afterwards with the lock
+  // toggle (editDocument's `visibility`). The backend still accepts a
+  // `visibility` query parameter for any other client.
+  uploadDocument: (file: File, isPicture: boolean, language: string) => {
     const form = new FormData()
     form.append('file', file)
-    const params = new URLSearchParams({
-      source_channel: 'web', is_picture: String(isPicture), language, visibility,
-    })
+    const params = new URLSearchParams({ source_channel: 'web', is_picture: String(isPicture), language })
     return request<UploadResult>(`/api/documents?${params}`, { method: 'POST', body: form })
   },
 
@@ -241,13 +249,10 @@ export const opsApi = {
   // DECISIONS #78): the backend merges them into one PDF and runs it through
   // the same pipeline as any upload — one document, one review item. The
   // order of `pages` IS the page order. app/main.py::upload_document_pages.
-  uploadPages: (pages: File[], language: string, visibility: Visibility = 'company') => {
+  uploadPages: (pages: File[], language: string) => {
     const form = new FormData()
     for (const page of pages) form.append('files', page)
-    return request<UploadResult>(
-      `/api/documents/pages?${new URLSearchParams({ language, visibility })}`,
-      { method: 'POST', body: form },
-    )
+    return request<UploadResult>(`/api/documents/pages?${new URLSearchParams({ language })}`, { method: 'POST', body: form })
   },
 
   listDocuments: () => request<DocumentRow[]>('/api/documents'),
@@ -308,6 +313,9 @@ export const opsApi = {
       // document as a picture (lane/doc_type/bucket set deterministically
       // server-side, app/main.py::edit_document); there's no reverse.
       is_picture?: boolean
+      // visibility (2026-09-24, round 14): the lock toggle. Only the uploader
+      // may send it (403 otherwise, refused whole).
+      visibility?: Visibility
     },
   ) =>
     request<{ status: string }>(`/api/documents/${documentId}`, {

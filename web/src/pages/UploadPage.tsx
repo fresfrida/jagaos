@@ -25,14 +25,13 @@ import { type UploadResult } from '../features/ops/opsApi'
 import { useOpsData } from '../features/ops/useOpsData'
 import { PageStager } from '../features/upload/PageStager'
 import { UploadChoice } from '../features/upload/UploadChoice'
-import { UploadVisibility } from '../features/upload/UploadVisibility'
 import { MAX_PAGES } from '../features/upload/uploadSelection'
 import { useUploadFlow } from '../features/upload/useUploadFlow'
 import { onTriggerUploadChoice } from '../lib/uploadTrigger'
 
 function UploadReviewContent() {
   const { t, i18n } = useTranslation()
-  const { role, company } = useAuth()
+  const { role } = useAuth()
   const { documents, reviewItems, apiUp, error, setError, refresh } = useOpsData()
 
   const [justRejectedFilename, setJustRejectedFilename] = useState<string | null>(null)
@@ -41,11 +40,6 @@ function UploadReviewContent() {
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
   const canResolve = role !== null && roleAtLeast(role, 'admin')
-  // "Only me" is offered only when the backend says it keeps a file private
-  // (company.private_documents). An older one ignores the request and would
-  // upload the file company-visible — a control that lies about privacy is
-  // worse than none (DECISIONS #82, #85).
-  const canChoosePrivate = company?.private_documents === true
 
   // 2026-09-24 (item 1): no document auto-files at upload time anymore
   // (DECISIONS #40 — every upload needs a human confirm, even a clean one),
@@ -105,13 +99,7 @@ function UploadReviewContent() {
                 onDocumentFiles={flow.chooseDocumentFiles}
                 onPhotoFile={flow.uploadPhoto}
               />
-              {canChoosePrivate && (
-                <UploadVisibility
-                  onlyMe={flow.visibility === 'only_me'}
-                  disabled={flow.busy}
-                  onChange={(onlyMe) => flow.setVisibility(onlyMe ? 'only_me' : 'company')}
-                />
-              )}
+
               {flow.busy && !flow.staged && (
                 <p className="mt-3 text-[13px] text-muted" role="status">{t('ops.upload.uploading')}</p>
               )}
@@ -181,6 +169,7 @@ function UploadReviewContent() {
                   onResolved={() => void refresh()}
                   onRejected={setJustRejectedFilename}
                   onPoll={() => void refresh()}
+                  onVisibilityChanged={() => void refresh()}
                 />
               ))}
             </div>

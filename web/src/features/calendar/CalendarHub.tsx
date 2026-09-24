@@ -20,7 +20,7 @@ import { DatesView } from './DatesView'
 
 export function CalendarHub() {
   const { t, i18n } = useTranslation()
-  const { documents, expectations, obligations, apiUp, error } = useOpsData()
+  const { documents, expectations, obligations, apiUp, error, refresh } = useOpsData()
 
   return (
     <div>
@@ -35,7 +35,7 @@ export function CalendarHub() {
       <div className="space-y-10">
         <section>
           <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">{t('ops.tabs.dates')}</h2>
-          <DatesView documents={documents} />
+          <DatesView documents={documents} onChanged={() => void refresh()} />
         </section>
 
         <section>

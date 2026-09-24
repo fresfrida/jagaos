@@ -40,7 +40,7 @@ export const STACK_ROWS: StackRow[] = [
   // check became locality-aware (Singapore's 9% rate no longer applies
   // unconditionally to every invoice) — "tax arithmetic" describes what
   // it actually does now, not one specific country's rate.
-  { name: 'Deterministic verification', description: 'Confidence floor and tax arithmetic checks — code, not a model call — flag anything uncertain for human review.', responsibility: 'Validate', highlight: true },
+  { name: 'Deterministic verification', description: 'Confidence floor and tax arithmetic checks (code, not a model call) flag anything uncertain for human review.', responsibility: 'Validate', highlight: true },
 ]
 
 export const FINAL_CTA = {

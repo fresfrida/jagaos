@@ -6,7 +6,7 @@
 
 import { useCallback, useState } from 'react'
 import { normalizeImageForUpload } from '../../lib/imageNormalize'
-import { opsApi, type UploadResult, type Visibility } from '../ops/opsApi'
+import { opsApi, type UploadResult } from '../ops/opsApi'
 import {
   appendPages, interpretDocumentSelection, movePage, removePage, type SelectionError,
 } from './uploadSelection'
@@ -23,11 +23,6 @@ interface Deps {
 
 export function useUploadFlow({ language, refresh, onOutcome, onError }: Deps) {
   const [busy, setBusy] = useState(false)
-  // 2026-09-24 (round 13, DECISIONS #85): who the NEXT upload is for. Back to
-  // 'company' after every successful upload — the same call the old picture
-  // toggle made: a personal choice left switched on would quietly hide the
-  // next, unrelated file from the team.
-  const [visibility, setVisibility] = useState<Visibility>('company')
   const [staged, setStaged] = useState<File[] | null>(null)
   const [selectionError, setSelectionError] = useState<SelectionError | null>(null)
 
@@ -37,7 +32,6 @@ export function useUploadFlow({ language, refresh, onOutcome, onError }: Deps) {
       onError(null)
       try {
         const result = await send()
-        setVisibility('company')
         await refresh()
         onOutcome(result)
         return true
@@ -53,8 +47,8 @@ export function useUploadFlow({ language, refresh, onOutcome, onError }: Deps) {
 
   const uploadOne = useCallback(
     (file: File, isPicture: boolean) =>
-      run(async () => opsApi.uploadDocument(await normalizeImageForUpload(file), isPicture, language, visibility)),
-    [language, run, visibility],
+      run(async () => opsApi.uploadDocument(await normalizeImageForUpload(file), isPicture, language)),
+    [language, run],
   )
 
   /** PHOTO: exactly one image, marked as a picture. */
@@ -95,13 +89,13 @@ export function useUploadFlow({ language, refresh, onOutcome, onError }: Deps) {
         ? await uploadOne(only, false) // took pages away until one was left: an ordinary upload
         : await run(async () => {
             const pages = await Promise.all(staged.map(normalizeImageForUpload))
-            return opsApi.uploadPages(pages, language, visibility)
+            return opsApi.uploadPages(pages, language)
           })
     if (done) cancelStaging()
-  }, [cancelStaging, language, run, staged, uploadOne, visibility])
+  }, [cancelStaging, language, run, staged, uploadOne])
 
   return {
-    busy, staged, selectionError, visibility, setVisibility,
+    busy, staged, selectionError,
     uploadPhoto, chooseDocumentFiles, addPages, move, remove, cancelStaging, submitPages,
   }
 }

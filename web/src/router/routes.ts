@@ -61,12 +61,20 @@ export const ROUTES: Record<RouteId, RouteConfig> = {
 /** The logged-out header's nav tabs, in order. */
 export const TAB_ROUTES = ['calendar', 'tags'] as const
 
-/** The logged-in header's nav, in order (2026-09-23, header/nav
- * restructure): Calendar and Tags are the same two paths as the
- * logged-out nav above — same URL, different content once signed in
- * (Page.tsx branches on session state) — plus the three routes promoted
- * from OpsConsole's remaining tabs. */
-export const OPS_NAV_ROUTES = ['calendar', 'tags', 'search', 'company-files', 'upload'] as const
+/** The signed-in DESKTOP header's inline nav (round 14, DECISIONS #88): only
+ * the two pages people open all day. It used to be Calendar, Tags, Search,
+ * Company Files and Upload (plus Company Settings for admin/owner) — six items
+ * that overlapped the language select and the call-to-action between ~640 and
+ * ~900px. Calendar and Company Files are the same paths as before (Calendar's
+ * content differs by session — DECISIONS #59); the rest moved into the account
+ * menu (ACCOUNT_MENU_ROUTES) and Upload became the header's one solid button.
+ * The mobile bottom nav (BottomNav.tsx) keeps its own five destinations. */
+export const SIGNED_IN_NAV_ROUTES = ['calendar', 'company-files'] as const
+
+/** Pages the account menu links to on desktop (round 14), for everyone
+ * signed in. Company Settings is added for admin and owner by
+ * sections/headerNav.ts::accountMenuRoutes. */
+export const ACCOUNT_MENU_ROUTES = ['tags', 'search'] as const
 
 /** Translated label per signed-in nav item, shared by the desktop header
  * (`Header.tsx`) and the mobile bottom nav (`BottomNav.tsx`, 2026-09-23
@@ -92,8 +100,15 @@ export function parsePath(pathname: string): ResolvedRoute {
   return ids.find((id) => ROUTES[id].path === path) ?? 'not-found'
 }
 
+/** The home page's tab title, exactly as asked (2026-09-24, round 14) — a
+ * literal, not derived from PRODUCT_NAME or a route title. index.html carries
+ * the same string so the tab reads right before the app has loaded. */
+export const HOME_TITLE = 'JagaOS, a Show Me Your Agents project'
+
+/** The browser tab title: always "JagaOS: PageName", never "PageName - JagaOS"
+ * (round 14). The page name is the route's static English title, as before. */
 export function pageTitle(route: ResolvedRoute): string {
-  if (route === 'home') return `${PRODUCT_NAME} — company memory for growing teams`
-  if (route === 'not-found') return `Page not found — ${PRODUCT_NAME}`
-  return `${ROUTES[route].title} — ${PRODUCT_NAME}`
+  if (route === 'home') return HOME_TITLE
+  if (route === 'not-found') return `${PRODUCT_NAME}: Page not found`
+  return `${PRODUCT_NAME}: ${ROUTES[route].title}`
 }

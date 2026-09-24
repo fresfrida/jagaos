@@ -107,9 +107,9 @@ def _membership_from_token(token: str, db_path: str = DB_PATH) -> CurrentMembers
         if session_row is None:
             raise HTTPException(401, "Invalid session")
         if session_row["revoked_at"] is not None:
-            raise HTTPException(401, "Session revoked — log in again")
+            raise HTTPException(401, "Session revoked. Log in again.")
         if datetime.fromisoformat(session_row["expires_at"]) < datetime.now(timezone.utc):
-            raise HTTPException(401, "Session expired — log in again")
+            raise HTTPException(401, "Session expired. Log in again.")
 
         user = conn.execute(
             "SELECT id, email, name FROM app_user WHERE id = ?", (session_row["user_id"],)
@@ -278,6 +278,26 @@ def may_see_document(
     if status == PENDING_REVIEW_STATUS:
         return may_see_review_item(membership, uploaded_by_user_id)
     return True
+
+
+def may_change_visibility(membership: CurrentMembership, *, uploaded_by_user_id: int | None) -> bool:
+    """Who may flip a document between 'company' and 'only_me' (round 14,
+    DECISIONS #86): the person who uploaded it, and no one else — in BOTH
+    directions, whatever their role.
+
+    Deliberately narrower than may_edit_document (which lets admin/owner edit
+    any company document). If admin/owner could make someone else's company
+    file private, that admin would lock themselves out of it the instant they
+    did it — a personal file is invisible even to them (may_see_document) — and
+    the whole team would lose a company record on one person's say-so. Making a
+    file personal is the uploader's own call about their own file; the reverse
+    can only be done by the person who can see it, which is the same person.
+    A document with no recorded uploader can be changed by nobody."""
+    return (
+        ROLE_ORDER[membership.role] >= ROLE_ORDER["user"]
+        and uploaded_by_user_id is not None
+        and uploaded_by_user_id == membership.user_id
+    )
 
 
 def may_resolve_review_item(

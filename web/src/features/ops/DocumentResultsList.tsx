@@ -96,12 +96,12 @@ export function DocumentResultsList({
                 {trace.report.nodes.map((node, i) => (
                   <tr key={i} className="border-t border-line">
                     <td className="px-4 py-2 text-ink">{node.node}</td>
-                    <td className="px-4 py-2 text-muted">{node.model ?? '—'}</td>
+                    <td className="px-4 py-2 text-muted">{node.model ?? '-'}</td>
                     <td className="px-4 py-2 text-muted">
-                      {node.input_tokens ?? '—'} / {node.output_tokens ?? '—'}
+                      {node.input_tokens ?? '-'} / {node.output_tokens ?? '-'}
                     </td>
-                    <td className="px-4 py-2 text-muted">{node.cost_usd ? `$${node.cost_usd.toFixed(5)}` : '—'}</td>
-                    <td className="px-4 py-2 text-muted">{node.decision ?? '—'}</td>
+                    <td className="px-4 py-2 text-muted">{node.cost_usd ? `$${node.cost_usd.toFixed(5)}` : '-'}</td>
+                    <td className="px-4 py-2 text-muted">{node.decision ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -111,12 +111,7 @@ export function DocumentResultsList({
       )}
 
       {viewingDocument && (
-        <DocumentViewerModal
-          documentId={viewingDocument.id}
-          filename={viewingDocument.filename}
-          mediaType={viewingDocument.media_type}
-          onClose={() => setViewingDocument(null)}
-        />
+        <DocumentViewerModal doc={viewingDocument} onClose={() => setViewingDocument(null)} onChanged={onSaved} />
       )}
     </div>
   )

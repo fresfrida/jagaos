@@ -9,7 +9,7 @@
   },
   "home": {
     "heading": "Selamat datang ke JagaOS",
-    "subheading": "Ingatan syarikat untuk pasukan yang berkembang — rakam dokumen, keputusan dan tarikh akhir, kemudian cari semula dalam beberapa saat.",
+    "subheading": "Ingatan syarikat untuk pasukan yang berkembang. Rakam dokumen, keputusan dan tarikh akhir, kemudian cari semula dalam beberapa saat.",
     "signIn": "Log masuk",
     "getStarted": "Mula"
   },
@@ -18,13 +18,13 @@
     "nameLabel": "Nama syarikat",
     "fyeMonthLabel": "Bulan akhir tahun kewangan",
     "fyeDayLabel": "Hari akhir tahun kewangan",
-    "readOnlyNotice": "Hanya pemilik boleh mengubah ini — hubungi mereka jika sesuatu perlu dikemas kini.",
+    "readOnlyNotice": "Hanya pemilik boleh mengubah ini. Hubungi mereka jika sesuatu perlu dikemas kini.",
     "saved": "Disimpan.",
     "uenLabel": "UEN",
     "gstLabel": "Berdaftar GST",
     "addressLabel": "Alamat berdaftar",
     "prefill": {
-      "banner": "Diisi terlebih dahulu daripada {{filename}}. Belum disimpan — semak nilai, betulkan yang salah, kemudian Simpan.",
+      "banner": "Diisi terlebih dahulu daripada {{filename}}. Belum disimpan. Semak nilai, betulkan yang salah, kemudian Simpan.",
       "loading": "Membaca profil perniagaan…",
       "failed": "Tidak dapat mengisi terlebih dahulu daripada dokumen itu.",
       "discard": "Buang pengisian awal"
@@ -50,7 +50,7 @@
   "auth": {
     "login": {
       "title": "Log masuk",
-      "subtitle": "Tiada kata laluan lagi — masukkan e-mel anda untuk teruskan.",
+      "subtitle": "Tiada kata laluan lagi. Masukkan e-mel anda untuk teruskan.",
       "emailLabel": "E-mel",
       "newCompanyCheckbox": "Saya sedang menubuhkan syarikat baharu",
       "companyNameLabel": "Nama syarikat",
@@ -84,7 +84,7 @@
     "backend": {
       "checking": "Menyemak pelayan…",
       "reachable": "Pelayan boleh dicapai",
-      "unreachable": "Pelayan tidak dapat dicapai — mulakan dengan `uvicorn app.main:app --reload` dalam app/"
+      "unreachable": "Pelayan tidak dapat dicapai. Mulakan dengan `uvicorn app.main:app --reload` dalam app/"
     },
     "session": {
       "checking": "Menyemak sesi anda…",
@@ -101,28 +101,28 @@
     "upload": {
       "pictureQuestion": "Apa yang anda muat naik?",
       "uploading": "Sedang memuat naik…",
-      "viewerCantUpload": "Pelihat tidak boleh memuat naik dokumen — hubungi admin atau pemilik.",
+      "viewerCantUpload": "Pelihat tidak boleh memuat naik dokumen. Hubungi admin atau pemilik.",
       "uploadReplacement": "Muat naik gantian",
       "rejectedPromptSuffix": "ditolak dan dipadam. Muat naik gantian?",
       "toast": {
-        "clean": "Muat naik diterima. Tiada isu ditemui — sahkan di bawah.",
-        "needsReview": "Muat naik diterima. Ditanda untuk semakan — lihat di bawah.",
-        "quarantined": "Muat naik disekat untuk semakan keselamatan — lihat di bawah.",
+        "clean": "Muat naik diterima. Tiada isu ditemui. Sahkan di bawah.",
+        "needsReview": "Muat naik diterima. Ditanda untuk semakan, lihat di bawah.",
+        "quarantined": "Muat naik disekat untuk semakan keselamatan, lihat di bawah.",
         "duplicate": "Fail ini sudah dimuat naik sebelum ini."
       },
       "choice": {
         "document": {
           "title": "Dokumen",
-          "hint": "Invois, resit, surat, kontrak — PDF atau foto setiap halaman."
+          "hint": "Invois, resit, kontrak"
         },
         "photo": {
           "title": "Gambar",
-          "hint": "Tempat, benda atau orang — bukan dokumen. Kapsyen sahaja, tiada pengekstrakan data."
+          "hint": "Tempat, benda, atau orang, kapsyen sahaja"
         }
       },
       "pages": {
         "heading": "{{count}} halaman dalam satu dokumen",
-        "hint": "Semak susunan — halaman akan digabungkan menjadi satu dokumen, halaman 1 dahulu.",
+        "hint": "Semak susunan. Halaman akan digabungkan menjadi satu dokumen, halaman 1 dahulu.",
         "pageLabel": "Halaman {{n}}",
         "moveUp": "Alihkan halaman {{n}} ke atas",
         "moveDown": "Alihkan halaman {{n}} ke bawah",
@@ -130,13 +130,9 @@
         "addMore": "Tambah lagi halaman",
         "submit": "Muat naik {{count}} halaman sebagai satu dokumen",
         "error": {
-          "mixed": "Pilih satu PDF atau beberapa foto — PDF tidak boleh digabungkan dengan foto.",
+          "mixed": "Pilih satu PDF atau beberapa foto. PDF tidak boleh digabungkan dengan foto.",
           "tooMany": "Satu dokumen boleh mempunyai paling banyak {{max}} halaman."
         }
-      },
-      "visibility": {
-        "label": "Hanya saya",
-        "hint": "Hanya anda boleh melihatnya — pentadbir dan pemilik juga tidak."
       }
     },
     "review": {
@@ -145,7 +141,7 @@
         "heading": "Dokumen",
         "filenameLabel": "Nama fail",
         "descriptionLabel": "Keterangan",
-        "descriptionPendingPlaceholder": "Belum ada kapsyen — ketik mikrofon atau taip sendiri",
+        "descriptionPendingPlaceholder": "Belum ada kapsyen. Ketik mikrofon atau taip sendiri",
         "generatingCaption": "Menjana kapsyen…",
         "bucketLabel": "Kategori",
         "docTypeLabel": "Jenis dokumen",
@@ -159,22 +155,22 @@
       "onlyAdminCanResolve": "Hanya admin atau pemilik boleh menyelesaikan ini.",
       "deleteButton": "Padam",
       "deleteOrReupload": "atau muat naik semula dokumen untuk cuba menyemak sekali lagi.",
-      "onlyAdminCanDelete": "Hanya admin atau pemilik boleh memadam ini — atau muat naik semula dokumen untuk cuba menyemak sekali lagi.",
+      "onlyAdminCanDelete": "Hanya admin atau pemilik boleh memadam ini, atau muat naik semula dokumen untuk cuba menyemak sekali lagi.",
       "reasons": {
         "clean": "Tiada isu ditemui. Sila sahkan medan yang diekstrak di bawah adalah betul sebelum difailkan.",
-        "fileMissing": "Fail hilang — padam atau muat naik semula dokumen ini.",
+        "fileMissing": "Fail hilang. Padam atau muat naik semula dokumen ini.",
         "prefix": "Sila sahkan: {{reasons}}",
         "prefixList": "Sila sahkan:",
-        "injectionSuspected": "model menandakan dokumen ini mungkin mengandungi arahan yang disuntik — sila sahkan ia selamat sebelum diteruskan",
+        "injectionSuspected": "model menandakan dokumen ini mungkin mengandungi arahan yang disuntik. Sila sahkan ia selamat sebelum diteruskan",
         "injectionSuspectedBlocked": "Kami tidak dapat memproses fail ini dengan selamat, jadi tiada apa-apa yang diekstrak daripadanya. Padamkannya, atau muat naik salinan lain.",
-        "extractionError": "medan tidak dapat diekstrak dengan boleh dipercayai — sila semak sendiri sebelum mengesahkan",
-        "zeroAmounts": "subjumlah, cukai dan jumlah kesemuanya sifar — ini kelihatan seperti bacaan yang gagal, bukan invois bernilai sifar yang sebenar",
+        "extractionError": "medan tidak dapat diekstrak dengan boleh dipercayai. Sila semak sendiri sebelum mengesahkan",
+        "zeroAmounts": "subjumlah, cukai dan jumlah kesemuanya sifar. Ini kelihatan seperti bacaan yang gagal, bukan invois bernilai sifar yang sebenar",
         "gstMismatch": "GST {{gst}} bukan ~9% daripada subjumlah {{subtotal}} (dijangka ~{{expectedGst}})",
         "totalMismatch": "subjumlah + cukai ({{subtotalPlusGst}}) tidak sama dengan jumlah ({{total}})",
-        "amountsNotInText": "jumlah yang diekstrak tidak ditemui di mana-mana dalam teks dokumen — sila semak semula dengan imej sebelum mengesahkan",
+        "amountsNotInText": "jumlah yang diekstrak tidak ditemui di mana-mana dalam teks dokumen. Sila semak semula dengan imej sebelum mengesahkan",
         "missingRequiredFields": "medan wajib hilang: {{fields}}",
-        "missingArithmeticFields": "subjumlah/cukai/jumlah tiada — tidak dapat mengesahkan pengiraan",
-        "descriptionSignalsProblem": "penerangan menunjukkan dokumen ini mungkin tidak dibaca dengan betul — sila semaknya",
+        "missingArithmeticFields": "subjumlah/cukai/jumlah tiada, tidak dapat mengesahkan pengiraan",
+        "descriptionSignalsProblem": "penerangan menunjukkan dokumen ini mungkin tidak dibaca dengan betul. Sila semaknya",
         "couldNotReadDocument": "Kami tidak dapat membaca fail ini. Cuba foto yang lebih jelas atau fail lain."
       },
       "fieldLabel": {
@@ -231,7 +227,7 @@
       "delete": "Padam",
       "deleteConfirmMessage": "Padam {{filename}}? Ini tidak boleh dibatalkan.",
       "moreActions": "Tindakan lain",
-      "traceHeading": "Jejak — dokumen #{{documentId}} · jumlah ${{cost}}",
+      "traceHeading": "Jejak: dokumen #{{documentId}} · jumlah ${{cost}}",
       "traceTable": {
         "node": "Nod",
         "model": "Model",
@@ -253,8 +249,8 @@
       "noneOnDay": "Tiada dokumen pada hari ini."
     },
     "gaps": {
-      "heading": "Analisis jurang — {{satisfied}} daripada {{total}} dipegang",
-      "empty": "Belum ada jangkaan — muat naik dokumen berkanun yang menunjukkan peristiwa syarikat (penubuhan, pertukaran setiausaha syarikat)."
+      "heading": "Analisis jurang: {{satisfied}} daripada {{total}} dipegang",
+      "empty": "Belum ada jangkaan. Muat naik dokumen berkanun yang menunjukkan peristiwa syarikat (penubuhan, pertukaran setiausaha syarikat)."
     },
     "obligations": {
       "heading": "Kewajipan ({{count}})",
@@ -311,7 +307,10 @@
       "low": "rendah"
     },
     "visibility": {
-      "onlyMe": "Hanya saya"
+      "onlyYou": "Hanya anda",
+      "makePrivate": "Jadikan peribadi. Hanya anda boleh melihatnya.",
+      "shareWithCompany": "Hanya anda boleh melihat fail ini. Ketik untuk kongsi semula dengan syarikat.",
+      "uploaderOnly": "Hanya orang yang memuat naik fail ini boleh menukar siapa yang boleh melihatnya."
     }
   }
 }

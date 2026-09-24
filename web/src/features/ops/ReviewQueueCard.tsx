@@ -30,7 +30,9 @@ import {
 } from './opsShared'
 import { opsApi, type Bucket, type ReviewItem } from './opsApi'
 import { ReviewReasons } from './ReviewReasons'
+import { useDocumentVisibility } from './useDocumentVisibility'
 import { useEditableDescription } from './useEditableDescription'
+import { VisibilityToggle } from './VisibilityToggle'
 
 /** One field from a review_item.proposed_json blob — matches
  * app/models.py's Provenance[T], or a bare bool for injection_suspected. */
@@ -96,6 +98,7 @@ export function ReviewQueueCard({
   onResolved,
   onRejected,
   onPoll,
+  onVisibilityChanged,
 }: {
   item: ReviewItem
   canResolve: boolean
@@ -111,8 +114,13 @@ export function ReviewQueueCard({
   // caption. Not a generic "refresh me" the card invents on its own: one
   // existing data path, reused.
   onPoll: () => void
+  // 2026-09-24 (round 14, DECISIONS #86): after the lock toggle changes this
+  // document, the page refetches the queue (an item can leave the admin's
+  // queue the moment its uploader makes it personal).
+  onVisibilityChanged: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const lock = useDocumentVisibility(item.document_id, item.document_visibility ?? 'company', onVisibilityChanged)
   const proposed = parseProposed(item.proposed_json)
   const fieldNames = Object.keys(proposed).filter((k) => k !== 'injection_suspected' && isProvenance(proposed[k]))
   // 2026-09-22 (DECISIONS #40): every document now needs review, even a
@@ -359,9 +367,14 @@ export function ReviewQueueCard({
          render alongside a "no issues found"/isRoutine state, since
          app/graph/verify.py's file_missing check overrides every other
          reason rather than joining them. */}
-      {/* 2026-09-24 (round 13, DECISIONS #85): a personal file's card is only
-         ever sent to its uploader — say why nobody else on the team sees it. */}
-      {item.document_visibility === 'only_me' && <PersonalFileBadge className="mb-2" />}
+      {/* The lock toggle (round 14, DECISIONS #86) is the uploader's, and both
+         marks a personal file and changes it. Anyone else who can see a
+         personal file's card gets the read-only marker. */}
+      {item.can_change_visibility === true ? (
+        <VisibilityToggle visibility={lock.visibility} busy={lock.busy} error={lock.error} onToggle={() => void lock.toggle()} className="mb-2" />
+      ) : (
+        item.document_visibility === 'only_me' && <PersonalFileBadge className="mb-2" />
+      )}
       <ReviewReasons
         reasons={reasons}
         className={`text-[13px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}
@@ -465,7 +478,7 @@ export function ReviewQueueCard({
               <input
                 value={vendorName}
                 disabled={!canResolve}
-                placeholder="—"
+                placeholder="-"
                 list={VENDOR_NAMES_DATALIST_ID}
                 onChange={(e) => setVendorName(e.target.value)}
                 className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
