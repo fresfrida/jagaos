@@ -61,6 +61,19 @@ def company() -> dict:
         )
         assert resp.status_code == 200, resp.text
         documents[name] = resp.json()["document_id"]
+
+    # These tests are about who may EDIT or DELETE a document, so the documents
+    # are confirmed (filed) first. A document still pending review is hidden
+    # from the users it would otherwise be compared against (round 13,
+    # DECISIONS #83) — an edit attempt there is a 404, which
+    # tests/test_document_visibility.py covers; here it would only hide the
+    # ownership rule this file exists to pin.
+    for item in client.get("/api/review", headers=_headers(tokens["owner"])).json():
+        confirmed = client.post(
+            f"/api/review/{item['id']}/resolve?thread_id={item['thread_id']}",
+            json={"action": "confirm", "corrected_fields": {}}, headers=_headers(tokens["owner"]),
+        )
+        assert confirmed.status_code == 200, confirmed.text
     return {"tokens": tokens, "documents": documents}
 
 

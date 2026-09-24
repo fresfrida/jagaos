@@ -41,7 +41,8 @@ _TABLES = [
     # into the next test.
     "document_search",
     "document", "session", "membership",
-    "app_user", "company",
+    # company_group after company: company.group_id points at it (round 12).
+    "app_user", "company", "company_group",
 ]
 
 

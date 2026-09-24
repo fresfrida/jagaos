@@ -38,8 +38,12 @@ def derive_expectations(state: PipelineState) -> PipelineState:
         held_doc_types = [
             r["doc_type"]
             for r in conn.execute(
+                # A personal file (visibility != 'company', DECISIONS #85) is not
+                # held BY THE COMPANY: counting it would mark an expectation
+                # "satisfied" by a document nobody else can see, and would show
+                # everyone that such a document exists.
                 "SELECT DISTINCT doc_type FROM document WHERE company_id = ? "
-                "AND status != 'quarantined' AND doc_type IS NOT NULL",
+                "AND status != 'quarantined' AND visibility = 'company' AND doc_type IS NOT NULL",
                 (state["company_id"],),
             ).fetchall()
         ]

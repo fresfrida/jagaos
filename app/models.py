@@ -47,6 +47,11 @@ BucketName = Literal[
 ]
 
 
+# 2026-09-24 (round 13, DECISIONS #85): who an uploaded document is for. The
+# values match document.visibility (app/db.py) and app/auth.py's constants.
+Visibility = Literal["company", "only_me"]
+
+
 class ClassifyResult(BaseModel):
     lane: Literal["statutory", "invoice", "important", "memory"]
     doc_type: str
@@ -127,6 +132,39 @@ class StatutoryFields(BaseModel):
     issued_on: Provenance[date | None] | None = None
     due_on: Provenance[date | None] | None = None
     subject: Provenance[str]
+    injection_suspected: bool = False
+
+
+class CompanyProfileFields(BaseModel):
+    """Statutory-lane extraction for a company's OWN identity document — an
+    ACRA business profile / BizFile (2026-09-24, round 12, DECISIONS #79).
+
+    A different shape from StatutoryFields, which models a filing NOTICE
+    (reference_no, issued_on, due_on, subject) and has nowhere to put "who
+    this company is". These are the values the owner can pre-fill Company
+    Settings from; every write into the company row is still the owner's own
+    click on Save (app/main.py::edit_company), never this node's.
+
+    company_name is the one required value — a business profile without a
+    name is not one. Everything else follows the existing
+    Provenance[X | None] | None = None pattern (InvoiceFields.gst_reg_no,
+    StatutoryFields.reference_no), for the same reason: a real profile can
+    omit a value, and the model then returns a Provenance whose value is
+    null rather than dropping the field.
+
+    The financial year end is two integers, not one string as printed
+    ("31 December"): the company table stores fye_month/fye_day, and the
+    range check that decides whether they are usable is deterministic code
+    (app/main.py's prefill endpoint), not the model's say-so. gst_registered
+    is optional because GST registration is IRAS's record, not ACRA's, and a
+    profile often does not state it."""
+
+    company_name: Provenance[str]
+    uen: Provenance[str | None] | None = None
+    fye_month: Provenance[int | None] | None = None
+    fye_day: Provenance[int | None] | None = None
+    gst_registered: Provenance[bool | None] | None = None
+    registered_address: Provenance[str | None] | None = None
     injection_suspected: bool = False
 
 
@@ -251,6 +289,50 @@ class CompanyOut(BaseModel):
     # day-bucketing/highlight) independent of the viewing device's own
     # local time (an admin traveling should still see the company's today).
     timezone: str
+    # 2026-09-24 (round 12, DECISIONS #79): the rest of the identity fields
+    # Company Settings now edits (and an ACRA profile can pre-fill). Defaults,
+    # not required, so a payload built without them still validates.
+    uen: str | None = None
+    gst_registered: bool = False
+    registered_address: str | None = None
+    # 2026-09-24 (round 13, DECISIONS #85): a marker the frontend checks before
+    # offering the "Only me" upload choice. An older backend ignores an unknown
+    # `visibility` query parameter, so a file the person believed private would
+    # be uploaded company-visible — and it has no way to say so. Being always
+    # true here and absent there is what lets the frontend tell the two apart
+    # (DECISIONS #82: degrade to the previous behavior, never break).
+    private_documents: bool = True
+
+
+class CompanyProfilePrefill(BaseModel):
+    """GET /api/documents/{id}/company-profile — company-settings values read
+    from a confirmed ACRA business profile. None = the document did not state
+    it or the value was unusable; the form leaves that field unchanged."""
+
+    document_id: int
+    filename: str
+    name: str | None = None
+    uen: str | None = None
+    fye_month: int | None = None
+    fye_day: int | None = None
+    gst_registered: bool | None = None
+    registered_address: str | None = None
+
+
+class MyCompanyOut(BaseModel):
+    """One row of GET /api/auth/companies — a company the caller holds a
+    membership in, with the role they hold THERE. group_* are populated only
+    for an owner membership (app/auth.py::list_memberships)."""
+
+    id: int
+    name: str
+    role: RoleName
+    group_id: int | None = None
+    group_name: str | None = None
+
+
+class SwitchCompanyRequest(BaseModel):
+    company_id: int
 
 
 class AuthResponse(BaseModel):
@@ -281,18 +363,28 @@ class AddMemberRequest(BaseModel):
 
 class CompanyEditRequest(BaseModel):
     """PATCH /api/companies/{id} body (2026-09-23, role/permission work).
-    Owner-only (app/main.py::edit_company). Scoped to exactly the fields
+    Owner-only (app/main.py::edit_company). Started as exactly the fields
     `dev_login`'s signup form already collects (`name`/`fye_month`/
-    `fye_day`) — a deliberate floor, not the company table's full column
-    set (`uen`/`incorporated_on`/`gst_registered`/`gst_period`/`dormant`
-    have no UI to collect or validate them yet). Every field optional —
-    only the ones sent are changed, same convention as
-    `DocumentEditRequest`."""
+    `fye_day`); `timezone` (2026-09-24) and `uen`/`gst_registered`/
+    `registered_address` (round 12) were added since — still not the company
+    table's full column set (`incorporated_on`/`gst_period`/`dormant` have
+    no UI to collect or validate them yet). Every field optional — only the
+    ones sent are changed, same convention as `DocumentEditRequest`."""
 
-    name: str | None = None
+    # min_length: an empty name would save fine and then render as a blank
+    # company everywhere (2026-09-24 — found while wiring the ACRA pre-fill,
+    # which can hand the form an empty value).
+    name: str | None = Field(default=None, min_length=1)
     fye_month: int | None = Field(default=None, ge=1, le=12)
     fye_day: int | None = Field(default=None, ge=1, le=31)
     # 2026-09-24 (company-local dates): IANA name — validated against
     # zoneinfo's own database on save (app/main.py::edit_company), not just
     # accepted as an arbitrary string.
     timezone: str | None = None
+    # 2026-09-24 (round 12, DECISIONS #79): the ACRA business-profile fields.
+    # uen/registered_address are free text — no UEN format rule is enforced
+    # because none is cited anywhere in this repo (CLAUDE.md: no statutory
+    # rule without a citation); a blank string clears the value.
+    uen: str | None = Field(default=None, max_length=32)
+    gst_registered: bool | None = None
+    registered_address: str | None = Field(default=None, max_length=500)

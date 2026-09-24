@@ -27,6 +27,23 @@ injection_suspected=true.
 {document_text}
 </untrusted>"""
 
+# 2026-09-24 (round 12, DECISIONS #78): how much document text one LLM call is
+# given. Three nodes each cut it with their own literal `[:12000]`; a merged
+# multi-page scan (up to app/extract/ocr.py's MAX_PDF_OCR_PAGES pages) would
+# have had its later pages silently dropped from the model. 50,000 characters
+# is that page cap times a dense typed A4 page (~4,500 characters) plus
+# headroom — about 12k input tokens, only ever paid by a document that long.
+LLM_TEXT_CHAR_LIMIT = 50_000
+
+
+def untrusted_prompt(document_text: str) -> str:
+    """The user message for a node that reads a document: the text, cut to
+    LLM_TEXT_CHAR_LIMIT, inside the untrusted wrapper. The one place that cut
+    happens, so classify/extract/derive_events cannot disagree about how much
+    of a document they saw."""
+    return UNTRUSTED_TEMPLATE.format(document_text=document_text[:LLM_TEXT_CHAR_LIMIT])
+
+
 # Imperative / system-ish phrasing aimed at an LLM reading the document.
 # Deliberately broad — a false positive costs a review-queue item; a false
 # negative costs a statutory deadline.

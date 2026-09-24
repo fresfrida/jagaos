@@ -10,6 +10,12 @@ the UI). Swap in the team's real company profile (name/FYE only, still no
 real documents — see WINNING.md's privacy note) once the pipeline is
 stable.
 
+Since 2026-09-24 (round 12, DECISIONS #77) it also seeds one demo GROUP:
+"Try Demo Holdings", holding "Try Demo Pte Ltd" plus two sibling companies,
+all owned by owner@try-demo.test — so the company switcher has something to
+switch between. The other accounts stay members of "Try Demo Pte Ltd" only:
+one membership means no switcher and no group anywhere in their UI.
+
 Requires `uvicorn app.main:app --reload` already running. Run:
     python scripts/seed_dev_db.py
 """
@@ -19,12 +25,29 @@ import sys
 from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
+
+# The group label is written straight into the local database (below) — there
+# is deliberately no API to create a group, and app.db is imported for its
+# connection helper, so this needs the repo root on the path and .env loaded
+# for JAGA_DB_PATH before app.db is imported.
+sys.path.insert(0, str(Path(__file__).parent.parent))
+load_dotenv()
 
 API = os.environ.get("JAGA_API_BASE_URL", "http://127.0.0.1:8000")
 FILES_DIR = Path(__file__).parent.parent / "evals" / "demo_corpus" / "files"
 
 OWNER_EMAIL = "owner@try-demo.test"
 COMPANY_NAME = "Try Demo Pte Ltd"
+
+# 2026-09-24 (round 12, DECISIONS #77): the demo group. (name, fye_month,
+# fye_day) for the two companies created alongside COMPANY_NAME; the owner
+# holds an owner membership on each, which is what the switcher lists.
+GROUP_NAME = "Try Demo Holdings"
+SIBLING_COMPANIES = [
+    ("Try Demo Logistics Pte Ltd", 6, 30),
+    ("Try Demo Trading Pte Ltd", 3, 31),
+]
 
 # One account per role (2026-09-23, role/permission work), so testing "what
 # does a viewer see" doesn't need hand-creating a membership every time.
@@ -42,6 +65,41 @@ ROLE_ACCOUNTS = [
     ("user", "user2@try-demo.test", "Demo User 2"),
     ("viewer", "viewer@try-demo.test", "Demo Viewer"),
 ]
+
+
+def seed_group(client: httpx.Client, owner_headers: dict) -> None:
+    """Idempotent. Creates the sibling companies the normal way (dev-login
+    with a company_name makes the caller its owner), then labels all three
+    with one group. Nothing about the group grants access — each company's
+    reachability is still only the owner's membership row on it."""
+    held = {c["name"] for c in client.get("/api/auth/companies", headers=owner_headers).json()}
+    for name, fye_month, fye_day in SIBLING_COMPANIES:
+        if name in held:
+            continue
+        client.post(
+            "/api/auth/dev-login",
+            json={"email": OWNER_EMAIL, "company_name": name, "fye_month": fye_month, "fye_day": fye_day},
+        ).raise_for_status()
+        print(f"Created sibling company: {name} (owner {OWNER_EMAIL})")
+
+    from app.db import DB_PATH, get_conn, init_db
+
+    init_db(DB_PATH)  # the group table/columns exist even if the server has not restarted yet
+    names = [COMPANY_NAME, *(n for n, _, _ in SIBLING_COMPANIES)]
+    with get_conn(DB_PATH) as conn:
+        conn.execute(
+            "INSERT INTO company_group (name) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM company_group WHERE name = ?)",
+            (GROUP_NAME, GROUP_NAME),
+        )
+        group_id = conn.execute("SELECT id FROM company_group WHERE name = ?", (GROUP_NAME,)).fetchone()["id"]
+        # By name AND owner membership, so a like-named company someone else owns is never swept in.
+        conn.execute(
+            f"UPDATE company SET group_id = ? WHERE name IN ({','.join('?' * len(names))}) AND id IN ("
+            "  SELECT m.company_id FROM membership m JOIN app_user u ON u.id = m.user_id "
+            "  WHERE u.email = ? AND m.role = 'owner')",
+            (group_id, *names, OWNER_EMAIL),
+        )
+    print(f"Group '{GROUP_NAME}': {', '.join(names)} — switch between them as {OWNER_EMAIL}.")
 
 
 def main() -> None:
@@ -102,6 +160,8 @@ def main() -> None:
         login = client.post("/api/auth/dev-login", json={"email": email})
         login.raise_for_status()
         accounts.append((role, email, login.json()["token"]))
+
+    seed_group(client, headers)
 
     # Email is the only "credential" this auth model has (dev-login is a
     # placeholder for real magic-link email, app/auth.py's docstring) —

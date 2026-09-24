@@ -19,7 +19,16 @@
     "fyeMonthLabel": "财政年度结束月份",
     "fyeDayLabel": "财政年度结束日期",
     "readOnlyNotice": "只有所有者可以更改这些设置 — 如需更新请联系所有者。",
-    "saved": "已保存。"
+    "saved": "已保存。",
+    "uenLabel": "UEN",
+    "gstLabel": "已注册 GST",
+    "addressLabel": "注册地址",
+    "prefill": {
+      "banner": "已根据 {{filename}} 预填。尚未保存 — 请核对各项，修改有误之处，然后点击保存。",
+      "loading": "正在读取商业档案…",
+      "failed": "无法根据该文件预填。",
+      "discard": "放弃预填"
+    }
   },
   "header": {
     "primaryNav": "主导航",
@@ -35,7 +44,8 @@
       "companyFiles": "公司文件",
       "upload": "上传",
       "companySettings": "公司设置"
-    }
+    },
+    "switchCompany": "切换公司"
   },
   "auth": {
     "login": {
@@ -89,11 +99,7 @@
       "obligations": "义务"
     },
     "upload": {
-      "pictureQuestion": "这是照片，还是文件？",
-      "yes": "照片",
-      "no": "文件",
-      "pictureWarning": "选择「照片」时，系统只会生成简单说明，不会提取详细数据 — 发票、表格等正式文件请选择「文件」。",
-      "clickToUpload": "点击上传 PDF 或图片",
+      "pictureQuestion": "你要上传什么？",
       "uploading": "正在上传…",
       "viewerCantUpload": "查看者无法上传文件 — 请联系管理员或所有者。",
       "uploadReplacement": "上传替换文件",
@@ -103,6 +109,34 @@
         "needsReview": "已收到上传文件。已标记待审核——详见下方。",
         "quarantined": "出于安全考虑已拦截此次上传——详见下方。",
         "duplicate": "该文件已上传过。"
+      },
+      "choice": {
+        "document": {
+          "title": "文件",
+          "hint": "发票、收据、信函、合同 — PDF 或各页照片。"
+        },
+        "photo": {
+          "title": "照片",
+          "hint": "地点、物品或人物 — 非文书。仅生成说明，不提取数据。"
+        }
+      },
+      "pages": {
+        "heading": "同一份文件的 {{count}} 页",
+        "hint": "请确认顺序 — 将合并为一份文件，第 1 页在前。",
+        "pageLabel": "第 {{n}} 页",
+        "moveUp": "将第 {{n}} 页上移",
+        "moveDown": "将第 {{n}} 页下移",
+        "remove": "移除第 {{n}} 页",
+        "addMore": "添加更多页",
+        "submit": "将 {{count}} 页作为一份文件上传",
+        "error": {
+          "mixed": "请选择一个 PDF 或多张照片 — PDF 无法与照片合并。",
+          "tooMany": "一份文件最多 {{max}} 页。"
+        }
+      },
+      "visibility": {
+        "label": "仅自己可见",
+        "hint": "只有你能看到 — 管理员和所有者也看不到。"
       }
     },
     "review": {
@@ -156,7 +190,18 @@
         "docType": "文件类型",
         "referenceNo": "参考编号",
         "dueOn": "到期日",
-        "subject": "主题"
+        "subject": "主题",
+        "companyName": "公司名称",
+        "uen": "UEN",
+        "fyeMonth": "财政年度结束月份",
+        "fyeDay": "财政年度结束日期",
+        "gstRegistered": "已注册 GST",
+        "registeredAddress": "注册地址"
+      },
+      "boolean": {
+        "yes": "是",
+        "no": "否",
+        "notStated": "未注明"
       }
     },
     "companyFiles": {
@@ -194,7 +239,8 @@
         "cost": "费用",
         "decision": "结果"
       },
-      "noDocumentDate": "无文件日期"
+      "noDocumentDate": "无文件日期",
+      "prefillCompany": "用此文件预填公司设置"
     },
     "dates": {
       "uploadDate": "上传日期",
@@ -263,6 +309,9 @@
       "high": "高",
       "medium": "中",
       "low": "低"
+    },
+    "visibility": {
+      "onlyMe": "仅自己可见"
     }
   }
 }

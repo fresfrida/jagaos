@@ -74,8 +74,15 @@ export interface VerifyResult {
   needs_review: boolean
 }
 
+/** Who a document is for (2026-09-24, round 13, DECISIONS #85): 'company' —
+ * visible per the normal role rules — or 'only_me', a personal file only its
+ * uploader can ever see. Mirrors app/models.py's Visibility. */
+export type Visibility = 'company' | 'only_me'
+
 export interface UploadResult {
-  document_id: number
+  // null for a 'duplicate' of a document the caller cannot see: the server says
+  // "already uploaded" without naming a document they have no right to know of.
+  document_id: number | null
   // 'processed' (auto-filed, no human touch) is no longer possible as of
   // 2026-09-22 (DECISIONS #40) — every non-quarantined upload now needs
   // review, even a clean one.
@@ -122,6 +129,16 @@ export interface DocumentRow {
   // frontend deploys on push, the Lightsail backend only when someone
   // redeploys it) sends nothing — see opsShared.tsx's documentIsEditable.
   can_edit?: boolean
+  // 2026-09-24 (round 12, DECISIONS #79): the server's answer for THIS caller
+  // (rules/company_profile.py::may_prefill_company_from) — true only for an
+  // owner looking at a confirmed ACRA business profile. Optional for the same
+  // skew reason as can_edit, but the fallback differs: absent means "not
+  // offered", which is exactly what the app did before this existed.
+  can_prefill_company?: boolean
+  // 2026-09-24 (round 13, DECISIONS #85): 'only_me' for a personal file — only
+  // its uploader ever receives such a row, so this is for the badge, not a
+  // filter. Absent from an older backend, which has no personal files.
+  visibility?: Visibility
 }
 
 export interface Expectation {
@@ -156,6 +173,13 @@ export interface ReviewItem {
   document_lane: string | null
   document_doc_type: string | null
   document_vendor_name: string | null
+  // 2026-09-24 (round 13, DECISIONS #85): 'only_me' for a personal file, and the
+  // server's own answer to "may THIS caller accept/reject this item"
+  // (auth.may_resolve_review_item) — admin/owner, or the uploader of their own
+  // personal file. Both optional: an older backend sends neither, and the card
+  // then falls back to the role check it always used.
+  document_visibility?: Visibility
+  can_resolve?: boolean
   thread_id: string
   // reason: a short debug/trace string (codes joined, e.g. "gst_mismatch"),
   // no longer load-bearing for the UI (2026-09-23, items 7/8/10b).
@@ -203,11 +227,27 @@ export const opsApi = {
   // language (2026-09-24, item 5): the uploader's currently-selected UI
   // language (i18n.language) — read by classify.py to generate
   // description directly in that language instead of always English.
-  uploadDocument: (file: File, isPicture: boolean, language: string) => {
+  // visibility (2026-09-24, round 13): 'only_me' makes it a personal file.
+  uploadDocument: (file: File, isPicture: boolean, language: string, visibility: Visibility = 'company') => {
     const form = new FormData()
     form.append('file', file)
-    const params = new URLSearchParams({ source_channel: 'web', is_picture: String(isPicture), language })
+    const params = new URLSearchParams({
+      source_channel: 'web', is_picture: String(isPicture), language, visibility,
+    })
     return request<UploadResult>(`/api/documents?${params}`, { method: 'POST', body: form })
+  },
+
+  // Several photos of one document, in page order (2026-09-24, round 12,
+  // DECISIONS #78): the backend merges them into one PDF and runs it through
+  // the same pipeline as any upload — one document, one review item. The
+  // order of `pages` IS the page order. app/main.py::upload_document_pages.
+  uploadPages: (pages: File[], language: string, visibility: Visibility = 'company') => {
+    const form = new FormData()
+    for (const page of pages) form.append('files', page)
+    return request<UploadResult>(
+      `/api/documents/pages?${new URLSearchParams({ language, visibility })}`,
+      { method: 'POST', body: form },
+    )
   },
 
   listDocuments: () => request<DocumentRow[]>('/api/documents'),

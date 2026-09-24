@@ -6,7 +6,7 @@
  * along with it. Content moved verbatim; nothing here changed behavior. */
 
 import type { TFunction } from 'i18next'
-import { File, FileSpreadsheet, FileText, Image as ImageIcon, Mic, MicOff } from 'lucide-react'
+import { File, FileSpreadsheet, FileText, Image as ImageIcon, Lock, Mic, MicOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSpeechCaption } from '../../hooks/useSpeechCaption'
@@ -270,6 +270,14 @@ const FIELD_LABEL_KEY: Record<string, string> = {
   reference_no: 'ops.review.fieldLabel.referenceNo',
   due_on: 'ops.review.fieldLabel.dueOn',
   subject: 'ops.review.fieldLabel.subject',
+  // 2026-09-24 (round 12, DECISIONS #79): CompanyProfileFields
+  // (app/models.py) — the ACRA business profile's own extraction shape.
+  company_name: 'ops.review.fieldLabel.companyName',
+  uen: 'ops.review.fieldLabel.uen',
+  fye_month: 'ops.review.fieldLabel.fyeMonth',
+  fye_day: 'ops.review.fieldLabel.fyeDay',
+  gst_registered: 'ops.review.fieldLabel.gstRegistered',
+  registered_address: 'ops.review.fieldLabel.registeredAddress',
 }
 
 export function fieldLabel(t: TFunction, name: string): string {
@@ -283,6 +291,12 @@ export function fieldLabel(t: TFunction, name: string): string {
 // masked input below instead of a plain text box (2026-09-23, live
 // regression report item 4).
 export const DATE_FIELD_NAMES = new Set(['issued_on', 'due_on'])
+
+// A field extracted as a yes/no (app/models.py's CompanyProfileFields.
+// gst_registered — Provenance[bool | None]) — rendered as a Yes / No / Not
+// stated select instead of a text box showing the words "true"/"false", and
+// sent back as a real boolean (or null for "not stated"), not a string.
+export const BOOLEAN_FIELD_NAMES = new Set(['gst_registered'])
 
 // A native <input type="date">'s DISPLAYED format is controlled by the
 // browser/OS locale, not app code — HTML5 only guarantees the underlying
@@ -636,6 +650,21 @@ export function StatusPill({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-mono uppercase tracking-wide ${STATUS_TONE[status] ?? 'bg-canvas text-muted'}`}>
       {labelKey ? t(labelKey) : status}
+    </span>
+  )
+}
+
+/** "Only me" marker for a personal file (2026-09-24, round 13, DECISIONS
+ * #85). Only the uploader is ever sent such a document, so this is a reminder
+ * of why nobody else in the team can see it, not a filter. Same pill shape as
+ * StatusPill so the two read as a pair on a card. */
+export function PersonalFileBadge({ className }: { className?: string }) {
+  const { t } = useTranslation()
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-md bg-canvas px-2 py-0.5 text-[11px] font-mono uppercase tracking-wide text-ink ${className ?? ''}`}
+    >
+      <Lock size={11} aria-hidden="true" /> {t('ops.visibility.onlyMe')}
     </span>
   )
 }

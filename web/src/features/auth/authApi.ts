@@ -27,6 +27,54 @@ export interface Company {
   // viewing device's own local time (lib/dates.ts's dayInTimezone/
   // todayInTimezone).
   timezone: string
+  // 2026-09-24 (round 12, DECISIONS #79): the rest of what Company Settings
+  // edits (and an ACRA business profile can pre-fill). Optional on purpose —
+  // a backend older than these fields (the Vercel frontend deploys on push,
+  // the Lightsail backend only when redeployed) sends none of them; the form
+  // then treats them as blank rather than crashing.
+  uen?: string | null
+  gst_registered?: boolean
+  registered_address?: string | null
+  // 2026-09-24 (round 13, DECISIONS #85): true from a backend that keeps a
+  // document private when asked. Absent from an older one, which would ignore
+  // the request and upload the file company-visible — so the "Only me" choice
+  // is offered only when this is true (DECISIONS #82).
+  private_documents?: boolean
+}
+
+/** One row of GET /api/auth/companies: a company the caller belongs to and
+ * the role they hold THERE. group_* are set only on an owner membership
+ * (app/auth.py::list_memberships) — a non-owner never learns a group exists. */
+export interface MyCompany {
+  id: number
+  name: string
+  role: Role
+  group_id: number | null
+  group_name: string | null
+}
+
+/** Company Settings values read from a confirmed ACRA business profile
+ * (GET /api/documents/{id}/company-profile). null = the document did not
+ * state it (or it was unusable) — the form leaves that field as it is. */
+export interface CompanyProfilePrefill {
+  document_id: number
+  filename: string
+  name: string | null
+  uen: string | null
+  fye_month: number | null
+  fye_day: number | null
+  gst_registered: boolean | null
+  registered_address: string | null
+}
+
+export interface CompanyUpdate {
+  name?: string
+  fye_month?: number
+  fye_day?: number
+  timezone?: string
+  uen?: string
+  gst_registered?: boolean
+  registered_address?: string
 }
 
 export interface Session {
@@ -104,14 +152,31 @@ export const authApi = {
   // Company settings (2026-09-23, role/permission work) — owner-only
   // server-side (require_role("owner"), app/main.py::edit_company); the
   // frontend gates the page/fields the same way but the backend check is
-  // the real one. Scoped to name/fye_month/fye_day, same floor as the
-  // request body itself (CompanyEditRequest's own docstring).
-  updateCompany: (companyId: number, body: { name?: string; fye_month?: number; fye_day?: number; timezone?: string }) =>
+  // the real one. The body is CompanyEditRequest (app/models.py).
+  updateCompany: (companyId: number, body: CompanyUpdate) =>
     apiRequest<{ status: string }>(`/api/companies/${companyId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(body),
     }),
+
+  // Company switcher (2026-09-24, round 12, DECISIONS #77). The list is the
+  // caller's OWN memberships and nothing else; the switch is server-side,
+  // per session, and answers with the same shape as /me for the company now
+  // active — every data endpoint then scopes to it with no company id sent.
+  listCompanies: () => apiRequest<MyCompany[]>('/api/auth/companies', { headers: authHeaders() }),
+
+  switchCompany: (companyId: number) =>
+    apiRequest<{ user: User; company: Company; role: Role }>('/api/auth/switch-company', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ company_id: companyId }),
+    }),
+
+  // Owner-only, read-only (app/main.py::get_company_profile_prefill) — the
+  // values for the settings form; nothing is written until the owner saves.
+  getCompanyProfilePrefill: (documentId: number) =>
+    apiRequest<CompanyProfilePrefill>(`/api/documents/${documentId}/company-profile`, { headers: authHeaders() }),
 }
 
 export const ROLE_ORDER: Record<Role, number> = { viewer: 0, user: 1, admin: 2, owner: 3 }

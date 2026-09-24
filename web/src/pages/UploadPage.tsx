@@ -1,12 +1,16 @@
 /** Upload a document, watch it land in the review queue, confirm or
  * reject it — the former "Upload & Review" tab, now its own top-level
  * route (2026-09-23, header/nav restructure: promotes each OpsConsole tab
- * to a URL-addressable page). Content moved verbatim from OpsConsole.tsx;
- * data-fetching now comes from the shared useOpsData hook instead of
- * OpsConsole's own state. */
+ * to a URL-addressable page). Data-fetching comes from the shared
+ * useOpsData hook instead of OpsConsole's own state.
+ *
+ * 2026-09-24 (round 12, DECISIONS #78): the "is this a picture?" toggle and
+ * the single dropzone are now one two-way choice, DOCUMENT or PHOTO
+ * (features/upload/UploadChoice), and DOCUMENT accepts several photos as the
+ * ordered pages of one document (PageStager). The upload logic lives in
+ * useUploadFlow; this page composes. */
 
-import { Loader2, Upload } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -14,83 +18,69 @@ import { Toast, useToast } from '../components/ui/Toast'
 import { useAuth } from '../features/auth/AuthContext'
 import { RequireSession } from '../features/auth/RequireSession'
 import { roleAtLeast } from '../features/auth/authApi'
-import { normalizeImageForUpload } from '../lib/imageNormalize'
-import { onTriggerUploadPicker } from '../lib/uploadTrigger'
 import { OpsStatusBar } from '../features/ops/OpsStatusBar'
 import { ReviewQueueCard } from '../features/ops/ReviewQueueCard'
 import { VENDOR_NAMES_DATALIST_ID } from '../features/ops/opsShared'
-import { opsApi } from '../features/ops/opsApi'
+import { type UploadResult } from '../features/ops/opsApi'
 import { useOpsData } from '../features/ops/useOpsData'
+import { PageStager } from '../features/upload/PageStager'
+import { UploadChoice } from '../features/upload/UploadChoice'
+import { UploadVisibility } from '../features/upload/UploadVisibility'
+import { MAX_PAGES } from '../features/upload/uploadSelection'
+import { useUploadFlow } from '../features/upload/useUploadFlow'
+import { onTriggerUploadChoice } from '../lib/uploadTrigger'
 
 function UploadReviewContent() {
   const { t, i18n } = useTranslation()
-  const { role } = useAuth()
+  const { role, company } = useAuth()
   const { documents, reviewItems, apiUp, error, setError, refresh } = useOpsData()
 
-  const [busy, setBusy] = useState(false)
   const [justRejectedFilename, setJustRejectedFilename] = useState<string | null>(null)
-  const [isPictureUpload, setIsPictureUpload] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const choiceRef = useRef<HTMLDivElement>(null)
   const { toast, showToast, dismissToast } = useToast()
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
   const canResolve = role !== null && roleAtLeast(role, 'admin')
+  // "Only me" is offered only when the backend says it keeps a file private
+  // (company.private_documents). An older one ignores the request and would
+  // upload the file company-visible — a control that lies about privacy is
+  // worse than none (DECISIONS #82, #85).
+  const canChoosePrivate = company?.private_documents === true
 
-  // 2026-09-23 (live regression report, item 5): the bottom nav's raised
-  // Upload button (BottomNav.tsx) now dispatches this instead of
-  // navigating when already on this page — opens the same file picker
-  // the page's own dropzone uses, rather than being a dead tap.
+  // 2026-09-24 (item 1): no document auto-files at upload time anymore
+  // (DECISIONS #40 — every upload needs a human confirm, even a clean one),
+  // so "filed" isn't a real upload-time outcome; the toast reports what
+  // upload-time actually produces instead. review.reason still carries the
+  // same routine ('clean') vs flagged distinction the review card itself
+  // uses (isRoutine, ReviewQueueCard.tsx), just read here for one line.
+  const onOutcome = useCallback(
+    (result: UploadResult) => {
+      if (result.status === 'duplicate') showToast(t('ops.upload.toast.duplicate'), 'warning')
+      else if (result.status === 'quarantined') showToast(t('ops.upload.toast.quarantined'), 'warning')
+      else if (result.review?.reason === 'clean') showToast(t('ops.upload.toast.clean'), 'success')
+      else showToast(t('ops.upload.toast.needsReview'), 'success')
+    },
+    [showToast, t],
+  )
+  const onError = useCallback((message: string | null) => setError(message), [setError])
+
+  const flow = useUploadFlow({ language: i18n.language, refresh, onOutcome, onError })
+
+  // The bottom nav's raised Upload button, and "upload a replacement" below,
+  // bring the DOCUMENT / PHOTO choice into view and focus it: with two ways to
+  // upload there is no single picker for them to open.
+  const focusChoice = useCallback(() => {
+    choiceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    choiceRef.current?.querySelector('button')?.focus()
+  }, [])
   useEffect(() => {
     if (!canUpload) return
-    return onTriggerUploadPicker(() => fileInputRef.current?.click())
-  }, [canUpload])
+    return onTriggerUploadChoice(focusChoice)
+  }, [canUpload, focusChoice])
+
   // 2026-09-22 (DECISIONS #45): vendor_name autocomplete source — distinct
   // values already on this company's documents, no new endpoint.
   const vendorNames = [...new Set(documents.map((d) => d.vendor_name).filter((v): v is string => Boolean(v)))].sort()
-
-  const onUpload = async (file: File) => {
-    setBusy(true)
-    setError(null)
-    setJustRejectedFilename(null)
-    try {
-      const normalized = await normalizeImageForUpload(file)
-      // 2026-09-23 (live regression report, item 3): the result used to
-      // be kept and rendered in a "Last upload result" banner — removed
-      // outright, the review queue below already communicates the full
-      // outcome for a needs_review upload. Read again here (2026-09-24,
-      // item 1) only for the toast's one-line summary — not re-rendered
-      // in full the way the old banner was.
-      // 2026-09-24 (item 5): the uploader's currently-selected UI
-      // language, so classify.py generates its description directly in
-      // that language instead of always English.
-      const result = await opsApi.uploadDocument(normalized, isPictureUpload, i18n.language)
-      // 2026-09-23: back to the default (No) after every upload — the
-      // common case is still a real document, and leaving Yes stuck on
-      // would silently mis-tag the next, unrelated file.
-      setIsPictureUpload(false)
-      await refresh()
-      // 2026-09-24 (item 1): no document auto-files at upload time
-      // anymore (DECISIONS #40 — every upload needs a human confirm, even
-      // a clean one), so "filed" isn't a real upload-time outcome; the
-      // toast reports what upload-time actually produces instead —
-      // review.reason still carries the same routine ('clean') vs
-      // flagged distinction the review card itself uses (isRoutine,
-      // ReviewQueueCard.tsx), just read here for one line, not rebuilt.
-      if (result.status === 'duplicate') {
-        showToast(t('ops.upload.toast.duplicate'), 'warning')
-      } else if (result.status === 'quarantined') {
-        showToast(t('ops.upload.toast.quarantined'), 'warning')
-      } else if (result.review?.reason === 'clean') {
-        showToast(t('ops.upload.toast.clean'), 'success')
-      } else {
-        showToast(t('ops.upload.toast.needsReview'), 'success')
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <div>
@@ -107,57 +97,42 @@ function UploadReviewContent() {
 
       <div className="space-y-8">
         <Card className="p-6" interactive={false}>
-          {canUpload && (
-            <div className="mb-4">
-              {/* 2026-09-23 (DECISIONS #52): the primary human-facing
-                 control for the memory/picture case — automatic
-                 classification among the other three lanes (statutory/
-                 invoice/important) is untouched; this only ever decides
-                 "picture, yes or no." Default No — the common case is
-                 still a real document. */}
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-[13px] text-ink">{t('ops.upload.pictureQuestion')}</span>
-                <div className="flex gap-0.5 rounded-control border border-line p-0.5">
-                  {([false, true] as const).map((val) => {
-                    const active = isPictureUpload === val
-                    return (
-                      <button
-                        key={String(val)}
-                        type="button"
-                        onClick={() => setIsPictureUpload(val)}
-                        className={`rounded-md px-3 py-1 text-[13px] transition-colors ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
-                      >
-                        {val ? t('ops.upload.yes') : t('ops.upload.no')}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              {isPictureUpload && (
-                <p className="mt-1.5 text-[12px] text-muted">
-                  {t('ops.upload.pictureWarning')}
+          {canUpload ? (
+            <>
+              <UploadChoice
+                ref={choiceRef}
+                disabled={flow.busy}
+                onDocumentFiles={flow.chooseDocumentFiles}
+                onPhotoFile={flow.uploadPhoto}
+              />
+              {canChoosePrivate && (
+                <UploadVisibility
+                  onlyMe={flow.visibility === 'only_me'}
+                  disabled={flow.busy}
+                  onChange={(onlyMe) => flow.setVisibility(onlyMe ? 'only_me' : 'company')}
+                />
+              )}
+              {flow.busy && !flow.staged && (
+                <p className="mt-3 text-[13px] text-muted" role="status">{t('ops.upload.uploading')}</p>
+              )}
+              {flow.selectionError && !flow.staged && (
+                <p role="alert" className="mt-3 text-[13px] text-red-700">
+                  {t(`ops.upload.pages.error.${flow.selectionError}`, { max: MAX_PAGES })}
                 </p>
               )}
-            </div>
-          )}
-
-          {canUpload ? (
-            <label className="flex h-24 cursor-pointer items-center justify-center gap-2 rounded-card border border-dashed border-line text-sm text-muted hover:border-ink/40">
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-              {busy ? t('ops.upload.uploading') : t('ops.upload.clickToUpload')}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf,image/*"
-                className="hidden"
-                disabled={busy}
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) void onUpload(file)
-                  e.target.value = ''
-                }}
-              />
-            </label>
+              {flow.staged && (
+                <PageStager
+                  files={flow.staged}
+                  busy={flow.busy}
+                  error={flow.selectionError}
+                  onMove={flow.move}
+                  onRemove={flow.remove}
+                  onAddMore={flow.addPages}
+                  onSubmit={() => void flow.submitPages()}
+                  onCancel={flow.cancelStaging}
+                />
+              )}
+            </>
           ) : (
             <p className="flex h-24 items-center justify-center rounded-card border border-dashed border-line text-sm text-muted">
               {t('ops.upload.viewerCantUpload')}
@@ -167,8 +142,9 @@ function UploadReviewContent() {
           {/* 2026-09-23 (DECISIONS #50): closes the loop after a reject
              — it used to just disappear from the queue with no
              indication of where it went or what to do next. Simple
-             inline prompt, not a modal — "Upload a replacement" opens
-             the file picker directly rather than just scrolling to it. */}
+             inline prompt, not a modal — "Upload a replacement" brings
+             the DOCUMENT / PHOTO choice into view rather than picking a
+             kind for the person. */}
           {justRejectedFilename && canUpload && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-canvas p-4 text-[13px]">
               <p className="text-ink">
@@ -179,7 +155,7 @@ function UploadReviewContent() {
                 variant="secondary"
                 onClick={() => {
                   setJustRejectedFilename(null)
-                  fileInputRef.current?.click()
+                  focusChoice()
                 }}
               >
                 {t('ops.upload.uploadReplacement')}
@@ -198,7 +174,10 @@ function UploadReviewContent() {
                 <ReviewQueueCard
                   key={item.id}
                   item={item}
-                  canResolve={canResolve}
+                  // The server's per-item answer wins where it sends one (an
+                  // uploader may resolve their own personal file); an older
+                  // backend sends none, and the role check is what it always was.
+                  canResolve={item.can_resolve ?? canResolve}
                   onResolved={() => void refresh()}
                   onRejected={setJustRejectedFilename}
                   onPoll={() => void refresh()}

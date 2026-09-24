@@ -7,6 +7,9 @@ import { ButtonLink } from '../components/ui/ButtonLink'
 import { Logo } from '../components/ui/Logo'
 import { useAuth } from '../features/auth/AuthContext'
 import { roleAtLeast, type Role } from '../features/auth/authApi'
+import { CompanySwitcher } from '../features/auth/CompanySwitcher'
+import { useMyCompanies } from '../features/auth/MyCompaniesContext'
+import { hasSwitchableCompanies } from '../features/auth/companySwitcherModel'
 import { roleLabel } from '../features/ops/opsShared'
 import { useScrolled } from '../hooks/useScrolled'
 import { cn } from '../lib/cn'
@@ -109,6 +112,11 @@ function UserMenu() {
             <p className="truncate text-[12px] text-muted">{user.email}</p>
             {role && <Badge mono className="mt-1">{roleLabel(t, role)}</Badge>}
           </div>
+          {/* Company switcher (2026-09-24, round 12): renders nothing for
+             anyone with fewer than two companies, so the menu is unchanged
+             for nearly everyone. The phone's only home for it — there is no
+             room in the top bar at 375px. */}
+          <CompanySwitcher className="border-b border-line px-3 py-2" />
           {/* Company Settings (2026-09-23): the desktop inline nav already
              gets this entry (visibleNavRoutes below); the bottom nav
              (mobile, signed-in) has no room for a sixth fixed slot, so
@@ -145,6 +153,14 @@ export function Header({ current }: { current: ResolvedRoute }) {
   const { status, user, role, logout } = useAuth()
   const { t } = useTranslation()
   const navRoutes = status === 'signed-in' ? visibleNavRoutes(role) : TAB_ROUTES
+  // Someone who can switch company gets the compact account menu (the switcher
+  // lives in it) below xl instead of the inline name + Log Out, and the inline
+  // switcher itself only from xl up. The desktop header is already full at
+  // tablet widths without a switcher (a six-item nav for admin/owner overlaps
+  // the language select and Get Started between ~640 and ~900px — found
+  // 2026-09-24, not fixed here); a 180px select inline would have pushed a
+  // multi-company owner's header into overlap up to 1024px too.
+  const switchable = hasSwitchableCompanies(useMyCompanies())
 
   return (
     <header
@@ -193,16 +209,23 @@ export function Header({ current }: { current: ResolvedRoute }) {
           <LanguageSwitcher />
           {status === 'signed-in' && user ? (
             <>
-              <Link href={routeHref('upload')} className="hidden truncate text-[13px] text-muted sm:block sm:max-w-[160px]">
+              {/* Wide-desktop home of the company switcher (narrower screens
+                 use the account menu) — nothing renders for a one-company
+                 user. */}
+              <CompanySwitcher className="hidden max-w-[180px] xl:block" />
+              <Link
+                href={routeHref('upload')}
+                className={cn('hidden truncate text-[13px] text-muted sm:max-w-[160px]', switchable ? 'xl:block' : 'sm:block')}
+              >
                 {user.name || user.email}
               </Link>
               <button
                 onClick={() => void logout().then(() => navigate(routeHref('home')))}
-                className="hidden rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:block sm:px-3"
+                className={cn('hidden rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3', switchable ? 'xl:block' : 'sm:block')}
               >
                 {t('header.logOut')}
               </button>
-              <span className="sm:hidden">
+              <span className={switchable ? 'xl:hidden' : 'sm:hidden'}>
                 <UserMenu />
               </span>
             </>

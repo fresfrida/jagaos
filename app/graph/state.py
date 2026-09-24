@@ -24,6 +24,11 @@ class PipelineState(TypedDict, total=False):
     # it (confirmed by comparing against is_picture above, which already
     # worked precisely because it's declared here).
     language: str
+    # 2026-09-24 (round 13, DECISIONS #85): "company" | "only_me". Must be
+    # declared here for the same reason `language` is — LangGraph drops any
+    # state key that is not on this TypedDict. Read by derive_events, which
+    # never proposes a company event from a personal file.
+    visibility: str
 
     # suffixed _result to avoid colliding with the node names "classify" /
     # "extract" / "verify" — LangGraph forbids a node name equal to a state key

@@ -204,3 +204,122 @@ def test_diagnose_raw_tool_call_shape():
     print(r.tool_calls[0]["function"]["arguments"])
     print("--- finish info ---")
     print("input_tokens", r.input_tokens, "output_tokens", r.output_tokens)
+
+
+# --- round 12 (DECISIONS #79): a real ACRA-shaped PDF through the real pipeline ---
+
+
+def _upload_sample_and_confirm(pdf_name: str, email: str) -> tuple[dict, dict, int]:
+    """Uploads evals/samples/files/<pdf_name> through the real POST
+    /api/documents (ingest, real gateway classify + extract, verify), has the
+    owner confirm it in the review queue, and returns (extracted fields the
+    review card would show, the prefill endpoint's answer, document id)."""
+    import json
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    owner = client.post(
+        "/api/auth/dev-login",
+        json={"email": email, "company_name": "Old Name Pte Ltd", "fye_month": 12, "fye_day": 31},
+    ).json()
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+    sample = Path(__file__).parent.parent / "evals" / "samples" / "files" / pdf_name
+    resp = client.post(
+        "/api/documents", headers=headers, files={"file": (pdf_name, sample.read_bytes(), "application/pdf")},
+    )
+    assert resp.status_code == 200, resp.text
+    document_id = resp.json()["document_id"]
+
+    item = next(i for i in client.get("/api/review", headers=headers).json() if i["document_id"] == document_id)
+    proposed = json.loads(item["proposed_json"])
+    resolve = client.post(
+        f"/api/review/{item['id']}/resolve?thread_id={item['thread_id']}",
+        json={"action": "confirm", "corrected_fields": {}}, headers=headers,
+    )
+    assert resolve.status_code == 200, resolve.text
+    prefill = client.get(f"/api/documents/{document_id}/company-profile", headers=headers)
+    assert prefill.status_code == 200, prefill.text
+    return proposed, prefill.json(), document_id
+
+
+def test_acra_business_profile_extracts_through_the_real_gateway():
+    from app.db import get_conn
+    from app.graph.classify import is_company_profile_doc_type
+
+    proposed, prefill, document_id = _upload_sample_and_confirm("acra_business_profile.pdf", "liveacra@example.com")
+
+    with get_conn() as conn:
+        doc = conn.execute("SELECT lane, doc_type, bucket FROM document WHERE id = ?", (document_id,)).fetchone()
+    assert doc["lane"] == "statutory" and doc["bucket"] == "Statutory", dict(doc)
+    assert is_company_profile_doc_type(doc["doc_type"]), doc["doc_type"]
+
+    # The company-profile shape, not the filing-notice one — chosen by the real model's own doc_type.
+    assert "company_name" in proposed and "reference_no" not in proposed, proposed
+
+    assert "HARBOURLIGHT" in prefill["name"].upper()
+    assert prefill["uen"] == "202412345K"
+    assert (prefill["fye_month"], prefill["fye_day"]) == (6, 30)
+    assert prefill["gst_registered"] is True
+    assert "ROBINSON" in prefill["registered_address"].upper() and "048547" in prefill["registered_address"]
+
+
+def test_a_sparse_acra_profile_leaves_the_missing_values_null_through_the_real_gateway():
+    _, prefill, _ = _upload_sample_and_confirm("acra_business_profile_sparse.pdf", "livesparse@example.com")
+
+    assert "HARBOURLIGHT" in prefill["name"].upper() and prefill["uen"] == "202412345K"
+    # The document states neither a financial year end nor a GST status; the
+    # model was told never to infer them (from the incorporation date, say).
+    assert prefill["fye_month"] is None and prefill["fye_day"] is None, prefill
+    assert prefill["gst_registered"] in (None, False) and prefill["gst_registered"] is not True, prefill
+
+
+# --- round 13 (DECISIONS #84): the confirm -> event chain against the real gateway ---
+
+
+def test_a_confirmed_statutory_notice_produces_an_event_through_the_real_gateway():
+    """derive_events sat dead from 2026-09-22 (a stale needs_review guard, since
+    DECISIONS #40 made that flag permanently true). The mocked-model twin of this is
+    tests/test_derive_events_pipeline.py; this one has a real model classify, extract
+    and propose the event, and a person confirm it."""
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from app.db import get_conn
+    from app.main import app
+
+    client = TestClient(app)
+    owner = client.post(
+        "/api/auth/dev-login",
+        json={"email": "liveevents@example.com", "company_name": "Live Events Pte Ltd", "fye_month": 12, "fye_day": 31},
+    ).json()
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+    notice = Path(__file__).parent.parent / "evals" / "demo_corpus" / "files" / "03_notice_office_change.pdf"
+
+    uploaded = client.post(
+        "/api/documents", headers=headers, files={"file": (notice.name, notice.read_bytes(), "application/pdf")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    document_id = uploaded.json()["document_id"]
+    with get_conn() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM event").fetchone()[0] == 0, "nothing before a person confirms"
+        assert conn.execute("SELECT lane FROM document WHERE id = ?", (document_id,)).fetchone()["lane"] == "statutory"
+
+    item = next(i for i in client.get("/api/review", headers=headers).json() if i["document_id"] == document_id)
+    resolved = client.post(
+        f"/api/review/{item['id']}/resolve?thread_id={item['thread_id']}",
+        json={"action": "confirm", "corrected_fields": {}}, headers=headers,
+    )
+    assert resolved.status_code == 200, resolved.text
+
+    with get_conn() as conn:
+        events = [dict(r) for r in conn.execute("SELECT kind, occurred_on, source_document_id FROM event").fetchall()]
+        ran = [r["decision"] for r in conn.execute(
+            "SELECT decision FROM trace WHERE document_id = ? AND node = 'derive_events'", (document_id,)).fetchall()]
+    assert ran == ["proposed"], f"derive_events did not run and propose: {ran}"
+    assert events and events[0]["kind"] == "office_move" and events[0]["source_document_id"] == document_id, events
+    assert events[0]["occurred_on"] == "2026-03-01"

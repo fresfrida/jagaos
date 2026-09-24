@@ -26,8 +26,9 @@ from typing import get_args
 from pydantic import ValidationError
 
 from app.db import DB_PATH, get_conn, reindex_document_search
+from app.graph.derive_expectations import _slug
 from app.graph.state import PipelineState
-from app.guards.injection import UNTRUSTED_TEMPLATE, scan
+from app.guards.injection import scan, untrusted_prompt
 from app.llm import MODEL_NAME, call
 from app.models import BucketName, ClassifyResult, to_tool
 
@@ -84,7 +85,9 @@ formal filing purpose).
 doc_type:
 - For lane=statutory: a specific free-text type naming the actual filing
   (e.g. "ACRA Certificate of Incorporation", "Notice of Change of
-  Registered Office").
+  Registered Office"). A company's own business profile or BizFile — the
+  ACRA printout stating its registered name, UEN, registered address and
+  officers — is statutory with doc_type exactly "{company_profile_doc_type}".
 - For lane=invoice, important, or memory: pick exactly one of invoice,
   receipt, PO, quotation, delivery_order, contract, photo, other.
 
@@ -127,6 +130,23 @@ Also write:
 Call classify_document with your answer."""
 
 
+# 2026-09-24 (round 12, DECISIONS #79): the statutory doc_type for a company's
+# OWN identity document (an ACRA business profile / BizFile). doc_type is free
+# text in the statutory lane (DECISIONS #45), so this is a convention the
+# prompt asks for and is_company_profile_doc_type() matches leniently — the
+# model may write "ACRA BizFile business profile" and still route correctly.
+# Defined once here and imported by app/graph/extract.py (which picks the
+# extraction shape by it) and app/rules/company_profile.py (which decides who
+# may pre-fill company settings from it), so the phrase cannot drift.
+COMPANY_PROFILE_DOC_TYPE = "ACRA Business Profile"
+_COMPANY_PROFILE_SLUGS = ("business_profile", "bizfile")
+
+
+def is_company_profile_doc_type(doc_type: str | None) -> bool:
+    slug = _slug(doc_type or "")
+    return any(marker in slug for marker in _COMPANY_PROFILE_SLUGS)
+
+
 # Quoted when a name has a space, matching how the prompt has always written
 # "Memory Lane". Built from the BucketName type so the prompt cannot list a
 # bucket the model's answer would then fail validation against.
@@ -140,6 +160,7 @@ def render_system_prompt(language_name: str) -> str:
         language_name=language_name,
         unreadable_example=UNREADABLE_EXAMPLE_EN,
         bucket_names=BUCKET_NAMES_FOR_PROMPT,
+        company_profile_doc_type=COMPANY_PROFILE_DOC_TYPE,
     )
 
 
@@ -179,7 +200,7 @@ def classify(state: PipelineState) -> PipelineState:
                    "description_en": "Untitled photo",
                    "bucket": "Memory Lane", "vendor_name": None}
     else:
-        user = UNTRUSTED_TEMPLATE.format(document_text=text[:12000])
+        user = untrusted_prompt(text)
         system = render_system_prompt(language_name)
         # "haiku" is rejected by the gateway for this team's key — confirmed
         # live 2026-09-21 (GAPS.md's new §11): "Only the approved model is

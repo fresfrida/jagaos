@@ -11,6 +11,7 @@ import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { ApiError } from '../../lib/apiClient'
 import {
+  BOOLEAN_FIELD_NAMES,
   BucketField,
   DATE_FIELD_NAMES,
   descriptionFor,
@@ -24,6 +25,7 @@ import {
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
+  PersonalFileBadge,
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type ReviewItem } from './opsApi'
@@ -232,7 +234,12 @@ export function ReviewQueueCard({
           if (edits[name] !== originalValue(name)) {
             const field = proposed[name]
             const isNumeric = isProvenance(field) && typeof field.value === 'number'
-            correctedFields[name] = isNumeric ? Number(edits[name]) : edits[name]
+            if (BOOLEAN_FIELD_NAMES.has(name)) {
+              // Yes / No / Not stated — a real boolean (null for "not stated"), never the string "true".
+              correctedFields[name] = edits[name] === '' ? null : edits[name] === 'true'
+            } else {
+              correctedFields[name] = isNumeric ? Number(edits[name]) : edits[name]
+            }
           }
         }
         const documentEdits: {
@@ -352,6 +359,9 @@ export function ReviewQueueCard({
          render alongside a "no issues found"/isRoutine state, since
          app/graph/verify.py's file_missing check overrides every other
          reason rather than joining them. */}
+      {/* 2026-09-24 (round 13, DECISIONS #85): a personal file's card is only
+         ever sent to its uploader — say why nobody else on the team sees it. */}
+      {item.document_visibility === 'only_me' && <PersonalFileBadge className="mb-2" />}
       <ReviewReasons
         reasons={reasons}
         className={`text-[13px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}
@@ -487,10 +497,22 @@ export function ReviewQueueCard({
               // underlying value is ISO), so this is a real custom input,
               // not the native control.
               const isDateField = DATE_FIELD_NAMES.has(name)
+              const isBooleanField = BOOLEAN_FIELD_NAMES.has(name)
               return (
                 <label key={name} className="text-[12px] text-muted">
                   {fieldLabel(t, name)}
-                  {isDateField ? (
+                  {isBooleanField ? (
+                    <select
+                      value={edits[name] ?? ''}
+                      disabled={!canResolve}
+                      onChange={(e) => setEdits((prev) => ({ ...prev, [name]: e.target.value }))}
+                      className={`mt-1 ${FIELD_CLASS}`}
+                    >
+                      <option value="">{t('ops.review.boolean.notStated')}</option>
+                      <option value="true">{t('ops.review.boolean.yes')}</option>
+                      <option value="false">{t('ops.review.boolean.no')}</option>
+                    </select>
+                  ) : isDateField ? (
                     <input
                       value={isoToDmy(edits[name] ?? '')}
                       disabled={!canResolve}

@@ -27,16 +27,35 @@ import json
 from pydantic import ValidationError
 
 from app.db import DB_PATH, get_conn, reindex_document_search
+from app.graph.classify import is_company_profile_doc_type
 from app.graph.derive_expectations import _slug
 from app.graph.state import PipelineState
-from app.guards.injection import UNTRUSTED_TEMPLATE
+from app.guards.injection import untrusted_prompt
 from app.llm import MODEL_NAME, call
-from app.models import InvoiceFields, StatutoryFields, to_tool
+from app.models import CompanyProfileFields, InvoiceFields, StatutoryFields, to_tool
 
 TOOLS_BY_LANE = {
     "invoice": (InvoiceFields, "extract_invoice_fields", "Extract invoice fields with provenance for every value."),
     "statutory": (StatutoryFields, "extract_statutory_fields", "Extract statutory-letter fields with provenance for every value."),
 }
+
+# 2026-09-24 (round 12, DECISIONS #79): a company's own business profile is
+# statutory-lane but is NOT a filing notice — StatutoryFields has nowhere to
+# put its name/UEN/address. It gets its own shape, chosen by doc_type inside
+# the lane (classify.py's COMPANY_PROFILE_DOC_TYPE), extracted through the
+# same call()/tool-schema path as every other document — nothing here parses
+# the text by hand.
+COMPANY_PROFILE_TOOL = (
+    CompanyProfileFields, "extract_company_profile_fields",
+    "Extract a company's own identity fields from its ACRA business profile, with provenance for every value.",
+)
+
+
+def _extractor_for(classify_result: dict) -> tuple | None:
+    lane = classify_result["lane"]
+    if lane == "statutory" and is_company_profile_doc_type(classify_result.get("doc_type")):
+        return COMPANY_PROFILE_TOOL
+    return TOOLS_BY_LANE.get(lane)
 
 SYSTEM = """You extract fields from a Singapore SME document. Every value
 must carry a confidence (0-1) and, where possible, a page and character
@@ -60,7 +79,21 @@ For invoices specifically:
 - Every extracted field VALUE (names, dates, amounts, addresses, tax
   labels) must be copied exactly as it appears on the document — never
   translated, converted, or normalized to a different language or
-  currency, even if the rest of your output is in another language."""
+  currency, even if the rest of your output is in another language.
+
+For a company's own ACRA business profile / BizFile specifically:
+- company_name: the registered name exactly as printed, including "Pte. Ltd."
+  or "Private Limited" as written.
+- uen: the Unique Entity Number exactly as printed.
+- fye_month and fye_day: the financial year end as two integers — month 1-12
+  and day 1-31 (a year end of "31 December" is fye_month 12, fye_day 31). Leave
+  both null if the document does not state a financial year end; never infer
+  one from an incorporation date or an AGM date.
+- gst_registered: true only if the document itself says the company is GST
+  registered, false only if it says it is not, otherwise null. Never guess.
+- registered_address: the full registered office address, as one line.
+- Any of these the document does not contain is null with low confidence,
+  never invented."""
 
 
 def _provenance_value(result: dict, field: str) -> object | None:
@@ -78,13 +111,13 @@ def _is_this_company(vendor_name: str, company_name: str) -> bool:
 
 def extract(state: PipelineState) -> PipelineState:
     lane = state["classify_result"]["lane"]
-    tool_info = TOOLS_BY_LANE.get(lane)
+    tool_info = _extractor_for(state["classify_result"])
     if tool_info is None:
         return {"extract_result": {"skipped": True, "reason": f"no extractor for lane={lane}"}}
 
     model_cls, tool_name, description = tool_info
     tool = to_tool(model_cls, tool_name, description)
-    user = UNTRUSTED_TEMPLATE.format(document_text=state.get("text", "")[:12000])
+    user = untrusted_prompt(state.get("text", ""))
 
     llm_result = call(MODEL_NAME, SYSTEM, user, tools=[tool],
                        tool_choice={"type": "function", "function": {"name": tool_name}})

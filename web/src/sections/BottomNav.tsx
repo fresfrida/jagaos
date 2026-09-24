@@ -24,14 +24,16 @@
  * **Center button no longer a dead tap when already on /upload
  * (2026-09-23, live regression report item 5)** — it used to be a plain
  * <Link>, so tapping it while already on the page it navigates to did
- * nothing, next to the page's own working dropzone. Now opens the file
- * picker directly in that case instead (lib/uploadTrigger.ts). */
+ * nothing, next to the page's own working dropzone. Now brings the page's
+ * DOCUMENT / PHOTO choice into view and focuses it in that case instead
+ * (lib/uploadTrigger.ts — it opened the file picker directly until
+ * 2026-09-24, when the single dropzone became a two-way choice). */
 
 import { CalendarDays, FileText, Search, Tag, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../features/auth/AuthContext'
 import { cn } from '../lib/cn'
-import { triggerUploadPicker } from '../lib/uploadTrigger'
+import { triggerUploadChoice } from '../lib/uploadTrigger'
 import { Link } from '../router/Link'
 import { NAV_LABEL_KEYS, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
 
@@ -126,10 +128,11 @@ export function BottomNav({ current }: { current: ResolvedRoute }) {
           {/* 2026-09-23 (live regression report, item 5): this used to be
              a plain <Link> — pure navigation, so tapping it while
              already on /upload did nothing, next to the page's own
-             working dropzone. When already there, it now opens the file
-             picker directly instead (lib/uploadTrigger.ts's window
-             event, caught by UploadPage.tsx) rather than just navigating
-             to the page it's already on. */}
+             working dropzone. When already there, it now scrolls to and
+             focuses the page's DOCUMENT / PHOTO choice instead
+             (lib/uploadTrigger.ts's window event, caught by
+             UploadPage.tsx) rather than just navigating to the page it's
+             already on. */}
           {/* 2026-09-23 (live regression report, item 9): grown proportionally
              with NavItem's own increase (h-12/-mt-5 -> h-14/-mt-6, icon
              20 -> 22) so the raised button doesn't shrink relative to the
@@ -137,7 +140,7 @@ export function BottomNav({ current }: { current: ResolvedRoute }) {
           {uploadActive ? (
             <button
               type="button"
-              onClick={() => triggerUploadPicker()}
+              onClick={() => triggerUploadChoice()}
               aria-label={t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
               className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-ink text-white shadow-md transition-colors"
             >

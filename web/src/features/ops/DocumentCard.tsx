@@ -12,6 +12,8 @@ import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { ApiError } from '../../lib/apiClient'
 import { formatShortDate, localeFor } from '../../lib/dates'
+import { Link } from '../../router/Link'
+import { routeHref } from '../../router/routes'
 import {
   BucketField,
   descriptionFor,
@@ -20,6 +22,7 @@ import {
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
+  PersonalFileBadge,
   bucketLabel,
   docTypeLabel,
   useDocumentBlobUrl,
@@ -256,6 +259,7 @@ export function DocumentCard({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <StatusPill status={doc.status} />
+          {doc.visibility === 'only_me' && <PersonalFileBadge />}
           {doc.bucket && <Badge tone="neutral">{bucketLabel(t, doc.bucket)}</Badge>}
         </div>
       </div>
@@ -329,6 +333,20 @@ export function DocumentCard({
           >
             {t('ops.documents.edit')}
           </button>
+        )}
+        {/* Pre-fill company settings (2026-09-24, round 12, DECISIONS #79):
+           offered only when the server says so for THIS caller
+           (can_prefill_company — an owner, on a confirmed ACRA business
+           profile). Absent from an older backend means not offered, which
+           is what the app did before. It only opens the settings form
+           pre-filled; nothing is saved until the owner saves it there. */}
+        {doc.can_prefill_company === true && (
+          <Link
+            href={`${routeHref('company-settings')}?prefill=${doc.id}`}
+            className="text-[12px] font-mono uppercase tracking-wide text-ink underline underline-offset-2 hover:text-muted"
+          >
+            {t('ops.documents.prefillCompany')}
+          </Link>
         )}
         {/* No doc.status !== 'archived' guard needed (2026-09-23, DECISIONS
            #53) — the server never sends an archived document to this list

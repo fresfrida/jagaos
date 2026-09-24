@@ -19,7 +19,16 @@
     "fyeMonthLabel": "Bulan akhir tahun kewangan",
     "fyeDayLabel": "Hari akhir tahun kewangan",
     "readOnlyNotice": "Hanya pemilik boleh mengubah ini — hubungi mereka jika sesuatu perlu dikemas kini.",
-    "saved": "Disimpan."
+    "saved": "Disimpan.",
+    "uenLabel": "UEN",
+    "gstLabel": "Berdaftar GST",
+    "addressLabel": "Alamat berdaftar",
+    "prefill": {
+      "banner": "Diisi terlebih dahulu daripada {{filename}}. Belum disimpan — semak nilai, betulkan yang salah, kemudian Simpan.",
+      "loading": "Membaca profil perniagaan…",
+      "failed": "Tidak dapat mengisi terlebih dahulu daripada dokumen itu.",
+      "discard": "Buang pengisian awal"
+    }
   },
   "header": {
     "primaryNav": "Navigasi Utama",
@@ -35,7 +44,8 @@
       "companyFiles": "Fail Syarikat",
       "upload": "Muat Naik",
       "companySettings": "Tetapan Syarikat"
-    }
+    },
+    "switchCompany": "Tukar syarikat"
   },
   "auth": {
     "login": {
@@ -89,11 +99,7 @@
       "obligations": "Kewajipan"
     },
     "upload": {
-      "pictureQuestion": "Adakah ini gambar atau dokumen?",
-      "yes": "Gambar",
-      "no": "Dokumen",
-      "pictureWarning": "Pilihan \"Gambar\" hanya menghasilkan kapsyen ringkas, bukan pengekstrakan data terperinci — pilih \"Dokumen\" untuk invois, borang dan dokumen rasmi lain.",
-      "clickToUpload": "Klik untuk muat naik PDF atau imej",
+      "pictureQuestion": "Apa yang anda muat naik?",
       "uploading": "Sedang memuat naik…",
       "viewerCantUpload": "Pelihat tidak boleh memuat naik dokumen — hubungi admin atau pemilik.",
       "uploadReplacement": "Muat naik gantian",
@@ -103,6 +109,34 @@
         "needsReview": "Muat naik diterima. Ditanda untuk semakan — lihat di bawah.",
         "quarantined": "Muat naik disekat untuk semakan keselamatan — lihat di bawah.",
         "duplicate": "Fail ini sudah dimuat naik sebelum ini."
+      },
+      "choice": {
+        "document": {
+          "title": "Dokumen",
+          "hint": "Invois, resit, surat, kontrak — PDF atau foto setiap halaman."
+        },
+        "photo": {
+          "title": "Gambar",
+          "hint": "Tempat, benda atau orang — bukan dokumen. Kapsyen sahaja, tiada pengekstrakan data."
+        }
+      },
+      "pages": {
+        "heading": "{{count}} halaman dalam satu dokumen",
+        "hint": "Semak susunan — halaman akan digabungkan menjadi satu dokumen, halaman 1 dahulu.",
+        "pageLabel": "Halaman {{n}}",
+        "moveUp": "Alihkan halaman {{n}} ke atas",
+        "moveDown": "Alihkan halaman {{n}} ke bawah",
+        "remove": "Buang halaman {{n}}",
+        "addMore": "Tambah lagi halaman",
+        "submit": "Muat naik {{count}} halaman sebagai satu dokumen",
+        "error": {
+          "mixed": "Pilih satu PDF atau beberapa foto — PDF tidak boleh digabungkan dengan foto.",
+          "tooMany": "Satu dokumen boleh mempunyai paling banyak {{max}} halaman."
+        }
+      },
+      "visibility": {
+        "label": "Hanya saya",
+        "hint": "Hanya anda boleh melihatnya — pentadbir dan pemilik juga tidak."
       }
     },
     "review": {
@@ -156,7 +190,18 @@
         "docType": "Jenis dokumen",
         "referenceNo": "No. rujukan",
         "dueOn": "Tarikh akhir",
-        "subject": "Perkara"
+        "subject": "Perkara",
+        "companyName": "Nama syarikat",
+        "uen": "UEN",
+        "fyeMonth": "Bulan akhir tahun kewangan",
+        "fyeDay": "Hari akhir tahun kewangan",
+        "gstRegistered": "Berdaftar GST",
+        "registeredAddress": "Alamat berdaftar"
+      },
+      "boolean": {
+        "yes": "Ya",
+        "no": "Tidak",
+        "notStated": "Tidak dinyatakan"
       }
     },
     "companyFiles": {
@@ -194,7 +239,8 @@
         "cost": "Kos",
         "decision": "Keputusan"
       },
-      "noDocumentDate": "Tiada tarikh dokumen"
+      "noDocumentDate": "Tiada tarikh dokumen",
+      "prefillCompany": "Isi tetapan syarikat daripada ini"
     },
     "dates": {
       "uploadDate": "Tarikh muat naik",
@@ -263,6 +309,9 @@
       "high": "tinggi",
       "medium": "sederhana",
       "low": "rendah"
+    },
+    "visibility": {
+      "onlyMe": "Hanya saya"
     }
   }
 }

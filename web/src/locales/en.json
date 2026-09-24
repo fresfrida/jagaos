@@ -27,7 +27,8 @@
       "companyFiles": "Company Files",
       "upload": "Upload",
       "companySettings": "Company Settings"
-    }
+    },
+    "switchCompany": "Switch company"
   },
   "companySettings": {
     "heading": "Company Settings",
@@ -35,7 +36,16 @@
     "fyeMonthLabel": "FYE month",
     "fyeDayLabel": "FYE day",
     "readOnlyNotice": "Only the owner can change these — ask them if something needs updating.",
-    "saved": "Saved."
+    "saved": "Saved.",
+    "uenLabel": "UEN",
+    "gstLabel": "GST registered",
+    "addressLabel": "Registered address",
+    "prefill": {
+      "banner": "Pre-filled from {{filename}}. Nothing is saved yet — review the values, change anything that's wrong, then Save.",
+      "loading": "Reading the business profile…",
+      "failed": "Couldn't pre-fill from that document.",
+      "discard": "Discard pre-fill"
+    }
   },
   "auth": {
     "login": {
@@ -90,10 +100,6 @@
     },
     "upload": {
       "pictureQuestion": "What are you uploading?",
-      "yes": "Photo",
-      "no": "Document",
-      "pictureWarning": "Photos get a simple caption instead of detailed data extraction — choose Document for invoices, forms, and other official paperwork.",
-      "clickToUpload": "Click to upload a PDF or image",
       "uploading": "Uploading…",
       "viewerCantUpload": "Viewers can't upload documents — ask an admin or owner.",
       "uploadReplacement": "Upload a replacement",
@@ -103,6 +109,34 @@
         "needsReview": "Upload received. Flagged for review — see below.",
         "quarantined": "Upload blocked for safety review — see below.",
         "duplicate": "This file was already uploaded."
+      },
+      "choice": {
+        "document": {
+          "title": "Document",
+          "hint": "Invoices, receipts, letters, contracts — PDF or photos of the pages."
+        },
+        "photo": {
+          "title": "Photo",
+          "hint": "A place, thing or people — not paperwork. Caption only, no data extraction."
+        }
+      },
+      "pages": {
+        "heading": "{{count}} pages in one document",
+        "hint": "Check the order — they'll be merged into a single document, page 1 first.",
+        "pageLabel": "Page {{n}}",
+        "moveUp": "Move page {{n}} up",
+        "moveDown": "Move page {{n}} down",
+        "remove": "Remove page {{n}}",
+        "addMore": "Add more pages",
+        "submit": "Upload {{count}} pages as one document",
+        "error": {
+          "mixed": "Choose either one PDF or several photos — a PDF can't be combined with photos.",
+          "tooMany": "A document can have at most {{max}} pages."
+        }
+      },
+      "visibility": {
+        "label": "Only me",
+        "hint": "Only you can see it — not admins, not the owner."
       }
     },
     "review": {
@@ -156,7 +190,18 @@
         "docType": "Doc type",
         "referenceNo": "Reference no.",
         "dueOn": "Due date",
-        "subject": "Subject"
+        "subject": "Subject",
+        "companyName": "Company name",
+        "uen": "UEN",
+        "fyeMonth": "FYE month",
+        "fyeDay": "FYE day",
+        "gstRegistered": "GST registered",
+        "registeredAddress": "Registered address"
+      },
+      "boolean": {
+        "yes": "Yes",
+        "no": "No",
+        "notStated": "Not stated"
       }
     },
     "companyFiles": {
@@ -194,7 +239,8 @@
         "tokens": "Tokens in/out",
         "cost": "Cost",
         "decision": "Decision"
-      }
+      },
+      "prefillCompany": "Pre-fill company settings from this"
     },
     "dates": {
       "uploadDate": "Upload date",
@@ -263,6 +309,9 @@
       "high": "high",
       "medium": "medium",
       "low": "low"
+    },
+    "visibility": {
+      "onlyMe": "Only me"
     }
   }
 }

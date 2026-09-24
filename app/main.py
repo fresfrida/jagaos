@@ -30,8 +30,14 @@ from app.auth import (  # noqa: E402
     get_current_membership,
     hash_token,
     issue_session,
+    list_memberships,
     may_edit_document,
+    may_resolve_review_item,
+    may_see_document,
+    may_see_review_item,
+    ROLE_ORDER,
     require_role,
+    switch_company,
 )
 from app.db import (  # noqa: E402
     DB_PATH,
@@ -41,19 +47,30 @@ from app.db import (  # noqa: E402
     parse_description,
     reindex_document_search,
 )
+from app.extract.merge import PageImageError, merge_images_to_pdf  # noqa: E402
+from app.extract.ocr import MAX_PDF_OCR_PAGES  # noqa: E402
 from app.graph.ingest import ingest  # noqa: E402
 from app.graph.pipeline import PIPELINE  # noqa: E402
+from app.rules.company_profile import (  # noqa: E402
+    company_settings_from_profile,
+    extraction_values,
+    may_prefill_company_from,
+)
 from app.rules.transitions import InvalidTransition, transition_document  # noqa: E402
 from app.models import (  # noqa: E402
     AddMemberRequest,
     AuthResponse,
     CompanyEditRequest,
     CompanyOut,
+    CompanyProfilePrefill,
     DevLoginRequest,
     DocumentEditRequest,
     MemberOut,
+    MyCompanyOut,
     ReviewResolution,
+    SwitchCompanyRequest,
     UserOut,
+    Visibility,
 )
 
 app = FastAPI(title="JagaOS API")
@@ -95,6 +112,37 @@ app.add_middleware(
 @app.on_event("startup")
 def startup() -> None:
     init_db(DB_PATH)
+
+
+def _can_see(membership: CurrentMembership, row: sqlite3.Row | dict) -> bool:
+    """auth.may_see_document over a fetched document row — the row must carry
+    status, uploaded_by_user_id and visibility. One wrapper so every endpoint
+    asks the question the same way (round 13, DECISIONS #83/#85)."""
+    return may_see_document(
+        membership, status=row["status"], uploaded_by_user_id=row["uploaded_by_user_id"],
+        visibility=row["visibility"],
+    )
+
+
+def _hidden_or_missing(membership: CurrentMembership, row: sqlite3.Row | None) -> bool:
+    """True when `row` is absent, in another company, or not visible to the
+    caller — every one of which is answered with the same 404, so a document
+    the caller may not see cannot be told apart from one that does not exist."""
+    return row is None or row["company_id"] != membership.company_id or not _can_see(membership, row)
+
+
+# One column list and one row->CompanyOut mapping for every endpoint that
+# returns "the caller's company" (dev-login, /me, switch-company). It was
+# written out twice by hand, and this round added three more columns to it.
+_COMPANY_COLUMNS = "id, name, fye_month, fye_day, timezone, uen, gst_registered, registered_address"
+
+
+def _company_out(row: sqlite3.Row) -> CompanyOut:
+    return CompanyOut(
+        id=row["id"], name=row["name"], fye_month=row["fye_month"], fye_day=row["fye_day"],
+        timezone=row["timezone"], uen=row["uen"], gst_registered=bool(row["gst_registered"]),
+        registered_address=row["registered_address"],
+    )
 
 
 @app.get("/api/health")
@@ -144,34 +192,74 @@ def dev_login(body: DevLoginRequest) -> AuthResponse:
             company_id, role = membership["company_id"], membership["role"]
 
         company = conn.execute(
-            "SELECT id, name, fye_month, fye_day, timezone FROM company WHERE id = ?", (company_id,)
+            f"SELECT {_COMPANY_COLUMNS} FROM company WHERE id = ?", (company_id,)
         ).fetchone()
         final_user = conn.execute(
             "SELECT id, email, name FROM app_user WHERE id = ?", (user_id,)
         ).fetchone()
 
-    token = issue_session(user_id)
+    # The session starts scoped to the company this response describes. That
+    # was always the first membership until round 12, so it only matters when a
+    # user who already belongs to a company signs up a NEW one: the response
+    # named the new company while every later request ran as the first one.
+    token = issue_session(user_id, current_company_id=company_id)
     return AuthResponse(
         token=token,
         user=UserOut(id=final_user["id"], email=final_user["email"], name=final_user["name"]),
-        company=CompanyOut(id=company["id"], name=company["name"], fye_month=company["fye_month"],
-                            fye_day=company["fye_day"], timezone=company["timezone"]),
+        company=_company_out(company),
         role=role,
     )
 
 
-@app.get("/api/auth/me")
-def auth_me(membership: Annotated[CurrentMembership, Depends(get_current_membership)]) -> dict:
+def _me_payload(membership: CurrentMembership) -> dict:
+    """Who the caller is and which company (and role) this session is scoped
+    to right now — shared by /me and switch-company, so a switch answers with
+    exactly what the next /me would say."""
     with get_conn(DB_PATH) as conn:
         company = conn.execute(
-            "SELECT id, name, fye_month, fye_day, timezone FROM company WHERE id = ?", (membership.company_id,)
+            f"SELECT {_COMPANY_COLUMNS} FROM company WHERE id = ?", (membership.company_id,)
         ).fetchone()
     return {
         "user": {"id": membership.user_id, "email": membership.email, "name": membership.name},
-        "company": {"id": company["id"], "name": company["name"], "fye_month": company["fye_month"],
-                     "fye_day": company["fye_day"], "timezone": company["timezone"]},
+        "company": _company_out(company).model_dump(),
         "role": membership.role,
     }
+
+
+@app.get("/api/auth/me")
+def auth_me(membership: Annotated[CurrentMembership, Depends(get_current_membership)]) -> dict:
+    return _me_payload(membership)
+
+
+@app.get("/api/auth/companies")
+def auth_companies(
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> list[MyCompanyOut]:
+    """The companies the caller can switch between — their own memberships
+    and nothing else (DECISIONS #77). One row for nearly everyone, in which
+    case the frontend shows no switcher at all."""
+    return [MyCompanyOut(**row) for row in list_memberships(membership.user_id)]
+
+
+@app.post("/api/auth/switch-company")
+def auth_switch_company(
+    body: SwitchCompanyRequest,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+    authorization: Annotated[str, Header()],
+) -> dict:
+    """Scope this session to another company the caller belongs to. 403 for
+    a company they are not a member of (auth.switch_company); the response is
+    the same shape as /me, for the newly active company and the role held
+    there. Server-side, per session — not a header the client re-sends — so
+    every data endpoint keeps deriving its company from the session alone."""
+    token = authorization.removeprefix("Bearer ").strip()
+    role = switch_company(token, membership.user_id, body.company_id)
+    return _me_payload(
+        CurrentMembership(
+            user_id=membership.user_id, email=membership.email, name=membership.name,
+            company_id=body.company_id, role=role,
+        )
+    )
 
 
 @app.post("/api/auth/logout")
@@ -281,6 +369,16 @@ def edit_company(
             raise HTTPException(400, f"Unknown timezone: {body.timezone}") from None
         updates["timezone"] = body.timezone
 
+    # 2026-09-24 (round 12, DECISIONS #79): identity fields an ACRA business
+    # profile can pre-fill. A blank string clears the value (NULL), so the
+    # form can un-set a UEN or address it no longer wants.
+    if body.uen is not None:
+        updates["uen"] = body.uen.strip().upper() or None
+    if body.gst_registered is not None:
+        updates["gst_registered"] = int(body.gst_registered)
+    if body.registered_address is not None:
+        updates["registered_address"] = body.registered_address.strip() or None
+
     if updates:
         set_clause = ", ".join(f"{col} = ?" for col in updates)
         with get_conn(DB_PATH) as conn:
@@ -339,6 +437,110 @@ def _caption_document_background(document_id: int, stored_path: str) -> None:
     reindex_document_search(document_id, DB_PATH)
 
 
+def _process_upload(
+    membership: CurrentMembership, background_tasks: BackgroundTasks, tmp_path: str, filename: str,
+    source_channel: str, is_picture: bool, language: str, visibility: str,
+) -> dict:
+    """Run one already-written temp file through ingest and the pipeline and
+    build the upload response. Shared by the single-file upload and the
+    multi-page upload below (2026-09-24, round 12, DECISIONS #78), so a merged
+    scan takes exactly the path any other document takes. Does not delete
+    tmp_path — the caller owns its lifetime (see the try/finally in each)."""
+    ingest_state = ingest(
+        company_id=membership.company_id, source_path=tmp_path, filename=filename,
+        source_channel=source_channel, uploaded_by_user_id=membership.user_id,
+        visibility=visibility,
+    )
+    if ingest_state.get("text_source") == "duplicate":
+        # The duplicate check is on the file's hash across the whole database,
+        # so the match can be a document this caller may not see (a colleague's
+        # pending upload, someone's personal file, another company's). Say
+        # "already uploaded" — the person has the identical bytes — but never
+        # hand back the id of a document they cannot see (round 13).
+        with get_conn(DB_PATH) as conn:
+            existing = conn.execute(
+                "SELECT company_id, status, uploaded_by_user_id, visibility FROM document WHERE id = ?",
+                (ingest_state["document_id"],),
+            ).fetchone()
+        seen = not _hidden_or_missing(membership, existing)
+        return {"document_id": ingest_state["document_id"] if seen else None, "status": "duplicate"}
+
+    # 2026-09-23 (DECISIONS #52): the upload-time "is this a picture?"
+    # toggle (web/src/features/ops/OpsConsole.tsx) — set on the state dict
+    # here rather than threading a new param through ingest() itself,
+    # since ingest.py's EXIF/text extraction is unaffected by lane and
+    # already runs before this regardless (app/graph/ingest.py). Read by
+    # app/graph/classify.py to skip its LLM call entirely.
+    ingest_state["is_picture"] = is_picture
+    ingest_state["language"] = language
+    ingest_state["visibility"] = visibility
+
+    thread_id = ingest_state["run_id"]
+    result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
+    document_id = ingest_state["document_id"]
+
+    # Confirmed live 2026-09-21: langgraph 0.2.60's invoke() does NOT return
+    # a "__interrupt__" key the way earlier code here assumed — it just
+    # stops early with a partial state dict (no downstream keys like
+    # "events"). The pause itself is real (derive_events/obligations never
+    # ran), but detecting it from here needs a signal that doesn't depend on
+    # LangGraph's exact return shape. document.status, written unconditionally
+    # inside verify.py, is that signal.
+    with get_conn(DB_PATH) as conn:
+        doc_status = conn.execute(
+            "SELECT status FROM document WHERE id = ?", (document_id,)
+        ).fetchone()["status"]
+
+    if doc_status == "quarantined":
+        return {"document_id": document_id, "status": "quarantined",
+                "verify": result.get("verify_result")}
+
+    # 2026-09-23 (DECISIONS #55): kick off local-model captioning for a
+    # picture-lane upload — scheduled, not awaited, so this request
+    # returns before the caption call is even guaranteed to have started,
+    # let alone the ~20s+ it can take. Only for is_picture uploads: that's
+    # the only path that leaves description NULL (DECISIONS #52); a
+    # quarantined document (returned above already) never reaches here.
+    if is_picture:
+        with get_conn(DB_PATH) as conn:
+            stored_path = conn.execute(
+                "SELECT stored_path FROM document WHERE id = ?", (document_id,)
+            ).fetchone()["stored_path"]
+        # Caught live while verifying locally, not assumed: app/graph/
+        # ingest.py's DOCS_PATH is a relative path ("./data/docs"), stored
+        # in the DB as-is — meaningless to jaga-vision, a separate process
+        # with its own working directory. Resolved to absolute here, in
+        # the one process that actually knows its own correct base
+        # directory, rather than relying on jaga-vision's systemd unit
+        # happening to share jaga-api's WorkingDirectory.
+        absolute_path = str(Path(stored_path).resolve())
+        background_tasks.add_task(_caption_document_background, document_id, absolute_path)
+
+    # 2026-09-22 (DECISIONS #40): no document is ever filed without an
+    # explicit human confirmation — verify.py now always sets needs_review,
+    # so doc_status here is only ever "quarantined" (above) or
+    # "needs_review". There is no third, auto-filed "processed" case left
+    # to return; a branch for one would be dead code.
+    with get_conn(DB_PATH) as conn:
+        review_item = conn.execute(
+            "SELECT id, reason, question FROM review_item WHERE document_id = ? "
+            "AND status = 'open' ORDER BY id DESC LIMIT 1",
+            (document_id,),
+        ).fetchone()
+    return {
+        "document_id": document_id,
+        "status": "needs_review",
+        "thread_id": thread_id,
+        "review_item_id": review_item["id"] if review_item else None,
+        # reason (added 2026-09-22, DECISIONS #47) lets the upload banner
+        # apply the same routine-vs-flagged distinction ReviewQueueCard
+        # already makes ('clean extraction' — verify.py — vs a real
+        # reason) instead of showing an amber NEEDS_REVIEW pill for every
+        # upload, clean ones included.
+        "review": {"reason": review_item["reason"], "question": review_item["question"]} if review_item else None,
+    }
+
+
 @app.post("/api/documents")
 async def upload_document(
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
@@ -349,6 +551,10 @@ async def upload_document(
     # param read by app/graph/classify.py to write its generated
     # description directly in this language instead of always English.
     language: str = "en",
+    # 2026-09-24 (round 13, DECISIONS #85): "company" (default — every existing
+    # caller) or "only_me", a personal file only the uploader can ever see.
+    # A Literal, so anything else is a 422, not a silently company-visible file.
+    visibility: Visibility = "company",
 ) -> dict:
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
         tmp.write(await file.read())
@@ -361,108 +567,83 @@ async def upload_document(
     # ingest() returns: app/graph/ingest.py's own shutil.copyfile already
     # wrote the permanent copy into DOCS_PATH before returning, and every
     # downstream node (classify/extract/verify, the captioning background
-    # task below) reads either the already-extracted `text` or the
-    # document's own `stored_path` from the DB — never tmp_path again.
-    # try/finally, not just a line after the pipeline call, so this also
-    # cleans up on an exception (a bad file, a pipeline error) instead of
-    # only on the success path.
+    # task) reads either the already-extracted `text` or the document's own
+    # `stored_path` from the DB — never tmp_path again. try/finally, not just
+    # a line after the pipeline call, so this also cleans up on an exception
+    # (a bad file, a pipeline error) instead of only on the success path.
     try:
-        ingest_state = ingest(
-            company_id=membership.company_id, source_path=tmp_path, filename=file.filename,
-            source_channel=source_channel, uploaded_by_user_id=membership.user_id,
+        return _process_upload(
+            membership, background_tasks, tmp_path, file.filename, source_channel, is_picture, language,
+            visibility,
         )
-        if ingest_state.get("text_source") == "duplicate":
-            return {"document_id": ingest_state["document_id"], "status": "duplicate"}
-
-        # 2026-09-23 (DECISIONS #52): the upload-time "is this a picture?"
-        # toggle (web/src/features/ops/OpsConsole.tsx) — set on the state dict
-        # here rather than threading a new param through ingest() itself,
-        # since ingest.py's EXIF/text extraction is unaffected by lane and
-        # already runs before this regardless (app/graph/ingest.py). Read by
-        # app/graph/classify.py to skip its LLM call entirely.
-        ingest_state["is_picture"] = is_picture
-        ingest_state["language"] = language
-
-        thread_id = ingest_state["run_id"]
-        result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
-        document_id = ingest_state["document_id"]
-
-        # Confirmed live 2026-09-21: langgraph 0.2.60's invoke() does NOT return
-        # a "__interrupt__" key the way earlier code here assumed — it just
-        # stops early with a partial state dict (no downstream keys like
-        # "events"). The pause itself is real (derive_events/obligations never
-        # ran), but detecting it from here needs a signal that doesn't depend on
-        # LangGraph's exact return shape. document.status, written unconditionally
-        # inside verify.py, is that signal.
-        with get_conn(DB_PATH) as conn:
-            doc_status = conn.execute(
-                "SELECT status FROM document WHERE id = ?", (document_id,)
-            ).fetchone()["status"]
-
-        if doc_status == "quarantined":
-            return {"document_id": document_id, "status": "quarantined",
-                    "verify": result.get("verify_result")}
-
-        # 2026-09-23 (DECISIONS #55): kick off local-model captioning for a
-        # picture-lane upload — scheduled, not awaited, so this request
-        # returns before the caption call is even guaranteed to have started,
-        # let alone the ~20s+ it can take. Only for is_picture uploads: that's
-        # the only path that leaves description NULL (DECISIONS #52); a
-        # quarantined document (returned above already) never reaches here.
-        if is_picture:
-            with get_conn(DB_PATH) as conn:
-                stored_path = conn.execute(
-                    "SELECT stored_path FROM document WHERE id = ?", (document_id,)
-                ).fetchone()["stored_path"]
-            # Caught live while verifying locally, not assumed: app/graph/
-            # ingest.py's DOCS_PATH is a relative path ("./data/docs"), stored
-            # in the DB as-is — meaningless to jaga-vision, a separate process
-            # with its own working directory. Resolved to absolute here, in
-            # the one process that actually knows its own correct base
-            # directory, rather than relying on jaga-vision's systemd unit
-            # happening to share jaga-api's WorkingDirectory.
-            absolute_path = str(Path(stored_path).resolve())
-            background_tasks.add_task(_caption_document_background, document_id, absolute_path)
-
-        # 2026-09-22 (DECISIONS #40): no document is ever filed without an
-        # explicit human confirmation — verify.py now always sets needs_review,
-        # so doc_status here is only ever "quarantined" (above) or
-        # "needs_review". There is no third, auto-filed "processed" case left
-        # to return; a branch for one would be dead code.
-        with get_conn(DB_PATH) as conn:
-            review_item = conn.execute(
-                "SELECT id, reason, question FROM review_item WHERE document_id = ? "
-                "AND status = 'open' ORDER BY id DESC LIMIT 1",
-                (document_id,),
-            ).fetchone()
-        return {
-            "document_id": document_id,
-            "status": "needs_review",
-            "thread_id": thread_id,
-            "review_item_id": review_item["id"] if review_item else None,
-            # reason (added 2026-09-22, DECISIONS #47) lets the upload banner
-            # apply the same routine-vs-flagged distinction ReviewQueueCard
-            # already makes ('clean extraction' — verify.py — vs a real
-            # reason) instead of showing an amber NEEDS_REVIEW pill for every
-            # upload, clean ones included.
-            "review": {"reason": review_item["reason"], "question": review_item["question"]} if review_item else None,
-        }
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+
+
+@app.post("/api/documents/pages")
+async def upload_document_pages(
+    membership: Annotated[CurrentMembership, Depends(require_role("user"))],
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile], language: str = "en", visibility: Visibility = "company",
+) -> dict:
+    """Several photos of one document, in page order -> ONE document
+    (2026-09-24, round 12, DECISIONS #78). The pages are merged into a single
+    image-only PDF (app/extract/merge.py) and handed to the same ingest and
+    pipeline as any other upload: one document row, one review item, and the
+    scanned-PDF OCR path reading every page — there is no second extraction
+    route for multi-page.
+
+    The order of `files` IS the page order. At least 2 pages (one file is the
+    ordinary upload) and at most ocr.MAX_PDF_OCR_PAGES, the cap the OCR step
+    already applies: past it the extra pages would be silently dropped, so a
+    longer set is refused instead. A page that is not a readable image is a
+    400 naming the page, not a 500. No byte cap exists anywhere yet (a
+    known gap, docs/KANBAN.md); the web client downscales each photo before
+    sending."""
+    if len(files) < 2:
+        raise HTTPException(400, "Send at least 2 pages — a single file is an ordinary upload")
+    if len(files) > MAX_PDF_OCR_PAGES:
+        raise HTTPException(400, f"At most {MAX_PDF_OCR_PAGES} pages per document, got {len(files)}")
+
+    temp_paths: list[str] = []
+    try:
+        for upload in files:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(upload.filename or "").suffix) as tmp:
+                tmp.write(await upload.read())
+                temp_paths.append(tmp.name)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as merged:
+            temp_paths.append(merged.name)
+        try:
+            merge_images_to_pdf(temp_paths[:-1], merged.name)
+        except PageImageError as e:
+            raise HTTPException(400, f"Page {e.page} is not a readable image") from None
+        stem = Path(files[0].filename or "scan").stem
+        return _process_upload(
+            membership, background_tasks, merged.name, f"{stem}-{len(files)}-pages.pdf", "web", False, language,
+            visibility,
+        )
+    finally:
+        for path in temp_paths:
+            Path(path).unlink(missing_ok=True)
+
 
 
 @app.post("/api/review/{review_item_id}/resolve")
 def resolve_review(
     review_item_id: int, thread_id: str, body: ReviewResolution,
-    membership: Annotated[CurrentMembership, Depends(require_role("admin"))],
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
 ) -> dict:
     # All the actual state changes (review_item, extraction rows, document
     # status) happen inside app/graph/human_review.py on resume, not here —
     # that keeps "what does resolving mean" in one place instead of split
     # between this endpoint and the graph node.
     #
-    # Deliberately kept admin+ (2026-09-23, role/permission work) — NOT
-    # extended to let a `user` resolve review items on their own uploads,
+    # Admin+ (2026-09-23, role/permission work), with ONE narrow exception
+    # added in round 13 (DECISIONS #85): the uploader of a PERSONAL file
+    # (visibility 'only_me') may resolve its review item — nobody else can
+    # even see it, so without this a `user`'s private upload could never leave
+    # review. Otherwise NOT extended to let a `user` resolve review items on
+    # their own uploads,
     # even though "edit your own upload" now is (see edit_document above).
     # Considered and rejected: resolving is the human-in-the-loop safety
     # check this whole review queue exists for (DECISIONS #40 — every
@@ -474,19 +655,38 @@ def resolve_review(
     # their own flagged upload would remove the second pair of eyes that's
     # the actual point — so this stays a real oversight action (the same
     # tier as add_member), not a routine self-service one.
+    is_admin = ROLE_ORDER[membership.role] >= ROLE_ORDER["admin"]
     with get_conn(DB_PATH) as conn:
         item = conn.execute(
-            "SELECT r.id, r.company_id, r.document_id, d.status AS document_status "
+            "SELECT r.id, r.company_id, r.document_id, d.status AS status, "
+            "       d.uploaded_by_user_id AS uploaded_by_user_id, d.visibility AS visibility, "
+            "       substr(d.sha256, 1, 12) AS thread_id "
             "FROM review_item r JOIN document d ON d.id = r.document_id "
             "WHERE r.id = ? AND r.status = 'open'",
             (review_item_id,),
         ).fetchone()
-        if item is None:
-            raise HTTPException(404, "review item not found or already resolved")
-        if item["company_id"] != membership.company_id:
-            raise HTTPException(403, "Not a member of this company")
+    may_act = (
+        item is not None
+        and item["company_id"] == membership.company_id
+        and may_resolve_review_item(
+            membership, uploaded_by_user_id=item["uploaded_by_user_id"], visibility=item["visibility"],
+        )
+    )
+    if not may_act and not is_admin:
+        # Below admin and not the uploader of their own personal file: the
+        # role gate, with the same answer it always gave (this used to be a
+        # require_role("admin") dependency that ran before any lookup).
+        raise HTTPException(403, f"Requires role 'admin' or higher, caller is '{membership.role}'")
+    if item is None:
+        raise HTTPException(404, "review item not found or already resolved")
+    if item["company_id"] != membership.company_id:
+        raise HTTPException(403, "Not a member of this company")
+    if not _can_see(membership, item):
+        # A pending document, or a personal file, this caller may not see: the
+        # same 404 as a review item that does not exist.
+        raise HTTPException(404, "review item not found or already resolved")
 
-    if item["document_status"] == "quarantined":
+    if item["status"] == "quarantined":
         # 2026-09-23 (DECISIONS #68): a quarantined document's pipeline run
         # never reaches human_review's interrupt() — verify() returns
         # early, before ever pausing (see verify.py's injection_hits
@@ -516,6 +716,15 @@ def resolve_review(
             )
         return {"status": "archived", "events": None, "obligations_created": None}
 
+    # thread_id is client-supplied and is what actually gets resumed, so it must
+    # be THIS item's thread — otherwise anyone allowed to resolve one item
+    # could resume another document's paused run by naming its thread. Newly
+    # necessary in round 13, when the set of people who may resolve widened
+    # (an uploader, for their own personal file). The hash prefix is not a
+    # secret an outsider can guess (48 bits) but it is derivable from a file
+    # they hold, and the check costs one comparison.
+    if thread_id != item["thread_id"]:
+        raise HTTPException(400, "thread_id does not belong to this review item")
     try:
         result = PIPELINE.invoke(
             Command(resume=body.model_dump()),
@@ -556,7 +765,8 @@ def list_review_items(
             "SELECT r.*, d.filename AS document_filename, d.media_type AS document_media_type, "
             "d.description AS document_description, d.bucket AS document_bucket, "
             "d.doc_type AS document_doc_type, d.vendor_name AS document_vendor_name, "
-            "d.lane AS document_lane, "
+            "d.lane AS document_lane, d.uploaded_by_user_id AS uploaded_by_user_id, "
+            "d.status AS document_status, d.visibility AS document_visibility, "
             # thread_id == run_id, generated in app/graph/ingest.py as
             # sha256[:12] — not its own column, derived the same way here
             # rather than adding one for a value that never changes.
@@ -571,7 +781,34 @@ def list_review_items(
         # read-only here (not part of DocumentEditRequest) - it's what
         # decides whether doc_type renders as the fixed dropdown or the
         # statutory lane's free-text input, not itself editable.
-        return [dict(r) for r in rows]
+        #
+        # 2026-09-24 (round 12): who sees which item is auth.may_see_review_item's
+        # call (admin/owner all, a user only their own uploads, a viewer none),
+        # applied here in one place; the uploader's id is the input to that
+        # rule, not something the client needs, so it is dropped from the row.
+        #
+        # Round 13 (DECISIONS #85): a personal file's item is the uploader's
+        # alone — even an admin or the owner does not see it — so the queue
+        # asks may_see_document as well as the review-item rule. `can_resolve`
+        # is this caller's own answer (auth.may_resolve_review_item), so the
+        # card offers Accept/Reject exactly where the server would allow them.
+        visible = []
+        for r in rows:
+            item = dict(r)
+            uploader = item.pop("uploaded_by_user_id")
+            document_status = item.pop("document_status")
+            if not may_see_review_item(membership, uploader):
+                continue
+            if not may_see_document(
+                membership, status=document_status, uploaded_by_user_id=uploader,
+                visibility=item["document_visibility"],
+            ):
+                continue
+            item["can_resolve"] = may_resolve_review_item(
+                membership, uploaded_by_user_id=uploader, visibility=item["document_visibility"],
+            )
+            visible.append(item)
+        return visible
 
 
 @app.get("/api/expectations")
@@ -603,9 +840,13 @@ def _document_row_for(membership: CurrentMembership, row: sqlite3.Row) -> dict:
     """A document as list/search return it: the row minus the uploader's
     user id (the client never needs it), plus `can_edit` — the caller's own
     answer from auth.may_edit_document, so the UI does not offer an Edit
-    that the server would refuse."""
+    that the server would refuse — and `can_prefill_company`, likewise from
+    rules.company_profile.may_prefill_company_from."""
     doc = dict(row)
     doc["can_edit"] = may_edit_document(membership, doc.pop("uploaded_by_user_id"))
+    # 2026-09-24 (round 12): same idea for the ACRA "pre-fill company
+    # settings" action — the caller's own answer from one rule function.
+    doc["can_prefill_company"] = may_prefill_company_from(membership.role, doc["doc_type"], doc["status"])
     return doc
 
 
@@ -618,16 +859,26 @@ def list_documents(
     keeping archived documents out of the app entirely (2026-09-23,
     DECISIONS #53). Unconditional, no parameter, no role exception: an
     archived document is recoverable only via direct DB access on the
-    Lightsail box, never through this API, for any role including owner."""
+    Lightsail box, never through this API, for any role including owner.
+
+    Since round 13 a second kind of invisibility sits beside it
+    (auth.may_see_document): a document pending review is hidden from the
+    users the review queue hides it from, and a personal file from everyone
+    but its uploader."""
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id "
+            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility "
             "FROM document WHERE company_id = ? AND status != 'archived' "
             "ORDER BY received_at DESC",
             (membership.company_id,),
         ).fetchall()
-        return [_document_row_for(membership, r) for r in rows]
+        # Round 13 (DECISIONS #83/#85): a document this caller may not see —
+        # pending review and not theirs to see, or someone else's personal
+        # file — is left out exactly the way an archived one is, so it is
+        # absent from Company Files, from Search and from the Calendar (which
+        # reads this same list), not merely hidden by the UI.
+        return [_document_row_for(membership, r) for r in rows if _can_see(membership, r)]
 
 
 @app.get("/api/search")
@@ -667,11 +918,15 @@ def search_documents(
         # list_documents's exclusion just below it in this file.
         docs = conn.execute(
             f"SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            f"description, bucket, vendor_name, occurred_on, uploaded_by_user_id FROM document "
+            f"description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility FROM document "
             f"WHERE id IN ({placeholders}) AND status != 'archived'",
             ordered_ids,
         ).fetchall()
-        docs_by_id = {d["id"]: _document_row_for(membership, d) for d in docs}
+        # Same visibility rule as list_documents (round 13): the FTS5 row has
+        # no status or visibility of its own, so a hidden document still
+        # MATCHES on its text — this join-back is where it stops being
+        # returned, which is the same place archived documents are dropped.
+        docs_by_id = {d["id"]: _document_row_for(membership, d) for d in docs if _can_see(membership, d)}
     # FTS5's rank order (relevance), not the IN-clause's arbitrary order.
     return [docs_by_id[doc_id] for doc_id in ordered_ids if doc_id in docs_by_id]
 
@@ -712,9 +967,12 @@ def edit_document(
     it from, so a `user` account may edit it same as before this change."""
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
-            "SELECT company_id, uploaded_by_user_id FROM document WHERE id = ?", (document_id,)
+            "SELECT company_id, status, uploaded_by_user_id, visibility FROM document WHERE id = ?",
+            (document_id,),
         ).fetchone()
-    if doc is None or doc["company_id"] != membership.company_id:
+    # 404 before the ownership 403 below: a document the caller may not see
+    # (round 13) must not be confirmed to exist by a "you can't edit this".
+    if _hidden_or_missing(membership, doc):
         raise HTTPException(404, "document not found")
     if not may_edit_document(membership, doc["uploaded_by_user_id"]):
         raise HTTPException(403, "You can only edit documents you uploaded yourself")
@@ -800,16 +1058,52 @@ def get_document_file(
     """
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
-            "SELECT company_id, stored_path, media_type, filename FROM document "
-            "WHERE id = ? AND status != 'archived'",
+            "SELECT company_id, stored_path, media_type, filename, status, uploaded_by_user_id, visibility "
+            "FROM document WHERE id = ? AND status != 'archived'",
             (document_id,),
         ).fetchone()
-    if doc is None or doc["company_id"] != membership.company_id:
+    # Round 13 (DECISIONS #83/#85): a document the caller may not see — pending
+    # review and not theirs, or someone else's personal file — is the same 404
+    # as an archived or nonexistent one, so the bytes are not "hidden but
+    # reachable" by anyone who knows or guesses an id.
+    if _hidden_or_missing(membership, doc):
         raise HTTPException(404, "document not found")
     return FileResponse(
         doc["stored_path"], media_type=doc["media_type"],
         filename=doc["filename"], content_disposition_type="inline",
     )
+
+
+@app.get("/api/documents/{document_id}/company-profile")
+def get_company_profile_prefill(
+    document_id: int,
+    membership: Annotated[CurrentMembership, Depends(require_role("owner"))],
+) -> CompanyProfilePrefill:
+    """The values an ACRA business-profile document holds, shaped for the
+    company-settings form (2026-09-24, round 12, DECISIONS #79). READ-ONLY:
+    nothing here touches the company row — the owner reviews the pre-filled
+    form and saves it themselves through PATCH /api/companies/{id}, so the
+    human still approves the write.
+
+    Owner only, and only for a document that is a business profile in the
+    caller's own company and has been confirmed in the review queue
+    (rules.company_profile.may_prefill_company_from). An archived document is
+    a 404, like every other endpoint that fetches one by id."""
+    with get_conn(DB_PATH) as conn:
+        doc = conn.execute(
+            "SELECT company_id, filename, doc_type, status, uploaded_by_user_id, visibility FROM document "
+            "WHERE id = ? AND status != 'archived'",
+            (document_id,),
+        ).fetchone()
+        if _hidden_or_missing(membership, doc):
+            raise HTTPException(404, "document not found")
+        if not may_prefill_company_from(membership.role, doc["doc_type"], doc["status"]):
+            raise HTTPException(409, "Only a confirmed ACRA business profile can pre-fill company settings")
+        rows = conn.execute(
+            "SELECT field, value_text FROM extraction WHERE document_id = ? ORDER BY id", (document_id,),
+        ).fetchall()
+    settings = company_settings_from_profile(extraction_values([(r["field"], r["value_text"]) for r in rows]))
+    return CompanyProfilePrefill(document_id=document_id, filename=doc["filename"], **settings)
 
 
 @app.post("/api/documents/{document_id}/archive")
@@ -829,9 +1123,12 @@ def archive_document(
     """
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
-            "SELECT company_id FROM document WHERE id = ?", (document_id,)
+            "SELECT company_id, status, uploaded_by_user_id, visibility FROM document WHERE id = ?",
+            (document_id,),
         ).fetchone()
-    if doc is None or doc["company_id"] != membership.company_id:
+    # An admin cannot delete what they cannot see (round 13): a personal file
+    # or a colleague's pending upload answers 404, not "deleted".
+    if _hidden_or_missing(membership, doc):
         raise HTTPException(404, "document not found")
 
     try:
@@ -872,13 +1169,20 @@ def get_trace(
     """
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
-            "SELECT company_id FROM document WHERE id = ? AND status != 'archived'",
+            "SELECT company_id, status, uploaded_by_user_id, visibility FROM document "
+            "WHERE id = ? AND status != 'archived'",
             (document_id,),
         ).fetchone()
         if doc is None:
             raise HTTPException(404, "document not found")
         if doc["company_id"] != membership.company_id:
             raise HTTPException(403, "Not a member of this company")
+        # Round 13 (DECISIONS #83/#85): a document in the caller's OWN company
+        # that they may not see — pending review and not theirs, or someone
+        # else's personal file — is a 404 like an archived one. The trace of a
+        # personal file would otherwise leak its lane, doc_type and cost.
+        if not _can_see(membership, doc):
+            raise HTTPException(404, "document not found")
         rows = conn.execute(
             "SELECT * FROM trace WHERE document_id = ? ORDER BY at", (document_id,)
         ).fetchall()

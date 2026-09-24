@@ -18,6 +18,21 @@ interface AuthContextValue extends AuthState {
   // targeted re-fetch of /api/auth/me rather than a second, parallel
   // "update company in place" code path.
   refreshCompany: () => Promise<void>
+  // 2026-09-24 (round 12, DECISIONS #77): scope this session to another
+  // company the user belongs to. Replaces `company` and `role` wholesale from
+  // the server's answer — the singular `company` field stays singular, there
+  // is no companies[] here (the switcher's own list lives in
+  // useMyCompanies). App.tsx keys the routed page on company.id, so every
+  // page remounts and refetches for the new company.
+  switchCompany: (companyId: number) => Promise<void>
+  // Re-reads /api/auth/me and applies it ONLY if the active company or role
+  // actually changed. The session's active company is server-side, so a
+  // switch made in another tab of this browser changes what THIS tab's next
+  // request is scoped to while this tab's header still names the old one;
+  // the switcher calls this on tab focus to close that gap. Deliberately not
+  // refreshCompany: replacing `company` with an equal-but-new object would
+  // reset any form that resyncs from it (Company Settings) mid-edit.
+  syncActiveCompany: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -66,11 +81,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshCompany = useCallback(async () => {
-    const { company } = await authApi.me()
-    setState((prev) => ({ ...prev, company }))
+    const { company, role } = await authApi.me()
+    setState((prev) => ({ ...prev, company, role }))
   }, [])
 
-  return <AuthContext.Provider value={{ ...state, login, logout, refreshCompany }}>{children}</AuthContext.Provider>
+  const switchCompany = useCallback(async (companyId: number) => {
+    const { company, role } = await authApi.switchCompany(companyId)
+    setState((prev) => ({ ...prev, company, role }))
+  }, [])
+
+  const syncActiveCompany = useCallback(async () => {
+    const { company, role } = await authApi.me()
+    setState((prev) =>
+      prev.company?.id === company.id && prev.role === role ? prev : { ...prev, company, role },
+    )
+  }, [])
+
+  return (
+    <AuthContext.Provider value={{ ...state, login, logout, refreshCompany, switchCompany, syncActiveCompany }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth(): AuthContextValue {

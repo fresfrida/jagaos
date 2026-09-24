@@ -27,6 +27,17 @@ CREATE TABLE IF NOT EXISTS company (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 2026-09-24 (round 12, DECISIONS #77): a group of companies under one
+-- holding name. Deliberately just a label — company.group_id (a migration
+-- below) points at it, and NOTHING derives access from it: who may see a
+-- company is still and only the membership row for that (user, company).
+-- The group is how the owner's company switcher is labelled, not a role.
+CREATE TABLE IF NOT EXISTS company_group (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS app_user (
     id INTEGER PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
@@ -256,6 +267,27 @@ _MIGRATIONS = [
     # every company today is one; changeable via the existing
     # PATCH /api/companies/{id}.
     "ALTER TABLE company ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Asia/Singapore'",
+    # 2026-09-24 (round 12, DECISIONS #77): NULL = an ungrouped company, no
+    # backfill needed. A label for the switcher, never an access rule.
+    "ALTER TABLE company ADD COLUMN group_id INTEGER REFERENCES company_group(id)",
+    # 2026-09-24 (round 12, DECISIONS #77): which of the caller's memberships
+    # this session is scoped to. NULL = "the first membership", exactly the
+    # behavior before this column existed, so every existing session (and any
+    # client that never switches) is unchanged. app/auth.py re-validates it
+    # against the membership table on every request — it is a preference
+    # among the caller's own memberships, never a grant.
+    "ALTER TABLE session ADD COLUMN current_company_id INTEGER REFERENCES company(id)",
+    # 2026-09-24 (round 12, DECISIONS #79): the company's registered office,
+    # the one identity field of an ACRA business profile the table had no
+    # column for (uen/incorporated_on/fye_*/gst_registered already exist).
+    "ALTER TABLE company ADD COLUMN registered_address TEXT",
+    # 2026-09-24 (round 13, DECISIONS #85): who a document is for. 'company' is
+    # every document that existed before this column and the default for a new
+    # one — visible per the normal role rules. 'only_me' is a personal file:
+    # visible to its uploader alone, no role exception (app/auth.py::
+    # may_see_document). Anything other than 'company' is treated as private,
+    # so a stray value fails closed.
+    "ALTER TABLE document ADD COLUMN visibility TEXT NOT NULL DEFAULT 'company'",
 ]
 
 

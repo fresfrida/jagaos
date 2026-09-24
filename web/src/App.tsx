@@ -1,6 +1,8 @@
 import { MotionConfig, motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
+import { MyCompaniesProvider } from './features/auth/MyCompaniesContext'
+import { useCompanyScopeKey } from './features/auth/useCompanyScopeKey'
 import { cn } from './lib/cn'
 import { Page } from './pages/Page'
 import type { ResolvedRoute } from './router/routes'
@@ -16,7 +18,8 @@ import { Header } from './sections/Header'
  * AuthProvider itself. */
 function AppContent({ route }: { route: ResolvedRoute }) {
   const { t } = useTranslation()
-  const { status } = useAuth()
+  const { status, company } = useAuth()
+  const companyScope = useCompanyScopeKey(company?.id)
   const showBottomNav = status === 'signed-in'
 
   return (
@@ -39,7 +42,11 @@ function AppContent({ route }: { route: ResolvedRoute }) {
          is sm:hidden. */}
       <main id="main" tabIndex={-1} className={cn('min-h-[calc(100svh-65px)] outline-none', showBottomNav && 'pb-24 sm:pb-0')}>
         {/* Swap instantly and fade the new page in (opacity only). An exit animation would leave a gap and move the layout. */}
-        <motion.div key={route} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
+        {/* Keyed on the active company too (2026-09-24, round 12, DECISIONS
+           #77): switching company remounts the page, so every hook refetches
+           and no document, search result or form value from the previous
+           company survives in component state. */}
+        <motion.div key={`${route}:${companyScope}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
           <Page route={route} />
         </motion.div>
       </main>
@@ -72,7 +79,9 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <AppContent route={route} />
+      <MyCompaniesProvider>
+        <AppContent route={route} />
+      </MyCompaniesProvider>
     </AuthProvider>
   )
 }

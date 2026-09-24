@@ -51,6 +51,7 @@ def ingest(
     source_identity: str | None = None,
     uploaded_by_user_id: int | None = None,
     db_path: str = DB_PATH,
+    visibility: str = "company",
 ) -> PipelineState:
     """Not a LangGraph node itself (it runs before we have a document_id to
     key state on) — called from app/main.py to create the document row,
@@ -93,12 +94,12 @@ def ingest(
                 "INSERT INTO document "
                 "(company_id, sha256, filename, media_type, bytes, stored_path, "
                 " source_channel, source_identity, uploaded_by_user_id, occurred_on, status, "
-                " extracted_text, text_source) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?)",
+                " extracted_text, text_source, visibility) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?, ?)",
                 (
                     company_id, sha, filename, media_type, src.stat().st_size,
                     str(stored_path), source_channel, source_identity, uploaded_by_user_id,
-                    exif_data.get("occurred_on"), text, text_source,
+                    exif_data.get("occurred_on"), text, text_source, visibility,
                 ),
             )
         except Exception:

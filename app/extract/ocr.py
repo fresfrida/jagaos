@@ -59,10 +59,20 @@ def extract_text(path: str) -> str:
 def extract_pdf_text(path: str) -> str:
     """OCR of an image-only PDF: rasterize each page (up to
     MAX_PDF_OCR_PAGES), OCR it, join with a blank line between pages — the
-    same shape app/extract/pdf.py produces for a born-digital PDF."""
-    parts = []
+    same shape app/extract/pdf.py produces for a born-digital PDF.
+
+    2026-09-24 (round 12, DECISIONS #78): a scan of more than one page gets a
+    "[Page N]" line ahead of each page that has text, so the model's `page`
+    citations (app/models.py's Provenance) point at a real page instead of
+    being meaningless across a merged document. A single page is returned
+    exactly as before, and a page with no text gets no marker — a blank scan
+    must still come back empty, or classify would take the "has text" path
+    for a document nobody could read."""
+    texts = []
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages[:MAX_PDF_OCR_PAGES]:
             image = page.to_image(resolution=PDF_OCR_DPI).original.convert("RGB")
-            parts.append(pytesseract.image_to_string(image, config=OCR_CONFIG).strip())
-    return "\n\n".join(parts).strip()
+            texts.append(pytesseract.image_to_string(image, config=OCR_CONFIG).strip())
+    if len(texts) == 1:
+        return texts[0]
+    return "\n\n".join(f"[Page {n}]\n{text}" for n, text in enumerate(texts, start=1) if text).strip()
