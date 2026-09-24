@@ -814,3 +814,59 @@ if __name__ == "__main__":
     import pytest
 
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_classify_prompt_does_not_presuppose_a_document_for_unreadable_text():
+    # 2026-09-24 (round 10): the prompt's own example used to be "Photo of
+    # a document, text unclear", which the model echoed for a photo of a
+    # temple (real gateway call, same round) — nothing in OCR noise says
+    # "document". This gateway is text-only (MDs/GAPS.md §8), so the honest
+    # instruction is "say nothing was readable and set low confidence",
+    # never a guess about what the picture shows.
+    from app.graph.classify import SYSTEM_TEMPLATE, UNREADABLE_EXAMPLE_EN
+
+    prompt = SYSTEM_TEMPLATE.format(language_name="Malay", unreadable_example=UNREADABLE_EXAMPLE_EN)
+
+    assert "Photo of a document" not in prompt
+    assert "document" not in UNREADABLE_EXAMPLE_EN.lower()
+    assert f'"{UNREADABLE_EXAMPLE_EN}"' in prompt
+    assert "never the image" in prompt
+    assert "confidence 0.3 or" in prompt
+
+
+def test_unreadable_input_reaches_the_plain_language_review_reasons_in_any_language(monkeypatch):
+    # The prompt asks for a low confidence AND a fixed English phrase in
+    # description_en; verify()'s two existing checks (DECISIONS #67/#68)
+    # then turn either signal into the same plain "we couldn't read this"
+    # review reason. This chains the REAL classify() output into the REAL
+    # checks — including a Malay upload, where `description` is Malay and
+    # only description_en is English, which is what the detector reads.
+    import app.graph.classify as classify_module
+    from app.graph.classify import UNREADABLE_EXAMPLE_EN
+    from app.graph.verify import _check_classify_confidence, _check_description_signals_problem
+    from app.llm import LLMResult
+
+    def fake_call(model, system, user, **kwargs):
+        args = {
+            "lane": "memory", "doc_type": "other", "confidence": 0.3,
+            "injection_suspected": False, "bucket": "Memory Lane", "vendor_name": None,
+            "description_en": UNREADABLE_EXAMPLE_EN,
+            "description": "Imej tanpa teks yang jelas dan boleh dibaca",
+        }
+        return LLMResult(content="", model=model, input_tokens=10, output_tokens=5, cost_usd=0.0, latency_ms=1,
+                          tool_calls=[{"function": {"name": "classify_document", "arguments": json.dumps(args)}}])
+
+    monkeypatch.setattr(classify_module, "call", fake_call)
+    document_id = _seed_company_and_document("unreadablephotosha")
+
+    result = classify_module.classify({
+        "run_id": "unreadablephoto1", "company_id": 1, "document_id": document_id,
+        "text": ", aoe INOW es oe i\nLAW ie", "language": "ms",
+    })["classify_result"]
+
+    assert [r["code"] for r in _check_classify_confidence(result)] == ["could_not_read_document"]
+    assert [r["code"] for r in _check_description_signals_problem(result["description_en"])] == ["description_signals_problem"]
+    # And the phrase itself — not only the model's confidence — trips the
+    # detector, so a model that ignores the confidence instruction is still
+    # caught.
+    assert _check_description_signals_problem(UNREADABLE_EXAMPLE_EN)

@@ -24,6 +24,7 @@ import {
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type DocumentRow } from './opsApi'
+import { useEditableDescription } from './useEditableDescription'
 
 /** Small preview next to each row in the Documents list (2026-09-22, doc
  * 2's preview UX pass) — a photo is often more recognizable at a glance
@@ -141,7 +142,11 @@ export function DocumentCard({
   // {"en": "...", "<language>": "..."} — descriptionFor() reads back
   // whichever language is currently selected (falling back to English).
   const localDescription = descriptionFor(doc.description, i18n.language)
-  const [description, setDescription] = useState(localDescription)
+  // The card face above derives from localDescription on every render, so
+  // it already follows the language selector by construction. This is the
+  // edit form's own text — it follows the language too until the user
+  // types (useEditableDescription, shared with ReviewQueueCard).
+  const { description, setDescription, resetDescription } = useEditableDescription(doc.description)
   const [bucket, setBucket] = useState(doc.bucket ?? '')
   const [docType, setDocType] = useState(doc.doc_type ?? '')
   const [vendorName, setVendorName] = useState(doc.vendor_name ?? '')
@@ -305,17 +310,9 @@ export function DocumentCard({
         {canEdit && !editing && (
           <button
             onClick={() => {
-              // 2026-09-24 (items 5/6): description's local edit state was
-              // only ever initialized once at this component's first
-              // mount — a real bug found live while verifying this exact
-              // feature: switching the language selector after mount but
-              // before ever clicking Edit left the edit form showing
-              // whichever language was current at mount, not the one
-              // currently displayed. Re-syncing to localDescription here
-              // (computed fresh every render from the current language)
-              // means "start editing" always starts from what's actually
-              // on screen right now.
-              setDescription(localDescription)
+              // Entering edit mode starts from what is on screen right now,
+              // discarding any earlier edit's "user typed this" pin.
+              resetDescription()
               setEditing(true)
             }}
             className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink"

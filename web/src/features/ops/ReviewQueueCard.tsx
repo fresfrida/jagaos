@@ -4,7 +4,7 @@
  * pieces (DocTypeField, VoiceCaptionButton, etc.) now come from. */
 
 import { Archive, Check, Loader2, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -28,6 +28,7 @@ import {
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type ReviewItem } from './opsApi'
+import { useEditableDescription } from './useEditableDescription'
 
 /** One field from a review_item.proposed_json blob — matches
  * app/models.py's Provenance[T], or a bare bool for injection_suspected. */
@@ -145,21 +146,7 @@ export function ReviewQueueCard({
   // 2026-09-24 (items 5/6): item.document_description is JSON-encoded
   // {"en": "...", "<language>": "..."} — descriptionFor() reads back
   // whichever language is currently selected (falling back to English).
-  const [description, setDescription] = useState(descriptionFor(item.document_description, i18n.language))
-  // 2026-09-24 (items 5/6): tracks whether the reviewer has actually
-  // typed/spoken a correction themselves, distinct from `description`
-  // simply being non-empty (which it always is once a real description
-  // exists) — a real bug found live while verifying this exact feature:
-  // the effect below used to gate re-deriving on `description === ''`
-  // (DECISIONS #56's original, narrower guard, written before descriptions
-  // were language-dependent), which correctly protected an in-progress
-  // edit from a landing caption, but also silently froze the field at
-  // whichever language was active when the card first mounted — switching
-  // the language selector afterward did nothing, since the field was
-  // already non-empty. This ref is the real signal both cases actually
-  // need: re-derive from the server value whenever the language changes,
-  // unless the reviewer has genuinely edited it themselves.
-  const descriptionEditedRef = useRef(false)
+  const { description, setDescription } = useEditableDescription(item.document_description)
   const [bucket, setBucket] = useState(item.document_bucket ?? '')
   const [docType, setDocType] = useState(item.document_doc_type ?? '')
   // 2026-09-23 (live regression report, item 3): this used to initialize
@@ -188,24 +175,9 @@ export function ReviewQueueCard({
   // value, same as any placeholder.
   const isPendingCaption = isPictureLane && item.document_description === null
 
-  // 2026-09-23 (DECISIONS #56): a caption that lands via a poll tick (or
-  // any other refresh) only reaches this card through the `item` prop —
-  // local `description` state was set once at mount and never otherwise
-  // re-synced from props, so without this the card would show "no
-  // caption yet" forever despite the database already having a real one
-  // (confirmed live: a genuine caption was generated and saved, but the
-  // card never updated short of a full page reload).
-  // 2026-09-24 (items 5/6): also re-derives when the reviewer switches
-  // the language selector, so a document generated (or previously edited)
-  // in another language shows that language's own text instead of
-  // whatever was current at mount — gated on descriptionEditedRef, not
-  // `description === ''`, so this never clobbers a correction the
-  // reviewer actually made themselves, in either case.
-  useEffect(() => {
-    if (descriptionEditedRef.current) return
-    if (item.document_description === null) return
-    setDescription(descriptionFor(item.document_description, i18n.language))
-  }, [item.document_description, i18n.language])
+  // 2026-09-23 (DECISIONS #56) / 2026-09-24 (items 5/6): the description
+  // field follows a caption landing via a poll tick, and the selected
+  // language, until the reviewer edits it — see useEditableDescription.
 
   // Polls only while genuinely needed — picture lane, no caption yet —
   // for a short bounded window comfortably past jaga-vision's measured
@@ -411,10 +383,7 @@ export function ReviewQueueCard({
                   value={description}
                   disabled={!canResolve}
                   placeholder={isPendingCaption ? t('ops.review.document.descriptionPendingPlaceholder') : undefined}
-                  onChange={(e) => {
-                    descriptionEditedRef.current = true
-                    setDescription(e.target.value)
-                  }}
+                  onChange={(e) => setDescription(e.target.value)}
                   className="block h-9 w-full flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
                 />
                 {/* Voice caption (2026-09-23): only for picture-lane
@@ -426,10 +395,7 @@ export function ReviewQueueCard({
                    fallback, no separate code path needed. */}
                 {isPictureLane && (
                   <VoiceCaptionButton
-                    onCaption={(text) => {
-                      descriptionEditedRef.current = true
-                      setDescription(text)
-                    }}
+                    onCaption={setDescription}
                     disabled={!canResolve}
                   />
                 )}

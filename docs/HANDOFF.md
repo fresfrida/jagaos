@@ -1635,9 +1635,11 @@ own explicit authorization to push freely: redeploying always needs the
 user's own explicit ask, not a relayed one (see "GitHub" bullet above).
 
 **Round 9 (10-item batch) implemented — items 1, 2, 3, 5, 6, 7, 9, 10 built and
-verified; items 4, 8 assessed only (DECISIONS #70/#71). Not committed, pushed,
-or redeployed — explicit hold pending a separate go-ahead (DECISIONS #72,
-2026-09-24).** Ordered as instructed: correctness bugs first, then features,
+verified; items 4, 8 assessed only (DECISIONS #70/#71). **Committed and pushed as
+`1c43ffe` by someone other than the session that built it, between rounds
+(`git log origin/main` and `git status -sb` confirm `main` is in sync with
+`origin/main`); not redeployed to Lightsail as far as this session can
+verify (DECISIONS #72, 2026-09-24).** Ordered as instructed: correctness bugs first, then features,
 then assessment docs. **Item 2 (company-local dates):** root cause was
 `derive_obligations.py`'s `date.today()` reading the server clock, not the
 company's own timezone (storage itself was already correct UTC — not the
@@ -1710,12 +1712,55 @@ version. **Checks:** `pytest tests/` 54/54, `python evals/run.py` 14/14
 adversarial, `npm run typecheck` and `npm run build` both clean.
 Screenshots: `docs/screenshots/round9-toast-{en,ms}.png`,
 `round9-invoice-review-{en,ms}.png`, `round9-resync-fixed-ms.png`,
-`round9-ms-native-description.png`. `./scripts/prepush-check.sh` not run —
+`round9-ms-native-description.png`. `./scripts/prepush-check.sh` was not run by the
+building session —
 nothing is being pushed this round. Full per-item detail:
 `docs/KANBAN.md` Done (2026-09-24), `docs/DECISIONS.md` #70-#72.
 
+**Round 10 (5-item follow-up on round 9's language work + one cosmetic) —
+built and verified, uncommitted, awaiting a go-ahead (DECISIONS #73,
+2026-09-24).** Two of the request's premises did not survive checking against
+the running app, and the docs record what was actually found. **Generation
+(item 1):** verified independently, not re-investigated — a real upload with
+`language=ms` stored `{"en": ..., "ms": ...}` with a native Malay sentence;
+locked in by 3 new gateway-free upload-level tests (`tests/test_upload_
+language.py`, mutation-checked against both the `main.py` handoff and the
+`PipelineState` declaration). **Display (items 2/3):** the request said
+Company Files' card doesn't react to a language switch — live baseline showed
+the card *face* already did (it is derived from `descriptionFor(doc.
+description, i18n.language)` on every render, not from state); what actually
+stayed stale was the open *edit form's* input. Fixed by extracting
+ReviewQueueCard's own ref+effect into one shared hook,
+`useEditableDescription`, and using it in both cards (a copy would have
+re-created the drift that already produced a bug in round 9); one deliberate
+deviation from a straight port — `DocumentCard` outlives save/cancel, so it
+also calls `resetDescription()` on entering edit mode. Frontend regression
+tests: this project's first test runner (vitest + jsdom + Testing Library,
+`npm run test`, 8 tests, mutation-checked). **Photo path (item 4):** root
+cause confirmed and reproduced live (a real temple photo, non-picture path:
+"Document with unclear or corrupted text") — the prompt's own example
+("Photo of a document, text unclear") presupposed a document. Reworded, and
+the model is now told it only sees OCR text, must not guess what a picture
+shows, and must use one fixed English phrase plus confidence ≤ 0.3. **The
+"connect it to could_not_read_document" half was already true** (both the
+low-confidence and the problem-word signals fired before any change), but
+the suggested reword would have silently switched the word signal off, so
+the phrase now lives once in `classify.py` (`UNREADABLE_EXAMPLE_EN`) and is
+imported by `verify.py`'s detector. Live after: temple photo → "Image with no
+clear readable text" plus both reasons; a Malay upload → English + a real
+Malay sentence plus both reasons. **Never both languages at once (item 5):**
+true by construction (`descriptionFor` returns one string); now also a test.
+**Cosmetic (docType-locked helper text):** not reproduced — measured the
+text's geometry at 375px and 320px, all four languages, both places it
+renders: it wraps (1-2 lines), stays in the viewport, no clipping ancestor;
+no change made. **Checks:** `pytest tests/` 59/59, `python evals/run.py`
+14/14, `npm run test` 8/8, `npm run typecheck` and `npm run build` clean.
+Screenshots: `docs/screenshots/round10-*.png`.
+
 **Known gaps, in the order they'll bite:**
-- **⚠ Lightsail needs a redeploy to pick up round 9's changes (items 2, 5/6, 7, 9/10) as well as DECISIONS #69's fix** (2026-09-24) — company-timezone dates, bilingual descriptions, session-purge, currency/locality-aware tax all live only in this checkout; nothing from round 9 is committed, pushed, or redeployed yet (explicit hold, DECISIONS #72). The extract.py/classify.py 500-on-zero-tool-calls bug and the schema-mismatch trace-insert crash from DECISIONS #69 are separately already pushed but still await their own redeploy. Redeploy needs the user's own explicit go-ahead, not a peer's, per this project's standing rule.
+- **⚠ Lightsail needs a redeploy to pick up round 9's changes (items 2, 5/6, 7, 9/10) as well as DECISIONS #69's fix** (2026-09-24) — company-timezone dates, bilingual descriptions, session-purge, currency/locality-aware tax all live only in this checkout; round 9 is committed and pushed (`1c43ffe`) but, as far as this session can verify, not redeployed to the box (DECISIONS #72); round 10's changes (DECISIONS #73) are still uncommitted. The extract.py/classify.py 500-on-zero-tool-calls bug and the schema-mismatch trace-insert crash from DECISIONS #69 are separately already pushed but still await their own redeploy. Redeploy needs the user's own explicit go-ahead, not a peer's, per this project's standing rule.
+- **Sparse OCR noise on a non-document photo still reaches the LLM** (round 10, DECISIONS #73) — `app/graph/ingest.py` treats image OCR under 10 characters as "no text" (deterministic, no LLM call, "Untitled photo"), but four real non-document photos measured 3, 5, 5 and 17 alphanumeric characters: the 17-character one still went to the model. The new prompt handles it honestly and both review reasons fire, so this is a consistency/cost option (raise the threshold, count alphanumerics), not a bug — at the price of false alarms on genuinely tiny text images. Not changed.
+- **The unreadable-image review reason quotes the English detector phrase inside a translated sentence** (round 10) — `description_signals_problem`'s `{{word}}` is the matched English phrase, shown as-is in the zh/ms/ta sentence (visible in `docs/screenshots/round10-locked-text-review-ta.png`). Pre-existing for every matched word; more visible now that the phrase is longer. Redundant with the plain "we couldn't read this file" reason shown beside it.
 - **`GET /api/documents` is genuinely unpaginated** (confirmed by grep, DECISIONS #70) — returns every non-archived row for the company on every call; `useOpsData.ts` already refetches on every route navigation by design. Verified this, not FTS5 search, is the first real bottleneck as a company's own document history grows. No urgency at today's real row counts.
 - **`_check_amounts_in_text`/`_amount_strings()` (`app/graph/verify.py`) doesn't handle thousands-separator-formatted numbers** — found 2026-09-24 testing a synthetic IDR invoice with comma-formatted amounts, which falsely tripped `amounts_not_in_text`. Not fixed; more likely to matter now that item 9/10 actually enables large non-SGD amounts.
 - **~500+ leftover `tmp*.pdf`/`tmp*.db` files accumulate in the OS temp dir** from `tests/test_rules_smoke.py`'s `_seed_company_and_document` helper's `tempfile.mktemp()` pattern (found during item 7's lifecycle audit). Test-only, harmless, not fixed — would need touching dozens of call sites.
@@ -1829,6 +1874,7 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | App window chrome around the logged-out Calendar/Tags marketing preview | `features/preview/ProductFrame.tsx` |
 | Reusable UI | `components/ui/*` (Button, Badge, Card, Container, Reveal, EmptyState, MemoryCard, SourceLabel, Logo) |
 | Upload-outcome toast — non-blocking, 4s auto-dismiss, i18n from the start (2026-09-24, item 1) | `components/ui/Toast.tsx` (`useToast()`), wired in `pages/UploadPage.tsx` |
+| Description edit-field state that follows the selected language until the user types (2026-09-24, round 10) — shared by both cards so they cannot drift; regression tests | `features/ops/useEditableDescription.ts`, `features/ops/DocumentCard.i18n.test.tsx` |
 | Session state, login/logout, role helpers, company-settings save/refresh (2026-09-23, `refreshCompany()`) | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
 | Session-gate-and-redirect guard shared by every real-app page (2026-09-23, DECISIONS #59) | `features/auth/RequireSession.tsx` |
 | Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
@@ -1860,7 +1906,8 @@ remember the deployed site won't reflect that iteration until it's pushed.
 ```bash
 npm install
 npm run dev          # local iteration only — http://localhost:5173, not what's tested on the phone
-npm run typecheck    # tsc, strict (there is no lint or test runner yet)
+npm run typecheck    # tsc, strict (there is no lint yet)
+npm run test         # vitest + jsdom + Testing Library (added 2026-09-24, round 10 — one test file so far: DocumentCard.i18n.test.tsx)
 npm run build        # typecheck + production build to web/dist
 npm run preview      # serve dist on :4173
 ```
@@ -1901,4 +1948,4 @@ see the callout below on why that matters for `/ops` specifically.
 2. Start both servers: `uvicorn app.main:app --reload` from repo root (backend), `cd web && npm run dev` (frontend, local iteration — the deployed `https://jagaos.vercel.app` is what actually gets checked on the phone, per the Commands section above).
 3. `python scripts/seed_dev_db.py` (idempotent — safe to re-run) to get a company with data and one account per role — prints `owner@`/`admin@`/`user@`/`viewer@try-demo.test` and each one's dev-login token — rather than starting from an empty `/login` signup.
 4. Log in at `/login`, land on `/upload`, upload a document, watch it get classified/extracted, resolve anything flagged, then check `/calendar` (dates/obligations/gap analysis), `/company-files`, `/search`, and — owner/admin only — `/company-settings` (2026-09-23, DECISIONS #59/#64 — six real pages, not one tabbed `/ops`; the old URL still works, redirecting to `/upload`). Log in as each seeded role to see the nav/permission differences firsthand. That loop working, end to end, in the browser, is the current bar — not another backend node.
-5. Next real milestones, in the order they'd bite: **review and either push or discard round 9's uncommitted batch** (items 1, 2, 3, 5, 6, 7, 9, 10 built and verified; items 4, 8 assessed only — DECISIONS #70-#72, `docs/KANBAN.md` Done 2026-09-24 — explicitly held back pending a go-ahead), then member-management UI (backend's done, no frontend), a product frame with its own styling instead of `/ops`'s debug-console look, deploying this round's and DECISIONS #69's backend changes to Lightsail (`docs/KANBAN.md` Backlog has the full list).
+5. Next real milestones, in the order they'd bite: **review round 10's uncommitted batch** (DECISIONS #73, `docs/KANBAN.md` Done 2026-09-24 — held back pending a go-ahead; round 9, DECISIONS #70-#72, is already pushed as `1c43ffe`), then member-management UI (backend's done, no frontend), a product frame with its own styling instead of `/ops`'s debug-console look, deploying this round's and DECISIONS #69's backend changes to Lightsail (`docs/KANBAN.md` Backlog has the full list).

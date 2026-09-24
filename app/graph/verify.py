@@ -9,6 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from app.db import DB_PATH, get_conn
+from app.graph.classify import UNREADABLE_EXAMPLE_EN
 from app.graph.state import PipelineState
 from app.guards.injection import quarantine, scan
 from app.models import VerifyResult
@@ -194,6 +195,11 @@ def _check_amounts_in_text(fields: dict, text: str) -> list[dict]:
 _DESCRIPTION_PROBLEM_WORDS = (
     "unreadable", "corrupted", "unclear", "illegible", "cannot be read",
     "not legible", "hard to read", "poor quality", "unrecognizable",
+    # 2026-09-24 (round 10): the wording classify.py's prompt now asks the
+    # model to use for unreadable/textless input (imported, not retyped, so
+    # they cannot drift), plus the near-variants a model tends to produce
+    # instead when it paraphrases it.
+    UNREADABLE_EXAMPLE_EN.lower(), "no readable text", "no legible text",
 )
 
 

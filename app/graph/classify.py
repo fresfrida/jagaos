@@ -63,6 +63,18 @@ UNTITLED_PHOTO_BY_LANGUAGE = {
     "ta": "தலைப்பிடப்படாத புகைப்படம்",
 }
 
+# 2026-09-24 (round 10): what the model is told to write in description_en
+# when OCR text is empty/garbled/too short to identify anything. Defined
+# once and imported by app/graph/verify.py's problem-word detector, so the
+# phrase the prompt asks for is by construction one the "needs a human's
+# plain-language check" heuristic recognizes — reword it here and both move
+# together. Deliberately does not say "document": the same OCR-noise input
+# comes from a photo of a room or a piece of furniture, and this gateway is
+# text-only (MDs/GAPS.md §8) — nothing here can know which it was. The old
+# example ("Photo of a document, text unclear") presupposed a document, and
+# the model echoed it for scenes that were plainly not paperwork.
+UNREADABLE_EXAMPLE_EN = "Image with no clear readable text"
+
 SYSTEM_TEMPLATE = """You classify Singapore SME documents into one of four lanes:
 statutory (ACRA/IRAS letters, notices, filings), invoice (bills, receipts),
 important (contracts, leases, insurance), or memory (photos, notes with no
@@ -93,9 +105,15 @@ Also write:
   or your own confidence in the description, bucket, or doc_type fields —
   confidence has its own dedicated field; a description like "invoice
   with incomplete or corrupted text" is wrong even if the text really is
-  incomplete. If the text is too broken to tell what the document is,
-  just say so plainly ("Photo of a document, text unclear") without
-  editorializing about data quality. Write this in {language_name}.
+  incomplete. Write this in {language_name}.
+  You only ever see OCR text, never the image itself. If that text is
+  empty, garbled, or too short to tell what this is, do NOT assume it came
+  from a document — it may be a photograph of a room, an object or a
+  person that simply contains no text — and never guess what a picture
+  shows. In that case description_en must be exactly
+  "{unreadable_example}" (write `description` as the same sentence in
+  {language_name}), lane memory, doc_type other, and confidence 0.3 or
+  lower.
 - description_en: the exact same description, in English, regardless of
   what language you wrote `description` in above. If {language_name} is
   already English, write the identical sentence in both fields.
@@ -145,7 +163,9 @@ def classify(state: PipelineState) -> PipelineState:
                    "bucket": "Memory Lane", "vendor_name": None}
     else:
         user = UNTRUSTED_TEMPLATE.format(document_text=text[:12000])
-        system = SYSTEM_TEMPLATE.format(language_name=language_name)
+        system = SYSTEM_TEMPLATE.format(
+            language_name=language_name, unreadable_example=UNREADABLE_EXAMPLE_EN,
+        )
         # "haiku" is rejected by the gateway for this team's key — confirmed
         # live 2026-09-21 (GAPS.md's new §11): "Only the approved model is
         # allowed". sonnet4.5 is the only callable model; no cheap-routing
