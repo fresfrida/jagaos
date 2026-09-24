@@ -31,6 +31,7 @@ from app.graph.state import PipelineState
 from app.guards.injection import scan, untrusted_prompt
 from app.llm import MODEL_NAME, call
 from app.models import BucketName, ClassifyResult, to_tool
+from app.rules.expectations import hint_label
 from app.rules.grounding import ground_classification
 
 TOOL = to_tool(
@@ -176,13 +177,27 @@ BUCKET_NAMES_FOR_PROMPT = ", ".join(
 )
 
 
-def render_system_prompt(language_name: str) -> str:
-    return SYSTEM_TEMPLATE.format(
+# Round 16 (DECISIONS #90): appended when an upload was started from a compliance
+# checklist item. The label comes from rules/expectations.py (never from the
+# client), and the note says plainly that it is an expectation, not evidence, so
+# a wrong hint cannot make the model call a lease a Certificate of Incorporation.
+EXPECTED_DOCUMENT_NOTE = """
+
+The uploader started this upload from a checklist item that asks for: "{label}".
+That is what they EXPECT to be uploading, not evidence of what this is. Classify
+from the text exactly as you otherwise would. Only if the text really is that
+kind of document, use that wording (or its closest plain form) as doc_type when
+the lane is statutory. If the text is something else, ignore this note entirely."""
+
+
+def render_system_prompt(language_name: str, expected_document: str | None = None) -> str:
+    prompt = SYSTEM_TEMPLATE.format(
         language_name=language_name,
         unreadable_example=UNREADABLE_EXAMPLE_EN,
         bucket_names=BUCKET_NAMES_FOR_PROMPT,
         company_profile_doc_type=COMPANY_PROFILE_DOC_TYPE,
     )
+    return prompt + EXPECTED_DOCUMENT_NOTE.format(label=expected_document) if expected_document else prompt
 
 
 def classify(state: PipelineState) -> PipelineState:
@@ -222,7 +237,7 @@ def classify(state: PipelineState) -> PipelineState:
                    "bucket": "Memory Lane", "vendor_name": None}
     else:
         user = untrusted_prompt(text)
-        system = render_system_prompt(language_name)
+        system = render_system_prompt(language_name, hint_label(state.get("doc_type_hint")))
         # "haiku" is rejected by the gateway for this team's key — confirmed
         # live 2026-09-21 (GAPS.md's new §11): "Only the approved model is
         # allowed". sonnet4.5 is the only callable model; no cheap-routing

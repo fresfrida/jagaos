@@ -18,24 +18,31 @@
  * here would be the one exception for a route that does exist, just not
  * for this caller's role.
  *
- * Pre-fill (round 12): arriving with ?prefill=<document id> (the Company
- * Files card's action on a confirmed ACRA business profile) lays that
- * document's extracted values over the form and marks what changed. It only
- * fills the form — nothing is saved until the owner presses Save. */
+ * Business profile (round 16, DECISIONS #90): the first row is the company's
+ * business profile (features/company/BusinessProfileSection): upload it, see its
+ * thumbnail, open it in the lightbox. Once a person has confirmed what was read in
+ * the review queue, "Fill in the form" shows every change (field, now, from the
+ * profile) in a bottom sheet first; applying fills the FORM and marks what changed,
+ * and nothing is saved until the owner presses Save. (Round 12's Company Files
+ * card link and its ?prefill= address are gone.) */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { useAuth } from '../features/auth/AuthContext'
 import { RequireSession } from '../features/auth/RequireSession'
 import { authApi, roleAtLeast } from '../features/auth/authApi'
+import { BusinessProfileSection } from '../features/company/BusinessProfileSection'
 import {
-  applyPrefill, backendHasIdentityFields, formFromCompany, toUpdate, type CompanyForm, type CompanyFormField,
+  applyPrefill, backendHasIdentityFields, formFromCompany, prefillChanges, toUpdate, type CompanyForm, type CompanyFormField,
 } from '../features/company/companyForm'
-import { prefillDocumentIdFromQuery, useCompanyProfilePrefill } from '../features/company/useCompanyProfilePrefill'
+import { PrefillConfirmSheet } from '../features/company/PrefillConfirmSheet'
+import { useBusinessProfile } from '../features/company/useBusinessProfile'
+import { useCompanyProfilePrefill } from '../features/company/useCompanyProfilePrefill'
 import { FIELD_CLASS } from '../features/ops/opsShared'
 import { cn } from '../lib/cn'
+import { middleEllipsis } from '../lib/filename'
 import { navigate } from '../router/navigate'
 import { routeHref } from '../router/routes'
 
@@ -44,7 +51,7 @@ const BLANK_FORM: CompanyForm = { name: '', fyeMonth: 12, fyeDay: 31, uen: '', g
 const PREFILLED_CLASS = 'border-sage ring-1 ring-sage'
 
 function CompanySettingsContent() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { role, company, refreshCompany } = useAuth()
   const canEdit = role === 'owner'
   const canView = role !== null && roleAtLeast(role, 'admin')
@@ -54,13 +61,21 @@ function CompanySettingsContent() {
 
   const [form, setForm] = useState<CompanyForm>(() => (company ? formFromCompany(company) : BLANK_FORM))
   const [prefilled, setPrefilled] = useState<CompanyFormField[]>([])
-  const [prefillDocumentId, setPrefillDocumentId] = useState<number | null>(() =>
-    prefillDocumentIdFromQuery(window.location.search),
-  )
+  // Which business-profile document the owner asked to fill the form from (drives the
+  // fetch and the confirmation sheet), and, once they confirmed, which file it came from.
+  const [prefillDocumentId, setPrefillDocumentId] = useState<number | null>(null)
+  const [appliedFrom, setAppliedFrom] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const prefillState = useCompanyProfilePrefill(prefillDocumentId, canEdit)
+  const businessProfile = useBusinessProfile({ enabled: canEdit, language: i18n.language })
+  // What the confirmation sheet lists: computed from the SAVED company, the same base
+  // applyPrefill lays the profile over, so the sheet and the apply always agree.
+  const pendingChanges = useMemo(
+    () => (prefillState.status === 'ready' && company ? prefillChanges(formFromCompany(company), prefillState.prefill) : []),
+    [prefillState, company],
+  )
 
   useEffect(() => {
     if (role !== null && !canView) navigate(routeHref('calendar'))
@@ -73,16 +88,8 @@ function CompanySettingsContent() {
     if (!company) return
     setForm(formFromCompany(company))
     setPrefilled([])
+    setAppliedFrom(null)
   }, [company])
-
-  // A pre-fill lays its values over the SAVED company (not over whatever is
-  // typed), so applying it is idempotent and Discard is just "reset".
-  useEffect(() => {
-    if (prefillState.status !== 'ready' || !company) return
-    const result = applyPrefill(formFromCompany(company), prefillState.prefill)
-    setForm(result.form)
-    setPrefilled(result.changed)
-  }, [prefillState, company])
 
   if (role !== null && !canView) {
     return <p className="py-16 text-sm text-muted">{t('ops.session.redirecting')}</p>
@@ -96,15 +103,21 @@ function CompanySettingsContent() {
   const fieldClass = (field: CompanyFormField, extra?: string) =>
     cn(FIELD_CLASS, 'mt-1', extra, prefilled.includes(field) && PREFILLED_CLASS)
 
-  const clearPrefillFromUrl = () => {
+  // Confirmed in the sheet: lay the profile over the SAVED company (not over whatever
+  // is typed), so applying is idempotent and Discard is just "reset".
+  const applyConfirmedPrefill = () => {
+    if (prefillState.status !== 'ready' || !company) return
+    const result = applyPrefill(formFromCompany(company), prefillState.prefill)
+    setForm(result.form)
+    setPrefilled(result.changed)
+    setAppliedFrom(prefillState.prefill.filename)
     setPrefillDocumentId(null)
-    window.history.replaceState(null, '', routeHref('company-settings'))
   }
 
   const discardPrefill = () => {
-    clearPrefillFromUrl()
     if (company) setForm(formFromCompany(company))
     setPrefilled([])
+    setAppliedFrom(null)
   }
 
   const save = async () => {
@@ -114,7 +127,6 @@ function CompanySettingsContent() {
     setSaved(false)
     try {
       await authApi.updateCompany(company.id, toUpdate(form, showIdentityFields))
-      clearPrefillFromUrl()
       await refreshCompany()
       setSaved(true)
     } catch (e) {
@@ -126,20 +138,34 @@ function CompanySettingsContent() {
 
   return (
     <Card className="max-w-md p-6" interactive={false}>
+      {canEdit && (
+        <BusinessProfileSection
+          profile={businessProfile}
+          onFill={setPrefillDocumentId}
+          fillBusy={prefillState.status === 'loading'}
+        />
+      )}
+
       {prefillState.status === 'loading' && (
         <p className="mb-4 text-[12px] text-muted" role="status">{t('companySettings.prefill.loading')}</p>
       )}
       {prefillState.status === 'failed' && (
         <p className="mb-4 text-[12px] text-red-700" role="alert">{t('companySettings.prefill.failed')}</p>
       )}
-      {prefillState.status === 'ready' && (
+      {appliedFrom !== null && (
         <div className="mb-4 rounded-control border border-sage bg-canvas p-3 text-[12px] text-ink" role="status">
-          <p>{t('companySettings.prefill.banner', { filename: prefillState.prefill.filename })}</p>
+          <p>{t('companySettings.prefill.banner', { filename: middleEllipsis(appliedFrom, 36) })}</p>
           <button type="button" onClick={discardPrefill} className="mt-1.5 underline hover:text-muted">
             {t('companySettings.prefill.discard')}
           </button>
         </div>
       )}
+      <PrefillConfirmSheet
+        open={prefillState.status === 'ready'}
+        changes={pendingChanges}
+        onApply={applyConfirmedPrefill}
+        onCancel={() => setPrefillDocumentId(null)}
+      />
 
       <label className="block text-[13px] text-muted">
         {t('companySettings.nameLabel')}

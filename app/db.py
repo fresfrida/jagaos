@@ -161,8 +161,12 @@ CREATE TABLE IF NOT EXISTS expectation (
     label TEXT NOT NULL,
     due_on TEXT,
     rule_id TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'missing'
+    status TEXT NOT NULL DEFAULT 'missing',
     -- missing | acknowledged_missing | waived | satisfied  (PLATFORM.md §2)
+    evidence_document_id INTEGER REFERENCES document(id)
+    -- the document that made this 'satisfied' (round 16, DECISIONS #90); NULL
+    -- while missing, and for a row satisfied before the column existed until
+    -- app/graph/derive_expectations.py::backfill_expectation_evidence finds it
 );
 
 CREATE TABLE IF NOT EXISTS obligation (
@@ -295,6 +299,11 @@ _MIGRATIONS = [
     # the exact two phrases the rules ever produced, never anything a person typed.
     "UPDATE obligation SET citation = REPLACE(citation, 'Companies Act s197 \u2014 ', 'Companies Act s197: ') WHERE citation LIKE 'Companies Act s197 \u2014 %'",
     "UPDATE obligation SET citation = REPLACE(citation, 'Income Tax Act \u2014 ', 'Income Tax Act: ') WHERE citation LIKE 'Income Tax Act \u2014 %'",
+    # 2026-09-24 (round 16, DECISIONS #90): which document made an expectation
+    # 'satisfied', so the compliance checklist can open it. Same pattern as
+    # obligation.evidence_document_id. Nullable: a 'missing' row has none, and a
+    # row satisfied before this column existed is filled in at startup.
+    "ALTER TABLE expectation ADD COLUMN evidence_document_id INTEGER REFERENCES document(id)",
 ]
 
 

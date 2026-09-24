@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Company, CompanyProfilePrefill } from '../auth/authApi'
-import { applyPrefill, backendHasIdentityFields, formFromCompany, toUpdate } from './companyForm'
+import { applyPrefill, backendHasIdentityFields, formFromCompany, prefillChanges, toUpdate } from './companyForm'
 
 const company: Company = {
   id: 1, name: 'Old Name Pte Ltd', fye_month: 12, fye_day: 31, timezone: 'Asia/Singapore',
@@ -83,5 +83,36 @@ describe('backendHasIdentityFields', () => {
     void uen
     expect(backendHasIdentityFields(legacy)).toBe(false)
     expect(backendHasIdentityFields(null)).toBe(false)
+  })
+})
+
+describe('prefillChanges', () => {
+  const current = formFromCompany({ ...company, uen: '202000001A', gst_registered: false, registered_address: '1 Old Road' })
+
+  it('lists each field the profile would change with the old and the new value, in form order', () => {
+    const changes = prefillChanges(current, {
+      ...blankPrefill, name: 'New Name Pte Ltd', uen: '202412345K', fye_month: 6, fye_day: 30,
+      gst_registered: true, registered_address: '18 Robinson Road',
+    })
+    expect(changes.map((c) => c.field)).toEqual(['name', 'fyeMonth', 'fyeDay', 'uen', 'gstRegistered', 'registeredAddress'])
+    expect(changes.find((c) => c.field === 'uen')).toEqual({ field: 'uen', before: '202000001A', after: '202412345K' })
+    expect(changes.find((c) => c.field === 'gstRegistered')).toEqual({ field: 'gstRegistered', before: false, after: true })
+  })
+
+  it('omits a field the profile did not state and one that already matches', () => {
+    const changes = prefillChanges(current, { ...blankPrefill, name: 'Old Name Pte Ltd', uen: '202412345K' })
+    expect(changes).toEqual([{ field: 'uen', before: '202000001A', after: '202412345K' }])
+  })
+
+  it('is empty when nothing would change, so the sheet can say so instead of offering an apply', () => {
+    expect(prefillChanges(current, blankPrefill)).toEqual([])
+    expect(prefillChanges(current, { ...blankPrefill, uen: '202000001A', fye_month: 12 })).toEqual([])
+  })
+
+  it('agrees with applyPrefill on what changes', () => {
+    const prefill = { ...blankPrefill, name: 'X Pte Ltd', gst_registered: true }
+    const applied = applyPrefill(current, prefill)
+    expect(prefillChanges(current, prefill).map((c) => c.field).sort()).toEqual([...applied.changed].sort())
+    for (const change of prefillChanges(current, prefill)) expect(applied.form[change.field]).toBe(change.after)
   })
 })

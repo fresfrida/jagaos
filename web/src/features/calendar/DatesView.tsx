@@ -40,6 +40,7 @@ import { ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
+import { FileName } from '../../components/ui/FileName'
 import { dayInTimezone, formatShortDate, localeFor, startOfMonth } from '../../lib/dates'
 import { useAuth } from '../auth/AuthContext'
 import { DocumentViewerModal } from '../ops/DocumentCard'
@@ -49,12 +50,13 @@ import { MonthGrid } from './MonthGrid'
 
 type DateBasis = 'upload' | 'document'
 
-// Amendment 2 (2026-09-22, DECISIONS #43): these exact two labels, not
-// "Received"/"Occurred" or any other wording — the toggle control itself
-// (tabs here) was left "your call".
+// Amendment 2 (2026-09-22, DECISIONS #43) fixed the toggle's wording as "Upload
+// date" / "Document date". Round 16 (item 8, DECISIONS #90) renamed the TOGGLE to
+// "When filed" / "Document dates", so it has its own keys; the document card's
+// "Upload date: ..." line keeps the old ones (ops.dates.uploadDate / documentDate).
 const DATE_BASIS_OPTIONS: { id: DateBasis; labelKey: string }[] = [
-  { id: 'upload', labelKey: 'ops.dates.uploadDate' },
-  { id: 'document', labelKey: 'ops.dates.documentDate' },
+  { id: 'upload', labelKey: 'ops.dates.basis.filed' },
+  { id: 'document', labelKey: 'ops.dates.basis.document' },
 ]
 
 // 2026-09-23 (live 375px bug report): two fixes to the row itself.
@@ -81,7 +83,7 @@ function DateGroupRow({ doc, onView }: { doc: DocumentRow; onView: () => void })
       <DocumentTypeIcon mediaType={doc.media_type} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-ink">{formatDocumentLabel(doc, i18n.language) || t('ops.documents.noCaptionYet')}</span>
-        <span className="block truncate text-[11px] text-muted">{doc.filename}</span>
+        <FileName name={doc.filename} max={34} className="block truncate text-[11px] text-muted" />
       </span>
       {doc.bucket && <Badge tone="neutral">{bucketLabel(t, doc.bucket)}</Badge>}
       <StatusPill status={doc.status} />
@@ -150,43 +152,48 @@ export function DatesView({ documents, onChanged }: { documents: DocumentRow[]; 
         })}
       </div>
 
-      {documents.length === 0 ? (
-        <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">{t('ops.dates.noneUploaded')}</p>
-      ) : (
-        <div className="space-y-4">
-          <MonthGrid month={month} documentsByDay={byDay} selectedDay={selectedDay} onSelectDay={setSelectedDay} onMonthChange={setMonth} timezone={timezone} />
+      {/* Round 16 (item 7): the month grid is always drawn. With no documents it used to
+         be replaced by a text-only "none uploaded" box, so a new company saw no
+         calendar at all; now that message is a small hint under the grid. */}
+      <div className="space-y-4">
+        <MonthGrid month={month} documentsByDay={byDay} selectedDay={selectedDay} onSelectDay={setSelectedDay} onMonthChange={setMonth} timezone={timezone} />
 
-          <section>
-            {selectedDay ? (
-              <>
-                <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">
-                  {formatShortDate(selectedDay, localeFor(i18n.language))} ({selectedDocs.length})
-                </h3>
-                {selectedDocs.length === 0 ? (
-                  <p className="rounded-card border border-line bg-white p-4 text-[13px] text-muted">{t('ops.dates.noneOnDay')}</p>
-                ) : (
-                  <div className="space-y-1">
-                    {selectedDocs.map((doc) => <DateGroupRow key={doc.id} doc={doc} onView={() => setViewingDocument(doc)} />)}
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="rounded-card border border-dashed border-line bg-white p-4 text-[13px] text-muted">{t('ops.dates.selectADay')}</p>
-            )}
-          </section>
-
-          {basis === 'document' && noDate.length > 0 && (
+        {documents.length === 0 ? (
+          <p className="text-[13px] text-muted" data-testid="no-documents-hint">{t('ops.dates.noneUploaded')}</p>
+        ) : (
+          <>
             <section>
-              <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">
-                {t('ops.dates.noDocumentDate', { count: noDate.length })}
-              </h3>
-              <div className="space-y-1">
-                {noDate.map((doc) => <DateGroupRow key={doc.id} doc={doc} onView={() => setViewingDocument(doc)} />)}
-              </div>
+              {selectedDay ? (
+                <>
+                  <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">
+                    {formatShortDate(selectedDay, localeFor(i18n.language))} ({selectedDocs.length})
+                  </h3>
+                  {selectedDocs.length === 0 ? (
+                    <p className="rounded-card border border-line bg-white p-4 text-[13px] text-muted">{t('ops.dates.noneOnDay')}</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {selectedDocs.map((doc) => <DateGroupRow key={doc.id} doc={doc} onView={() => setViewingDocument(doc)} />)}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="rounded-card border border-dashed border-line bg-white p-4 text-[13px] text-muted">{t('ops.dates.selectADay')}</p>
+              )}
             </section>
-          )}
-        </div>
-      )}
+
+            {basis === 'document' && noDate.length > 0 && (
+              <section>
+                <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">
+                  {t('ops.dates.noDocumentDate', { count: noDate.length })}
+                </h3>
+                <div className="space-y-1">
+                  {noDate.map((doc) => <DateGroupRow key={doc.id} doc={doc} onView={() => setViewingDocument(doc)} />)}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+      </div>
 
       {viewingDocument && (
         <DocumentViewerModal doc={viewingDocument} onClose={() => setViewingDocument(null)} onChanged={onChanged} />

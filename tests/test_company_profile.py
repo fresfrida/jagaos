@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from reportlab.pdfgen import canvas
 
 import app.graph.classify as classify_module
+import app.graph.derive_events as derive_events_module
 import app.graph.extract as extract_module
 from app.graph.classify import COMPANY_PROFILE_DOC_TYPE, is_company_profile_doc_type
 from app.graph.extract import _extractor_for
@@ -174,8 +175,17 @@ def extractors_used(monkeypatch) -> list[str]:
         used.append(kwargs["tools"][0]["function"]["name"])
         return _tool_response("extract_company_profile_fields", used.profile, model)
 
+    def fake_derive(model, system, user, **kwargs):
+        # A confirmed statutory document is read for a company event (DECISIONS #84).
+        # Canned like the other two model calls: without this the confirm step below
+        # reached the real gateway, so these tests needed LLM_GATEWAY_API_KEY and spent
+        # tokens (found in round 16: they failed whenever the key was not loaded).
+        return LLMResult(content="no_event", model=model, input_tokens=1, output_tokens=1,
+                         cost_usd=0.0, latency_ms=1, tool_calls=[])
+
     monkeypatch.setattr(classify_module, "call", fake_classify)
     monkeypatch.setattr(extract_module, "call", fake_extract)
+    monkeypatch.setattr(derive_events_module, "call", fake_derive)
     return used
 
 
@@ -222,8 +232,15 @@ def _prefill(team: dict, actor: str, document_id: int):
 
 
 def _can_prefill(team: dict, actor: str, document_id: int) -> bool:
-    rows = client.get("/api/documents", headers=_headers(team["tokens"][actor])).json()
-    return next(d for d in rows if d["id"] == document_id)["can_prefill_company"]
+    """Whether the Company Settings section would offer "fill in the form" for this
+    document. Round 16 (DECISIONS #90): a business profile is no longer in the
+    document lists (so no per-row flag); the owner's GET /api/business-profile
+    carries it, and anyone else is refused that endpoint outright."""
+    resp = client.get("/api/business-profile", headers=_headers(team["tokens"][actor]))
+    if resp.status_code == 403:
+        return False
+    document = resp.json()["document"]
+    return document is not None and document["id"] == document_id and document["can_prefill"]
 
 
 def test_a_business_profile_is_extracted_with_the_company_profile_shape_not_the_notice_shape(team, extractors_used):

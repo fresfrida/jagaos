@@ -9,12 +9,18 @@
  * different grid shape, so it's its own component rather than a forced
  * reuse. */
 
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../../components/ui/Button'
 import { cn } from '../../lib/cn'
 import { addMonths, daysInMonth, localeFor, parseIsoDate, startOfMonth, todayInTimezone, toIsoDate } from '../../lib/dates'
 import type { DocumentRow } from '../ops/opsApi'
+import { MonthJump, type JumpLevel } from './MonthJump'
+import { firstOfMonth as monthStart, shiftYearPage, yearPageStart, yearsOfPage } from './monthPaging'
+
+/** Which picker, if any, the header has opened over the day grid. */
+type Picker = { level: 'years'; start: number } | { level: 'months'; year: number } | null
 
 function weekdayLabels(locale: string): string[] {
   const monday = new Date(2024, 0, 1) // a known Monday
@@ -46,6 +52,40 @@ export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onM
   const firstWeekday = (parseIsoDate(firstOfMonth).getDay() + 6) % 7 // Monday = 0
   const totalDays = daysInMonth(month)
   const todayIso = todayInTimezone(timezone)
+  const [picker, setPicker] = useState<Picker>(null)
+  const viewed = parseIsoDate(month)
+  const today = parseIsoDate(todayIso)
+
+  // Round 16 (item 8): the header is a button. Tapping it opens the year grid, a year
+  // opens its months, a month jumps there and returns to the days. The chevrons follow
+  // the level: month by month on the days, a page of years on the year grid, year by
+  // year on the month grid. Tapping the header again goes back up a level.
+  const titleFor = (): string => {
+    if (picker?.level === 'years') {
+      const years = yearsOfPage(picker.start)
+      return `${years[0]} - ${years[years.length - 1]}`
+    }
+    if (picker?.level === 'months') return String(picker.year)
+    return monthLabel
+  }
+  const step = (direction: -1 | 1) => {
+    if (picker?.level === 'years') setPicker({ level: 'years', start: shiftYearPage(picker.start, direction) })
+    else if (picker?.level === 'months') setPicker({ level: 'months', year: picker.year + direction })
+    else onMonthChange(addMonths(month, direction))
+  }
+  const onTitle = () => {
+    if (picker === null) setPicker({ level: 'years', start: yearPageStart(viewed.getFullYear()) })
+    else if (picker.level === 'months') setPicker({ level: 'years', start: yearPageStart(picker.year) })
+    else setPicker(null)
+  }
+  const jump: JumpLevel | null =
+    picker === null ? null : picker.level === 'years' ? { level: 'years', years: yearsOfPage(picker.start) } : { level: 'months', year: picker.year }
+  const stepLabels =
+    picker?.level === 'years'
+      ? ['ops.dates.prevYears', 'ops.dates.nextYears']
+      : picker?.level === 'months'
+        ? ['ops.dates.prevYear', 'ops.dates.nextYear']
+        : ['ops.dates.prevMonth', 'ops.dates.nextMonth']
 
   const cells: (string | null)[] = [
     ...Array.from({ length: firstWeekday }, () => null),
@@ -59,61 +99,90 @@ export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onM
   return (
     <div className="overflow-hidden rounded-card border border-line bg-white">
       <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
-        <h3 className="text-sm font-semibold capitalize tracking-tight text-ink">{monthLabel}</h3>
+        <h3 className="min-w-0 text-sm font-semibold capitalize tracking-tight text-ink">
+          <button
+            type="button"
+            onClick={onTitle}
+            aria-expanded={picker !== null}
+            aria-label={t(picker === null ? 'ops.dates.pickMonth' : 'ops.dates.backToDays', { label: titleFor() })}
+            className="-ml-1.5 flex items-center gap-1 rounded-control px-1.5 py-1 hover:bg-canvas"
+          >
+            <span className="truncate">{titleFor()}</span>
+            <ChevronDown size={16} aria-hidden="true" className={cn('shrink-0 text-muted transition-transform', picker !== null && 'rotate-180')} />
+          </button>
+        </h3>
         <div className="flex gap-1.5">
-          <Button variant="secondary" size="icon" aria-label={t('ops.dates.prevMonth')} onClick={() => onMonthChange(addMonths(month, -1))} icon={<ChevronLeft size={18} />} />
-          <Button variant="secondary" size="icon" aria-label={t('ops.dates.nextMonth')} onClick={() => onMonthChange(addMonths(month, 1))} icon={<ChevronRight size={18} />} />
+          <Button variant="secondary" size="icon" aria-label={t(stepLabels[0] ?? '')} onClick={() => step(-1)} icon={<ChevronLeft size={18} />} />
+          <Button variant="secondary" size="icon" aria-label={t(stepLabels[1] ?? '')} onClick={() => step(1)} icon={<ChevronRight size={18} />} />
         </div>
       </div>
 
-      <div className="grid grid-cols-7">
-        {weekdayLabels(locale).map((label, i) => (
-          <div key={i} className="border-b border-line px-1 py-1.5 text-center font-mono text-[10px] uppercase tracking-wide text-muted">
-            {label}
+      {jump !== null ? (
+        <MonthJump
+          view={jump}
+          viewedYear={viewed.getFullYear()}
+          viewedMonth={viewed.getMonth()}
+          todayYear={today.getFullYear()}
+          todayMonth={today.getMonth()}
+          locale={locale}
+          onPickYear={(year) => setPicker({ level: 'months', year })}
+          onPickMonth={(year, monthIndex) => {
+            onMonthChange(monthStart(year, monthIndex))
+            setPicker(null)
+          }}
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-7">
+            {weekdayLabels(locale).map((label, i) => (
+              <div key={i} className="border-b border-line px-1 py-1.5 text-center font-mono text-[10px] uppercase tracking-wide text-muted">
+                {label}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <div className="grid grid-cols-7">
-        {cells.map((day, i) => {
-          if (!day) return <div key={i} className="min-h-[44px] border-b border-r border-line bg-canvas/40 sm:min-h-[56px]" />
-          const count = documentsByDay.get(day)?.length ?? 0
-          const isToday = day === todayIso
-          const isSelected = day === selectedDay
-          return (
-            <button
-              key={day}
-              type="button"
-              onClick={() => onSelectDay(day)}
-              aria-current={isToday ? 'date' : undefined}
-              aria-pressed={isSelected}
-              className={cn(
-                // flex flex-col items-start (2026-09-23, live 375px bug report):
-                // the date number and count badge are two `display:flex` spans
-                // (block-level, since `flex` — not `inline-flex`); with no
-                // explicit vertical layout on their shared parent, a block box
-                // with no explicit width defaults to filling the *entire*
-                // available width of its non-flex containing block, so the
-                // count badge stretched edge-to-edge and visually overlapped
-                // the date number at narrow cell widths, worst on the
-                // ring-highlighted selected cell. items-start here sizes each
-                // flex item to its own content instead of stretching it.
-                'flex min-h-[44px] flex-col items-start gap-1 border-b border-r border-line p-1 text-left transition-colors hover:bg-canvas sm:min-h-[56px]',
-                isSelected && 'bg-canvas ring-1 ring-inset ring-ink',
-              )}
-            >
-              <span className={cn('flex h-5 w-5 items-center justify-center rounded-full text-[12px]', isToday ? 'bg-ink font-medium text-white' : 'text-ink')}>
-                {Number(day.slice(8))}
-              </span>
-              {count > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-sage px-1 font-mono text-[9px] font-medium text-white">
-                  {count}
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </div>
+          <div className="grid grid-cols-7">
+            {cells.map((day, i) => {
+              if (!day) return <div key={i} className="min-h-[44px] border-b border-r border-line bg-canvas/40 sm:min-h-[56px]" />
+              const count = documentsByDay.get(day)?.length ?? 0
+              const isToday = day === todayIso
+              const isSelected = day === selectedDay
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => onSelectDay(day)}
+                  aria-current={isToday ? 'date' : undefined}
+                  aria-pressed={isSelected}
+                  className={cn(
+                    // flex flex-col items-start (2026-09-23, live 375px bug report):
+                    // the date number and count badge are two `display:flex` spans
+                    // (block-level, since `flex` — not `inline-flex`); with no
+                    // explicit vertical layout on their shared parent, a block box
+                    // with no explicit width defaults to filling the *entire*
+                    // available width of its non-flex containing block, so the
+                    // count badge stretched edge-to-edge and visually overlapped
+                    // the date number at narrow cell widths, worst on the
+                    // ring-highlighted selected cell. items-start here sizes each
+                    // flex item to its own content instead of stretching it.
+                    'flex min-h-[44px] flex-col items-start gap-1 border-b border-r border-line p-1 text-left transition-colors hover:bg-canvas sm:min-h-[56px]',
+                    isSelected && 'bg-canvas ring-1 ring-inset ring-ink',
+                  )}
+                >
+                  <span className={cn('flex h-5 w-5 items-center justify-center rounded-full text-[12px]', isToday ? 'bg-ink font-medium text-white' : 'text-ink')}>
+                    {Number(day.slice(8))}
+                  </span>
+                  {count > 0 && (
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-sage px-1 font-mono text-[9px] font-medium text-white">
+                      {count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -8,10 +8,29 @@
     }
   },
   "home": {
-    "heading": "欢迎使用 JagaOS",
-    "subheading": "为成长中的团队打造的公司记忆。捕捉文件、决策与截止日期，几秒内即可找回。",
     "signIn": "登录",
-    "getStarted": "开始使用"
+    "pitch": "别再到处找文件、错过截止日期了。",
+    "demo": {
+      "button": "先来逛逛",
+      "hint": "以所有者身份打开演示公司，无需注册。",
+      "opening": "正在打开演示…",
+      "failed": "暂时无法打开演示。您仍可登录。"
+    },
+    "haveAccount": "已有账户？",
+    "features": {
+      "capture": {
+        "title": "收集",
+        "text": "拍照或上传发票、合同或通知，由我们来读取。"
+      },
+      "review": {
+        "title": "审核",
+        "text": "由您确认我们读取的内容。人工确认之前不会归档。"
+      },
+      "obligations": {
+        "title": "义务",
+        "text": "截止日期和必须提交的文件会出现在您的日历上，并注明所依据的规定。"
+      }
+    }
   },
   "companySettings": {
     "heading": "公司设置",
@@ -27,7 +46,40 @@
       "banner": "已根据 {{filename}} 预填。尚未保存。请核对各项，修改有误之处，然后点击保存。",
       "loading": "正在读取商业档案…",
       "failed": "无法根据该文件预填。",
-      "discard": "放弃预填"
+      "discard": "放弃预填",
+      "confirmTitle": "使用这些信息？",
+      "confirmIntro": "公司概况将更改以下设置：",
+      "now": "现在",
+      "fromProfile": "概况",
+      "empty": "（空）",
+      "apply": "应用到表单",
+      "noChanges": "无需更改，概况与您当前的设置一致。",
+      "saveNote": "在您点击“保存”之前不会保存任何内容。"
+    },
+    "businessProfile": {
+      "title": "公司概况",
+      "hint": "上传后可填写下方信息。",
+      "loading": "正在查找公司概况…",
+      "loadFailed": "无法查找公司概况。",
+      "uploading": "正在读取您的文件…",
+      "view": "查看公司概况",
+      "fill": "填写表单",
+      "replace": "替换",
+      "remove": "移除",
+      "removeConfirm": "要移除 {{filename}} 吗？此操作无法撤销。",
+      "openQueue": "打开待审核列表",
+      "status": {
+        "filed": "已确认，可用于填写表单。",
+        "needsReview": "等待您确认读取的内容。",
+        "quarantined": "因安全检查被拦截。"
+      },
+      "notice": {
+        "uploaded": "已上传。请先在待审核列表中确认读取的内容，再填写表单。",
+        "notAProfile": "这看起来不是公司概况文件，因此已与您的其他文件一起归档。",
+        "duplicate": "该文件已上传过。",
+        "quarantined": "该文件因安全检查被拦截，请查看待审核列表。",
+        "failed": "操作未成功，请重试。"
+      }
     }
   },
   "header": {
@@ -95,7 +147,7 @@
       "review": "上传与审核",
       "documents": "文件",
       "dates": "日期",
-      "gaps": "差距分析",
+      "gaps": "合规清单",
       "obligations": "义务"
     },
     "upload": {
@@ -133,6 +185,19 @@
           "mixed": "请选择一个 PDF 或多张照片。PDF 无法与照片合并。",
           "tooMany": "一份文件最多 {{max}} 页。"
         }
+      },
+      "rejectedTitle": "要替换被拒绝的文件吗？",
+      "rejectedDismiss": "暂不",
+      "progress": {
+        "reading": "正在读取您的文件…",
+        "details": "正在提取详细信息…",
+        "almost": "即将归档…",
+        "announce": "正在上传 {{name}}",
+        "pages": "{{count}} 页"
+      },
+      "hint": {
+        "filingFor": "为此项上传：{{label}}",
+        "clear": "清除此提示"
       }
     },
     "review": {
@@ -235,8 +300,7 @@
         "cost": "费用",
         "decision": "结果"
       },
-      "noDocumentDate": "无文件日期",
-      "prefillCompany": "用此文件预填公司设置"
+      "noDocumentDate": "无文件日期"
     },
     "dates": {
       "uploadDate": "上传日期",
@@ -246,15 +310,30 @@
       "prevMonth": "上个月",
       "nextMonth": "下个月",
       "selectADay": "点击有文件的日期即可在此查看。",
-      "noneOnDay": "这一天没有文件。"
+      "noneOnDay": "这一天没有文件。",
+      "basis": {
+        "filed": "归档时间",
+        "document": "文件日期"
+      },
+      "prevYear": "上一年",
+      "nextYear": "下一年",
+      "prevYears": "更早的年份",
+      "nextYears": "更晚的年份",
+      "pickMonth": "{{label}}：选择年份和月份",
+      "backToDays": "{{label}}：返回"
     },
     "gaps": {
-      "heading": "差距分析：已持有 {{satisfied}} / {{total}}",
-      "empty": "暂无预期项目。请上传能识别为公司事件（如注册成立、公司秘书变更）的法定文件。"
+      "heading": "合规清单：已持有 {{satisfied}} / {{total}}",
+      "empty": "清单暂无项目。上传能识别为公司事件（如注册成立、公司秘书变更）的法定文件后，所需文件会显示在这里。",
+      "viewDocument": "查看文件",
+      "upload": "上传"
     },
     "obligations": {
       "heading": "义务 ({{count}})",
-      "empty": "尚未生成任何义务。"
+      "empty": "尚未生成任何义务。",
+      "due": "截止 {{date}}",
+      "showMore": "展开",
+      "showLess": "收起"
     },
     "documentViewer": {
       "loadFailed": "无法加载源文件。",
@@ -265,7 +344,8 @@
     "documentPreview": {
       "loadFailed": "无法加载源文件。",
       "loading": "正在加载源文件…",
-      "openSourcePdf": "打开原始 PDF"
+      "openSourcePdf": "打开原始 PDF",
+      "openImage": "打开大图"
     },
     "voiceCaption": {
       "stopRecording": "停止录制说明",

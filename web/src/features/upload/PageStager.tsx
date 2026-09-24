@@ -8,6 +8,7 @@ import { ArrowDown, ArrowUp, Loader2, Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../../components/ui/Button'
+import { FileName } from '../../components/ui/FileName'
 import { MAX_PAGES, type SelectionError } from './uploadSelection'
 
 /** Object URLs for the page thumbnails, revoked when the list changes or
@@ -62,7 +63,7 @@ export function PageStager({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-ink">{t('ops.upload.pages.pageLabel', { n: index + 1 })}</p>
-              <p className="truncate text-[12px] text-muted">{file.name}</p>
+              <p className="text-[12px] text-muted"><FileName name={file.name} max={30} /></p>
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
               <Button variant="ghost" size="icon" disabled={busy || index === 0} onClick={() => onMove(index, -1)}

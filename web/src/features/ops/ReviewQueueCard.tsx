@@ -10,6 +10,7 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { ApiError } from '../../lib/apiClient'
+import { middleEllipsis } from '../../lib/filename'
 import {
   BOOLEAN_FIELD_NAMES,
   BucketField,
@@ -25,10 +26,12 @@ import {
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
+  FieldLabelText,
   PersonalFileBadge,
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type ReviewItem } from './opsApi'
+import { DocumentViewerModal } from './DocumentCard'
 import { ReviewReasons } from './ReviewReasons'
 import { useDocumentVisibility } from './useDocumentVisibility'
 import { useEditableDescription } from './useEditableDescription'
@@ -53,16 +56,21 @@ function isProvenance(field: ProposedField | undefined): field is { value: unkno
 /** The source photo/PDF next to the fields a reviewer is confirming —
  * without it, confirming extracted fields isn't a safety check, it's a
  * rubber stamp (2026-09-22). A "reasonably-sized preview," not a document
- * viewer — the Company Files page's "View" action opens the full
- * DocumentViewerModal instead. */
+ * viewer: tapping it opens the same DocumentViewerModal every other place that
+ * shows a document uses (Company Files, Search, the Calendar), instead of the
+ * raw blob: URL in a new tab this used to be (round 16, item 4). The modal is
+ * the same on every screen size, so there is no phone/desktop difference here
+ * either. */
 function DocumentPreview({
   documentId,
   mediaType,
   filename,
+  onOpen,
 }: {
   documentId: number
   mediaType: string
   filename: string
+  onOpen: () => void
 }) {
   const { t } = useTranslation()
   const { blobUrl, failed } = useDocumentBlobUrl(documentId)
@@ -74,18 +82,23 @@ function DocumentPreview({
     return (
       <div className="mt-3">
         <embed src={blobUrl} type="application/pdf" className="h-64 w-full rounded-control border border-line" />
-        <a href={blobUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[12px] text-muted underline hover:text-ink">
+        <button type="button" onClick={onOpen} className="mt-1 inline-block text-[12px] text-muted underline hover:text-ink">
           {t('ops.documentPreview.openSourcePdf')}
-        </a>
+        </button>
       </div>
     )
   }
 
   if (mediaType.startsWith('image/')) {
     return (
-      <a href={blobUrl} target="_blank" rel="noreferrer" className="mt-3 block max-h-64 max-w-sm overflow-auto rounded-control border border-line">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={t('ops.documentPreview.openImage')}
+        className="mt-3 block max-h-64 max-w-sm cursor-zoom-in overflow-auto rounded-control border border-line"
+      >
         <img src={blobUrl} alt={`Source: ${filename}`} className="w-full object-contain" />
-      </a>
+      </button>
     )
   }
 
@@ -121,6 +134,7 @@ export function ReviewQueueCard({
 }) {
   const { t, i18n } = useTranslation()
   const lock = useDocumentVisibility(item.document_id, item.document_visibility ?? 'company', onVisibilityChanged)
+  const [viewingSource, setViewingSource] = useState(false)
   const proposed = parseProposed(item.proposed_json)
   const fieldNames = Object.keys(proposed).filter((k) => k !== 'injection_suspected' && isProvenance(proposed[k]))
   // 2026-09-22 (DECISIONS #40): every document now needs review, even a
@@ -380,7 +394,12 @@ export function ReviewQueueCard({
         className={`text-[13px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}
       />
 
-      <DocumentPreview documentId={item.document_id} mediaType={item.document_media_type} filename={item.document_filename} />
+      <DocumentPreview
+        documentId={item.document_id}
+        mediaType={item.document_media_type}
+        filename={item.document_filename}
+        onOpen={() => setViewingSource(true)}
+      />
 
       {/* Document-level metadata (organizational: what kind of thing this
          is, who it's from) vs. extracted line-item fields (what the model
@@ -392,7 +411,7 @@ export function ReviewQueueCard({
           <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">{t('ops.review.document.heading')}</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="text-[12px] text-muted sm:col-span-3">
-              {t('ops.review.document.filenameLabel')}
+              <FieldLabelText>{t('ops.review.document.filenameLabel')}</FieldLabelText>
               <input
                 value={filename}
                 disabled={!canResolve}
@@ -401,7 +420,7 @@ export function ReviewQueueCard({
               />
             </label>
             <label className="text-[12px] text-muted sm:col-span-3">
-              {t('ops.review.document.descriptionLabel')}
+              <FieldLabelText>{t('ops.review.document.descriptionLabel')}</FieldLabelText>
               <div className="mt-1 flex items-center gap-2">
                 <input
                   value={description}
@@ -440,7 +459,7 @@ export function ReviewQueueCard({
               )}
             </label>
             <label className="text-[12px] text-muted sm:col-span-3">
-              {t('ops.review.document.bucketLabel')}
+              <FieldLabelText>{t('ops.review.document.bucketLabel')}</FieldLabelText>
               <div className="mt-1">
                 <BucketField
                   value={bucket}
@@ -451,7 +470,7 @@ export function ReviewQueueCard({
               </div>
             </label>
             <label className="text-[12px] text-muted sm:col-span-3">
-              {t('ops.review.document.docTypeLabel')}
+              <FieldLabelText>{t('ops.review.document.docTypeLabel')}</FieldLabelText>
               {/* 2026-09-23 (live regression report, item 6): the separate
                  "is this a picture, not a document?" checkbox is gone —
                  it was a second control answering the exact same question
@@ -468,13 +487,15 @@ export function ReviewQueueCard({
                 onChange={setDocType}
                 className={`mt-1 ${FIELD_CLASS}`}
               />
-              {isPictureLane && <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
+              {/* min-h: this note wraps to one line in one language and two in another,
+                 which moved every field below it (round 16, item 5); two lines are reserved. */}
+              {isPictureLane && <p className="mt-1 min-h-[2.125rem] text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
               {docType === 'photo' && !isPictureLane && (
                 <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.reducesAccuracy')}</p>
               )}
             </label>
             <label className="text-[12px] text-muted">
-              {t('ops.review.document.vendorNameLabel')}
+              <FieldLabelText>{t('ops.review.document.vendorNameLabel')}</FieldLabelText>
               <input
                 value={vendorName}
                 disabled={!canResolve}
@@ -513,7 +534,7 @@ export function ReviewQueueCard({
               const isBooleanField = BOOLEAN_FIELD_NAMES.has(name)
               return (
                 <label key={name} className="text-[12px] text-muted">
-                  {fieldLabel(t, name)}
+                  <FieldLabelText>{fieldLabel(t, name)}</FieldLabelText>
                   {isBooleanField ? (
                     <select
                       value={edits[name] ?? ''}
@@ -616,7 +637,7 @@ export function ReviewQueueCard({
 
       <ConfirmDialog
         open={showDeleteConfirm}
-        message={t('ops.documents.deleteConfirmMessage', { filename: item.document_filename })}
+        message={t('ops.documents.deleteConfirmMessage', { filename: middleEllipsis(item.document_filename, 40) })}
         confirmLabel={t('common.buttons.delete')}
         cancelLabel={t('common.buttons.cancel')}
         busy={busy}
@@ -626,6 +647,20 @@ export function ReviewQueueCard({
         }}
         onCancel={() => setShowDeleteConfirm(false)}
       />
+
+      {viewingSource && (
+        <DocumentViewerModal
+          doc={{
+            id: item.document_id,
+            filename: item.document_filename,
+            media_type: item.document_media_type,
+            visibility: item.document_visibility,
+            can_change_visibility: item.can_change_visibility,
+          }}
+          onClose={() => setViewingSource(false)}
+          onChanged={onVisibilityChanged}
+        />
+      )}
     </Card>
   )
 }

@@ -1,28 +1,21 @@
-/** Lets the mobile bottom nav's raised Upload button (BottomNav.tsx) — and
- * the "upload a replacement" prompt — bring the Upload page's DOCUMENT / PHOTO
- * choice into view when the person is already on /upload, instead of being a
- * dead tap next to it (2026-09-23, live regression report item 5: the FAB was
- * a plain <Link>, pure navigation, so tapping it while already on /upload did
- * nothing).
+/** Opens the universal Upload sheet from anywhere (2026-09-24, round 16, item
+ * 10c). The bottom nav's raised Upload button used to navigate to /upload, or,
+ * when already there, scroll to and focus the page's own choice (round 12). It now
+ * opens one bottom sheet with the DOCUMENT / PHOTO choice on EVERY page, this one
+ * included, so the behaviour no longer depends on where you are.
  *
- * It used to open the file picker directly. With the two-way choice
- * (2026-09-24, round 12, DECISIONS #78) there is no single picker to open — a
- * tap can't know whether the person has a document or a photo — so it now
- * scrolls to the choice and focuses it, and the person taps one.
- *
- * A plain window CustomEvent, not a new React Context: BottomNav.tsx and
- * UploadPage.tsx are distant in the tree (rendered from App.tsx and the
- * router respectively, no shared parent worth threading state through)
- * and this is a single fire-and-forget signal, not shared state — a
- * context would be the heavier tool for a smaller job here. */
+ * A plain window CustomEvent, not a React Context: the button (BottomNav) and the
+ * sheet (UploadSheetHost) are siblings under App with nothing else in common, and
+ * this is a single fire-and-forget signal, not shared state. The same event opens
+ * the sheet from "Upload a replacement" after a rejection. */
 
-const TRIGGER_UPLOAD_EVENT = 'jagaos:focus-upload-choice'
+const OPEN_UPLOAD_SHEET_EVENT = 'jagaos:open-upload-sheet'
 
-export function triggerUploadChoice(): void {
-  window.dispatchEvent(new CustomEvent(TRIGGER_UPLOAD_EVENT))
+export function openUploadSheet(): void {
+  window.dispatchEvent(new CustomEvent(OPEN_UPLOAD_SHEET_EVENT))
 }
 
-export function onTriggerUploadChoice(handler: () => void): () => void {
-  window.addEventListener(TRIGGER_UPLOAD_EVENT, handler)
-  return () => window.removeEventListener(TRIGGER_UPLOAD_EVENT, handler)
+export function onOpenUploadSheet(handler: () => void): () => void {
+  window.addEventListener(OPEN_UPLOAD_SHEET_EVENT, handler)
+  return () => window.removeEventListener(OPEN_UPLOAD_SHEET_EVENT, handler)
 }

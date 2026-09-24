@@ -18,6 +18,17 @@ one membership means no switcher and no group anywhere in their UI.
 
 Requires `uvicorn app.main:app --reload` already running. Run:
     python scripts/seed_dev_db.py
+
+How it works (checked when scripts/reset_demo_data.py was written, DECISIONS
+#91): it is an HTTP CLIENT of the running server. Companies, accounts and the
+corpus uploads all go through the API (so the uploads run the real pipeline and
+each one's review state lives in the SERVER's memory, which is why a seed must go
+through the server and never in-process). Only the group label is written straight
+to the database, so that one step needs the script to resolve the SAME database
+the server serves (same cwd, same .env); it now reads the label back through the
+API and fails if the server cannot see it. It is idempotent by SKIPPING what
+exists: it does not repair a changed role or a deleted document. The exact clean
+state is what `scripts/reset_demo_data.py` restores (wipe, then this seed).
 """
 
 import os
@@ -67,6 +78,10 @@ ROLE_ACCOUNTS = [
 ]
 
 
+class SeedError(RuntimeError):
+    """The seed did not produce what it should, and says how."""
+
+
 def seed_group(client: httpx.Client, owner_headers: dict) -> None:
     """Idempotent. Creates the sibling companies the normal way (dev-login
     with a company_name makes the caller its owner), then labels all three
@@ -99,22 +114,30 @@ def seed_group(client: httpx.Client, owner_headers: dict) -> None:
             "  WHERE u.email = ? AND m.role = 'owner')",
             (group_id, *names, OWNER_EMAIL),
         )
+    # Read it back THROUGH THE SERVER. The label above went into whatever database this script
+    # resolved; if that is not the one the server serves (a different cwd or .env), the write
+    # succeeded and the app still shows no group. Say so instead of printing success.
+    seen = {c["name"]: c["group_name"] for c in client.get("/api/auth/companies", headers=owner_headers).json()}
+    missing = [n for n in names if seen.get(n) != GROUP_NAME]
+    if missing:
+        raise SeedError(
+            f"the group label is not visible through the server for: {', '.join(missing)}. This script and the "
+            "server are probably using different databases (run it from the server's own directory, with its .env)."
+        )
     print(f"Group '{GROUP_NAME}': {', '.join(names)} — switch between them as {OWNER_EMAIL}.")
 
 
-def main() -> None:
-    client = httpx.Client(base_url=API, timeout=60)
+def seed(client: httpx.Client, *, reuse_existing: bool = True, files_dir: Path = FILES_DIR) -> dict:
+    """Seeds through `client` (an httpx client on the running server) and returns
+    {"company_id", "accounts": [(role, email, token)], "uploads": [(filename, status)]}.
 
-    try:
-        client.get("/api/health").raise_for_status()
-    except httpx.ConnectError:
-        print("Backend not reachable at", API, "— start it first: uvicorn app.main:app --reload")
-        sys.exit(1)
-
+    reuse_existing=True is the dev-friendly default: if the demo owner already has
+    a company, reuse it and upload nothing. False creates the company and uploads the
+    corpus unconditionally, which is what a reset does right after wiping."""
     # Idempotent via the auth system itself, not a name lookup: logging in
     # with no company_name joins an existing membership if there is one.
-    rejoin = client.post("/api/auth/dev-login", json={"email": OWNER_EMAIL})
-    already_seeded = rejoin.status_code == 200
+    rejoin = client.post("/api/auth/dev-login", json={"email": OWNER_EMAIL}) if reuse_existing else None
+    already_seeded = rejoin is not None and rejoin.status_code == 200
 
     if already_seeded:
         auth = rejoin.json()
@@ -132,8 +155,9 @@ def main() -> None:
     company_id = auth["company"]["id"]
     headers = {"Authorization": f"Bearer {auth['token']}"}
 
+    uploads: list[tuple[str, str]] = []
     if not already_seeded:
-        for path in sorted(FILES_DIR.glob("*.pdf")):
+        for path in sorted(files_dir.glob("*.pdf")):
             with open(path, "rb") as f:
                 resp = client.post(
                     "/api/documents",
@@ -143,6 +167,7 @@ def main() -> None:
                 )
             resp.raise_for_status()
             body = resp.json()
+            uploads.append((path.name, body.get("status")))
             print(f"  {path.name}: {body.get('status')}")
 
     # Idempotent the same way the owner path above is: POST .../members
@@ -162,12 +187,30 @@ def main() -> None:
         accounts.append((role, email, login.json()["token"]))
 
     seed_group(client, headers)
+    return {"company_id": company_id, "accounts": accounts, "uploads": uploads}
+
+
+def main() -> None:
+    client = httpx.Client(base_url=API, timeout=60)
+
+    try:
+        client.get("/api/health").raise_for_status()
+    except httpx.ConnectError:
+        print("Backend not reachable at", API, "— start it first: uvicorn app.main:app --reload")
+        sys.exit(1)
+
+    try:
+        result = seed(client)
+    except SeedError as e:
+        print("SEED FAILED:", e)
+        sys.exit(1)
+    company_id = result["company_id"]
 
     # Email is the only "credential" this auth model has (dev-login is a
     # placeholder for real magic-link email, app/auth.py's docstring) —
     # there's no password to print alongside it.
     print(f"\nAccounts for '{COMPANY_NAME}' (company #{company_id}):")
-    for role, email, token in accounts:
+    for role, email, token in result["accounts"]:
         print(f"  {role:6s}  {email:28s}  token={token}")
 
     print("\nLog in at http://localhost:5173/login as any email above to use it in the app.")

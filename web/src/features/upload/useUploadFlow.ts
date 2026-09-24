@@ -19,16 +19,28 @@ interface Deps {
   onOutcome: (result: UploadResult) => void
   /** null clears the page's error banner; a string shows it. */
   onError: (message: string | null) => void
+  /** The checklist item this upload was started from (round 16, DECISIONS #90): a
+   * doc_type slug sent to classify as a hint. Applies to documents, not photos. */
+  docTypeHint?: string | null
 }
 
-export function useUploadFlow({ language, refresh, onOutcome, onError }: Deps) {
+/** What is being sent right now, for the progress moment. */
+export interface Uploading {
+  name: string
+  /** Set when several photos are merged into one document. */
+  pages?: number
+}
+
+export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHint }: Deps) {
   const [busy, setBusy] = useState(false)
+  const [uploading, setUploading] = useState<Uploading | null>(null)
   const [staged, setStaged] = useState<File[] | null>(null)
   const [selectionError, setSelectionError] = useState<SelectionError | null>(null)
 
   const run = useCallback(
-    async (send: () => Promise<UploadResult>): Promise<boolean> => {
+    async (send: () => Promise<UploadResult>, what: Uploading): Promise<boolean> => {
       setBusy(true)
+      setUploading(what)
       onError(null)
       try {
         const result = await send()
@@ -40,6 +52,7 @@ export function useUploadFlow({ language, refresh, onOutcome, onError }: Deps) {
         return false
       } finally {
         setBusy(false)
+        setUploading(null)
       }
     },
     [onError, onOutcome, refresh],
@@ -47,8 +60,11 @@ export function useUploadFlow({ language, refresh, onOutcome, onError }: Deps) {
 
   const uploadOne = useCallback(
     (file: File, isPicture: boolean) =>
-      run(async () => opsApi.uploadDocument(await normalizeImageForUpload(file), isPicture, language)),
-    [language, run],
+      run(
+        async () => opsApi.uploadDocument(await normalizeImageForUpload(file), isPicture, language, isPicture ? null : docTypeHint),
+        { name: file.name },
+      ),
+    [docTypeHint, language, run],
   )
 
   /** PHOTO: exactly one image, marked as a picture. */
@@ -87,15 +103,18 @@ export function useUploadFlow({ language, refresh, onOutcome, onError }: Deps) {
     const done =
       staged.length === 1
         ? await uploadOne(only, false) // took pages away until one was left: an ordinary upload
-        : await run(async () => {
-            const pages = await Promise.all(staged.map(normalizeImageForUpload))
-            return opsApi.uploadPages(pages, language)
-          })
+        : await run(
+            async () => {
+              const pages = await Promise.all(staged.map(normalizeImageForUpload))
+              return opsApi.uploadPages(pages, language, docTypeHint)
+            },
+            { name: only.name, pages: staged.length },
+          )
     if (done) cancelStaging()
-  }, [cancelStaging, language, run, staged, uploadOne])
+  }, [cancelStaging, docTypeHint, language, run, staged, uploadOne])
 
   return {
-    busy, staged, selectionError,
+    busy, uploading, staged, selectionError,
     uploadPhoto, chooseDocumentFiles, addPages, move, remove, cancelStaging, submitPages,
   }
 }

@@ -29,6 +29,12 @@ class PipelineState(TypedDict, total=False):
     # state key that is not on this TypedDict. Read by derive_events, which
     # never proposes a company event from a personal file.
     visibility: str
+    # 2026-09-24 (round 16, DECISIONS #90): the doc_type slug of the compliance
+    # checklist item this upload was started from ("Upload" beside a missing row),
+    # already validated against rules/expectations.LABEL_BY_DOC_TYPE by
+    # app/main.py. A hint for classify.py's prompt, never a classification.
+    # Declared here for the same LangGraph reason as `language`.
+    doc_type_hint: str
 
     # suffixed _result to avoid colliding with the node names "classify" /
     # "extract" / "verify" — LangGraph forbids a node name equal to a state key

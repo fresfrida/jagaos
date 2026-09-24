@@ -8,12 +8,21 @@
  * the single dropzone are now one two-way choice, DOCUMENT or PHOTO
  * (features/upload/UploadChoice), and DOCUMENT accepts several photos as the
  * ordered pages of one document (PageStager). The upload logic lives in
- * useUploadFlow; this page composes. */
+ * useUploadFlow; this page composes.
+ *
+ * Round 16: the upload shows a progress moment (UploadProgress) instead of a line
+ * of text; the "rejected, upload a replacement?" prompt is a dismissible bottom
+ * sheet shown once after a rejection instead of a permanent inline block; a file
+ * chosen in the universal Upload sheet (opened from any page, UploadSheetHost) is
+ * handed to this page (pendingSelection.ts) and uploaded here; and a `?for=` link
+ * from a missing compliance-checklist row becomes a hint on the upload. */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { BottomSheet } from '../components/ui/BottomSheet'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { FileName } from '../components/ui/FileName'
 import { Toast, useToast } from '../components/ui/Toast'
 import { useAuth } from '../features/auth/AuthContext'
 import { RequireSession } from '../features/auth/RequireSession'
@@ -23,19 +32,31 @@ import { ReviewQueueCard } from '../features/ops/ReviewQueueCard'
 import { VENDOR_NAMES_DATALIST_ID } from '../features/ops/opsShared'
 import { type UploadResult } from '../features/ops/opsApi'
 import { useOpsData } from '../features/ops/useOpsData'
+import { HintBanner } from '../features/upload/HintBanner'
 import { PageStager } from '../features/upload/PageStager'
+import { onSelectionHandedOff, takePendingSelection } from '../features/upload/pendingSelection'
 import { UploadChoice } from '../features/upload/UploadChoice'
+import { UploadProgress } from '../features/upload/UploadProgress'
+import { hintLabel, hintSlugFromSearch } from '../features/upload/uploadHint'
 import { MAX_PAGES } from '../features/upload/uploadSelection'
 import { useUploadFlow } from '../features/upload/useUploadFlow'
-import { onTriggerUploadChoice } from '../lib/uploadTrigger'
+import { openUploadSheet } from '../lib/uploadTrigger'
+import { routeHref } from '../router/routes'
 
 function UploadReviewContent() {
   const { t, i18n } = useTranslation()
   const { role } = useAuth()
-  const { documents, reviewItems, apiUp, error, setError, refresh } = useOpsData()
+  const { documents, expectations, reviewItems, apiUp, error, setError, refresh } = useOpsData()
 
   const [justRejectedFilename, setJustRejectedFilename] = useState<string | null>(null)
-  const choiceRef = useRef<HTMLDivElement>(null)
+  // The checklist item this upload was started for (`?for=<slug>`). Only honoured when
+  // this company really has that item, so a stale or invented link is no hint at all.
+  const [hintSlug, setHintSlug] = useState<string | null>(() => hintSlugFromSearch(window.location.search))
+  const activeHintLabel = hintLabel(hintSlug, expectations)
+  const clearHint = useCallback(() => {
+    setHintSlug(null)
+    window.history.replaceState(null, '', routeHref('upload'))
+  }, [])
   const { toast, showToast, dismissToast } = useToast()
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
@@ -49,28 +70,35 @@ function UploadReviewContent() {
   // uses (isRoutine, ReviewQueueCard.tsx), just read here for one line.
   const onOutcome = useCallback(
     (result: UploadResult) => {
+      if (result.status !== 'duplicate') clearHint() // the hint was for this one upload
       if (result.status === 'duplicate') showToast(t('ops.upload.toast.duplicate'), 'warning')
       else if (result.status === 'quarantined') showToast(t('ops.upload.toast.quarantined'), 'warning')
       else if (result.review?.reason === 'clean') showToast(t('ops.upload.toast.clean'), 'success')
       else showToast(t('ops.upload.toast.needsReview'), 'success')
     },
-    [showToast, t],
+    [clearHint, showToast, t],
   )
   const onError = useCallback((message: string | null) => setError(message), [setError])
 
-  const flow = useUploadFlow({ language: i18n.language, refresh, onOutcome, onError })
+  const flow = useUploadFlow({
+    language: i18n.language, refresh, onOutcome, onError, docTypeHint: activeHintLabel ? hintSlug : null,
+  })
 
-  // The bottom nav's raised Upload button, and "upload a replacement" below,
-  // bring the DOCUMENT / PHOTO choice into view and focus it: with two ways to
-  // upload there is no single picker for them to open.
-  const focusChoice = useCallback(() => {
-    choiceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    choiceRef.current?.querySelector('button')?.focus()
-  }, [])
+  // A file chosen in the universal Upload sheet (opened from any page, including
+  // this one) arrives here. Taken on mount for the case where the sheet navigated
+  // to this page, and again on the event for the case where this page was already open.
+  const { chooseDocumentFiles, uploadPhoto } = flow
   useEffect(() => {
     if (!canUpload) return
-    return onTriggerUploadChoice(focusChoice)
-  }, [canUpload, focusChoice])
+    const start = () => {
+      const selection = takePendingSelection()
+      if (selection === null) return
+      if (selection.kind === 'photo') uploadPhoto(selection.file)
+      else chooseDocumentFiles(selection.files)
+    }
+    start()
+    return onSelectionHandedOff(start)
+  }, [canUpload, chooseDocumentFiles, uploadPhoto])
 
   // 2026-09-22 (DECISIONS #45): vendor_name autocomplete source — distinct
   // values already on this company's documents, no new endpoint.
@@ -93,22 +121,24 @@ function UploadReviewContent() {
         <Card className="p-6" interactive={false}>
           {canUpload ? (
             <>
-              <UploadChoice
-                ref={choiceRef}
-                disabled={flow.busy}
-                onDocumentFiles={flow.chooseDocumentFiles}
-                onPhotoFile={flow.uploadPhoto}
-              />
+              {activeHintLabel && <HintBanner label={activeHintLabel} onClear={clearHint} />}
 
-              {flow.busy && !flow.staged && (
-                <p className="mt-3 text-[13px] text-muted" role="status">{t('ops.upload.uploading')}</p>
+              {flow.busy && flow.uploading ? (
+                <UploadProgress name={flow.uploading.name} pages={flow.uploading.pages} />
+              ) : (
+                <UploadChoice
+                  disabled={flow.busy}
+                  onDocumentFiles={flow.chooseDocumentFiles}
+                  onPhotoFile={flow.uploadPhoto}
+                />
               )}
+
               {flow.selectionError && !flow.staged && (
                 <p role="alert" className="mt-3 text-[13px] text-red-700">
                   {t(`ops.upload.pages.error.${flow.selectionError}`, { max: MAX_PAGES })}
                 </p>
               )}
-              {flow.staged && (
+              {flow.staged && !flow.busy && (
                 <PageStager
                   files={flow.staged}
                   busy={flow.busy}
@@ -127,29 +157,6 @@ function UploadReviewContent() {
             </p>
           )}
 
-          {/* 2026-09-23 (DECISIONS #50): closes the loop after a reject
-             — it used to just disappear from the queue with no
-             indication of where it went or what to do next. Simple
-             inline prompt, not a modal — "Upload a replacement" brings
-             the DOCUMENT / PHOTO choice into view rather than picking a
-             kind for the person. */}
-          {justRejectedFilename && canUpload && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-canvas p-4 text-[13px]">
-              <p className="text-ink">
-                <span className="font-medium">{justRejectedFilename}</span> {t('ops.upload.rejectedPromptSuffix')}
-              </p>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  setJustRejectedFilename(null)
-                  focusChoice()
-                }}
-              >
-                {t('ops.upload.uploadReplacement')}
-              </Button>
-            </div>
-          )}
         </Card>
 
         {reviewItems.length > 0 && (
@@ -176,6 +183,36 @@ function UploadReviewContent() {
           </section>
         )}
       </div>
+
+      {/* 2026-09-23 (DECISIONS #50) closed the loop after a reject with an inline
+         block that then stayed on the page for good. Round 16: it is a bottom
+         sheet, shown once right after a rejection and dismissible, so it is not
+         there the next time the page is opened. "Upload a replacement" hands over
+         to the universal Upload sheet rather than picking a kind for the person. */}
+      <BottomSheet
+        open={justRejectedFilename !== null && canUpload}
+        onClose={() => setJustRejectedFilename(null)}
+        title={t('ops.upload.rejectedTitle')}
+      >
+        <p className="text-[13px] text-ink">
+          {justRejectedFilename !== null && <FileName name={justRejectedFilename} max={36} className="font-medium" />}{' '}
+          {t('ops.upload.rejectedPromptSuffix')}
+        </p>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setJustRejectedFilename(null)}>
+            {t('ops.upload.rejectedDismiss')}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setJustRejectedFilename(null)
+              openUploadSheet()
+            }}
+          >
+            {t('ops.upload.uploadReplacement')}
+          </Button>
+        </div>
+      </BottomSheet>
 
       <Toast toast={toast} onDismiss={dismissToast} />
     </div>

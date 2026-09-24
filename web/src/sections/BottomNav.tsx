@@ -22,19 +22,18 @@
  * slot here — reachable on mobile via the account menu instead
  * (Header.tsx's UserMenu).
  *
- * **Center button no longer a dead tap when already on /upload
- * (2026-09-23, live regression report item 5)** — it used to be a plain
- * <Link>, so tapping it while already on the page it navigates to did
- * nothing, next to the page's own working dropzone. Now brings the page's
- * DOCUMENT / PHOTO choice into view and focuses it in that case instead
- * (lib/uploadTrigger.ts — it opened the file picker directly until
- * 2026-09-24, when the single dropzone became a two-way choice). */
+ * **Round 16 (item 10c): the center button opens the Upload sheet on every
+ * page** (features/upload/UploadSheetHost.tsx, lib/uploadTrigger.ts), a bottom
+ * sheet with the DOCUMENT / PHOTO choice. It used to navigate to /upload, and only
+ * when already there scroll to and focus the page's own choice (2026-09-23, item 5,
+ * where it had been a dead tap next to the page's dropzone). Choosing in the sheet
+ * hands the file to the Upload page, which uploads it. */
 
 import { CalendarDays, FileText, Search, Tag, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../features/auth/AuthContext'
 import { cn } from '../lib/cn'
-import { triggerUploadChoice } from '../lib/uploadTrigger'
+import { openUploadSheet } from '../lib/uploadTrigger'
 import { Link } from '../router/Link'
 import { NAV_LABEL_KEYS, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
 
@@ -126,35 +125,25 @@ export function BottomNav({ current }: { current: ResolvedRoute }) {
         {LEFT_ROUTES.map((id) => <NavItem key={id} id={id} active={current === id} />)}
 
         <div className="flex flex-1 flex-col items-center justify-center">
-          {/* 2026-09-23 (live regression report, item 5): this used to be
-             a plain <Link> — pure navigation, so tapping it while
-             already on /upload did nothing, next to the page's own
-             working dropzone. When already there, it now scrolls to and
-             focuses the page's DOCUMENT / PHOTO choice instead
-             (lib/uploadTrigger.ts's window event, caught by
-             UploadPage.tsx) rather than just navigating to the page it's
-             already on. */}
-          {/* 2026-09-23 (live regression report, item 9): grown proportionally
-             with NavItem's own increase (h-12/-mt-5 -> h-14/-mt-6, icon
-             20 -> 22) so the raised button doesn't shrink relative to the
-             now-taller bar around it. */}
-          {uploadActive ? (
-            <button
-              type="button"
-              onClick={() => triggerUploadChoice()}
-              aria-label={t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
-              className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-ink text-white shadow-md transition-colors"
-            >
-              <Upload size={22} aria-hidden="true" />
-            </button>
-          ) : (
-            <Link
-              href={routeHref(CENTER_ROUTE)}
-              className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-sage text-white shadow-md transition-colors"
-            >
-              <Upload size={22} aria-hidden="true" />
-            </Link>
-          )}
+          {/* Round 16 (item 10c): always opens the Upload sheet, on every page. It used
+             to navigate to /upload, and only when already there scrolled to and
+             focused the page's own choice (2026-09-23, item 5: it had been a dead tap
+             next to the page's dropzone). One bottom sheet with the DOCUMENT / PHOTO
+             choice now does the same job everywhere, this page included; a file
+             chosen in it is handed to the Upload page (UploadSheetHost).
+             2026-09-23 (item 9): h-14/-mt-6, icon 22, grown with NavItem's own size. */}
+          <button
+            type="button"
+            onClick={() => openUploadSheet()}
+            aria-label={t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
+            aria-haspopup="dialog"
+            className={cn(
+              '-mt-6 flex h-14 w-14 items-center justify-center rounded-full border-4 border-white text-white shadow-md transition-colors',
+              uploadActive ? 'bg-ink' : 'bg-sage',
+            )}
+          >
+            <Upload size={22} aria-hidden="true" />
+          </button>
           <span className={cn('mt-1 text-[11px] leading-none', uploadActive ? 'text-ink' : 'text-muted')}>
             {t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
           </span>

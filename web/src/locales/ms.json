@@ -8,10 +8,29 @@
     }
   },
   "home": {
-    "heading": "Selamat datang ke JagaOS",
-    "subheading": "Ingatan syarikat untuk pasukan yang berkembang. Rakam dokumen, keputusan dan tarikh akhir, kemudian cari semula dalam beberapa saat.",
     "signIn": "Log masuk",
-    "getStarted": "Mula"
+    "pitch": "Berhenti mencari dokumen dan terlepas tarikh akhir.",
+    "demo": {
+      "button": "Jenguk-jenguk dahulu",
+      "hint": "Membuka syarikat demo sebagai pemiliknya. Tiada pendaftaran diperlukan.",
+      "opening": "Membuka demo…",
+      "failed": "Tidak dapat membuka demo sekarang. Anda masih boleh log masuk."
+    },
+    "haveAccount": "Sudah ada akaun?",
+    "features": {
+      "capture": {
+        "title": "Tangkap",
+        "text": "Ambil gambar atau muat naik invois, kontrak atau notis. Kami membacanya untuk anda."
+      },
+      "review": {
+        "title": "Semakan",
+        "text": "Anda mengesahkan apa yang kami baca. Tiada apa difailkan sehingga seseorang menyemaknya."
+      },
+      "obligations": {
+        "title": "Kewajipan",
+        "text": "Tarikh akhir dan pemfailan yang diperlukan muncul dalam kalendar anda, lengkap dengan peraturan di sebaliknya."
+      }
+    }
   },
   "companySettings": {
     "heading": "Tetapan Syarikat",
@@ -27,7 +46,40 @@
       "banner": "Diisi terlebih dahulu daripada {{filename}}. Belum disimpan. Semak nilai, betulkan yang salah, kemudian Simpan.",
       "loading": "Membaca profil perniagaan…",
       "failed": "Tidak dapat mengisi terlebih dahulu daripada dokumen itu.",
-      "discard": "Buang pengisian awal"
+      "discard": "Buang pengisian awal",
+      "confirmTitle": "Guna butiran ini?",
+      "confirmIntro": "Profil perniagaan akan mengubah tetapan ini:",
+      "now": "Sekarang",
+      "fromProfile": "Profil",
+      "empty": "(kosong)",
+      "apply": "Gunakan pada borang",
+      "noChanges": "Tiada perubahan. Profil sepadan dengan tetapan semasa anda.",
+      "saveNote": "Tiada apa yang disimpan sehingga anda menekan Simpan."
+    },
+    "businessProfile": {
+      "title": "Profil perniagaan",
+      "hint": "Muat naik untuk mengisi butiran di bawah.",
+      "loading": "Menyemak profil perniagaan…",
+      "loadFailed": "Tidak dapat menyemak profil perniagaan.",
+      "uploading": "Membaca dokumen anda…",
+      "view": "Lihat profil perniagaan",
+      "fill": "Isi borang",
+      "replace": "Gantikan",
+      "remove": "Buang",
+      "removeConfirm": "Buang {{filename}}? Ini tidak boleh dibuat asal.",
+      "openQueue": "Buka baris gilir semakan",
+      "status": {
+        "filed": "Disahkan. Sedia untuk mengisi borang.",
+        "needsReview": "Menunggu anda mengesahkan apa yang kami baca.",
+        "quarantined": "Disekat untuk semakan keselamatan."
+      },
+      "notice": {
+        "uploaded": "Dimuat naik. Sahkan apa yang kami baca dalam baris gilir semakan, kemudian isi borang.",
+        "notAProfile": "Itu nampaknya bukan profil perniagaan, jadi ia difailkan bersama dokumen anda yang lain.",
+        "duplicate": "Fail itu telah dimuat naik.",
+        "quarantined": "Fail itu disekat untuk semakan keselamatan. Lihat baris gilir semakan.",
+        "failed": "Itu tidak berjaya. Sila cuba lagi."
+      }
     }
   },
   "header": {
@@ -95,7 +147,7 @@
       "review": "Muat Naik & Semakan",
       "documents": "Dokumen",
       "dates": "Tarikh",
-      "gaps": "Analisis Jurang",
+      "gaps": "Senarai semak pematuhan",
       "obligations": "Kewajipan"
     },
     "upload": {
@@ -133,6 +185,19 @@
           "mixed": "Pilih satu PDF atau beberapa foto. PDF tidak boleh digabungkan dengan foto.",
           "tooMany": "Satu dokumen boleh mempunyai paling banyak {{max}} halaman."
         }
+      },
+      "rejectedTitle": "Gantikan fail yang ditolak?",
+      "rejectedDismiss": "Bukan sekarang",
+      "progress": {
+        "reading": "Membaca dokumen anda…",
+        "details": "Mengeluarkan butiran…",
+        "almost": "Hampir difailkan…",
+        "announce": "Memuat naik {{name}}",
+        "pages": "{{count}} halaman"
+      },
+      "hint": {
+        "filingFor": "Memfailkan untuk: {{label}}",
+        "clear": "Kosongkan cadangan ini"
       }
     },
     "review": {
@@ -235,8 +300,7 @@
         "cost": "Kos",
         "decision": "Keputusan"
       },
-      "noDocumentDate": "Tiada tarikh dokumen",
-      "prefillCompany": "Isi tetapan syarikat daripada ini"
+      "noDocumentDate": "Tiada tarikh dokumen"
     },
     "dates": {
       "uploadDate": "Tarikh muat naik",
@@ -246,15 +310,30 @@
       "prevMonth": "Bulan sebelumnya",
       "nextMonth": "Bulan seterusnya",
       "selectADay": "Ketik hari yang mempunyai dokumen untuk melihatnya di sini.",
-      "noneOnDay": "Tiada dokumen pada hari ini."
+      "noneOnDay": "Tiada dokumen pada hari ini.",
+      "basis": {
+        "filed": "Bila difailkan",
+        "document": "Tarikh dokumen"
+      },
+      "prevYear": "Tahun sebelumnya",
+      "nextYear": "Tahun seterusnya",
+      "prevYears": "Tahun terdahulu",
+      "nextYears": "Tahun lebih lewat",
+      "pickMonth": "{{label}}: pilih tahun dan bulan",
+      "backToDays": "{{label}}: kembali"
     },
     "gaps": {
-      "heading": "Analisis jurang: {{satisfied}} daripada {{total}} dipegang",
-      "empty": "Belum ada jangkaan. Muat naik dokumen berkanun yang menunjukkan peristiwa syarikat (penubuhan, pertukaran setiausaha syarikat)."
+      "heading": "Senarai semak pematuhan: {{satisfied}} daripada {{total}} dipegang",
+      "empty": "Belum ada apa-apa dalam senarai semak. Muat naik dokumen berkanun yang menunjukkan peristiwa syarikat (penubuhan, pertukaran setiausaha syarikat) dan keperluannya akan dipaparkan di sini.",
+      "viewDocument": "Lihat dokumen",
+      "upload": "Muat naik"
     },
     "obligations": {
       "heading": "Kewajipan ({{count}})",
-      "empty": "Belum ada kewajipan dijana."
+      "empty": "Belum ada kewajipan dijana.",
+      "due": "Tamat {{date}}",
+      "showMore": "Tunjuk lagi",
+      "showLess": "Tunjuk kurang"
     },
     "documentViewer": {
       "loadFailed": "Tidak dapat memuatkan fail sumber.",
@@ -265,7 +344,8 @@
     "documentPreview": {
       "loadFailed": "Tidak dapat memuatkan fail sumber.",
       "loading": "Memuatkan sumber…",
-      "openSourcePdf": "Buka PDF asal"
+      "openSourcePdf": "Buka PDF asal",
+      "openImage": "Buka imej saiz penuh"
     },
     "voiceCaption": {
       "stopRecording": "Hentikan rakaman kapsyen",

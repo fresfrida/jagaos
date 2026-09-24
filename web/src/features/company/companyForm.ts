@@ -49,6 +49,23 @@ export function applyPrefill(
   return { form: next, changed }
 }
 
+/** One line of the confirmation the owner sees before a business profile is laid
+ * over the form: which field, what it holds now, what the profile would put there. */
+export interface PrefillChange {
+  field: CompanyFormField
+  before: CompanyForm[CompanyFormField]
+  after: CompanyForm[CompanyFormField]
+}
+
+/** Exactly the fields applyPrefill would change, with old and new value, in form
+ * order. Built on applyPrefill so the confirmation can never list something the
+ * apply does not do, or omit something it does. Empty when the profile already
+ * matches the company (or states nothing the company differs on). */
+export function prefillChanges(form: CompanyForm, prefill: CompanyProfilePrefill): PrefillChange[] {
+  const { form: next, changed } = applyPrefill(form, prefill)
+  return changed.map((field) => ({ field, before: form[field], after: next[field] }))
+}
+
 /** Whether the backend behind this session knows the identity fields (UEN,
  * GST registered, registered address). A backend from before round 12 omits
  * `uen` from the company it returns; the new one always sends the key (null

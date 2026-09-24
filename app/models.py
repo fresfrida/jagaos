@@ -303,6 +303,22 @@ class CompanyOut(BaseModel):
     registered_address: str | None = None
 
 
+class BusinessProfileDocument(BaseModel):
+    id: int
+    filename: str
+    media_type: str
+    status: str
+    received_at: str
+    can_prefill: bool
+
+
+class BusinessProfileOut(BaseModel):
+    """GET /api/business-profile — the company's current business-profile
+    document, or None. See app/main.py::get_business_profile."""
+
+    document: BusinessProfileDocument | None = None
+
+
 class CompanyProfilePrefill(BaseModel):
     """GET /api/documents/{id}/company-profile — company-settings values read
     from a confirmed ACRA business profile. None = the document did not state

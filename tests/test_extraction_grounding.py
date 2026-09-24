@@ -127,12 +127,18 @@ def test_the_stored_description_names_nothing_the_source_text_does_not(monkeypat
 
 def test_the_invented_name_is_never_indexed_so_search_cannot_find_it(monkeypatch):
     _model(monkeypatch, classify=PROFILE_ANSWER, extract_name="extract_company_profile_fields", extract_args=PROFILE_FIELDS)
-    token = _signup()
-    doc_id = _upload(token, "profile.pdf", _profile_pdf())["document_id"]
-    h = {"Authorization": f"Bearer {token}"}
+    doc_id = _upload(_signup(), "profile.pdf", _profile_pdf())["document_id"]
 
-    assert client.get("/api/search?q=ACRA", headers=h).json() == []
-    assert [d["id"] for d in client.get("/api/search?q=Sunbird", headers=h).json()] == [doc_id]
+    # The index itself is asked, not GET /api/search: since round 16 (DECISIONS #90)
+    # a business profile is filtered out of search results by design, which would
+    # make "no ACRA hit" true for the wrong reason.
+    def indexed(term: str) -> list[int]:
+        with get_conn() as conn:
+            return [r["rowid"] for r in conn.execute(
+                "SELECT rowid FROM document_search WHERE document_search MATCH ?", (term,)).fetchall()]
+
+    assert indexed("ACRA") == []
+    assert indexed("Sunbird") == [doc_id]
 
 
 def test_what_was_changed_is_recorded_in_the_trace(monkeypatch):

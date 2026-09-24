@@ -2,6 +2,7 @@ import { MotionConfig, motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
 import { MyCompaniesProvider } from './features/auth/MyCompaniesContext'
+import { UploadSheetHost } from './features/upload/UploadSheetHost'
 import { useCompanyScopeKey } from './features/auth/useCompanyScopeKey'
 import { cn } from './lib/cn'
 import { Page } from './pages/Page'
@@ -59,7 +60,7 @@ function AppContent({ route }: { route: ResolvedRoute }) {
          (tagline, Product/Solutions/Resources/Company columns, social
          icons) was rendering on every signed-in app page too — confirmed
          live, and it has zero i18n wiring (config/site.ts's
-         FOOTER_COLUMNS/FOOTER_TAGLINE), which is what actually surfaced
+         FOOTER_COLUMNS/FOOTER_TAGLINE; the columns are gone since round 16), which is what actually surfaced
          it (untranslated footer text sitting under a fully-translated
          page). Real product decision, not just a translation gap: this
          footer's own content (marketing-page links like "Founders"/
@@ -74,6 +75,7 @@ function AppContent({ route }: { route: ResolvedRoute }) {
          `home` — DECISIONS #64's HomeRedirect fires first). */}
       {status !== 'signed-in' && <Footer />}
       {showBottomNav && <BottomNav current={route} />}
+      <UploadSheetHost />
     </MotionConfig>
   )
 }

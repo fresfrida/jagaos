@@ -38,7 +38,10 @@ interface ChoiceProps {
   onClick: () => void
 }
 
-function Choice({ icon: Icon, title, hint, disabled, onClick }: ChoiceProps) {
+/** One row of the fork: icon, title, one short line, chevron. Exported because
+ * Company Settings' "Business profile" row (round 16, item 6) is deliberately the
+ * same row, so the two cannot drift apart. */
+export function ChoiceRow({ icon: Icon, title, hint, disabled, onClick }: ChoiceProps) {
   return (
     <button type="button" disabled={disabled} onClick={onClick} className={CHOICE_CLASS}>
       <Icon size={28} strokeWidth={1.75} className="shrink-0 text-ink" aria-hidden="true" />
@@ -55,11 +58,15 @@ export function UploadChoice({
   disabled,
   onDocumentFiles,
   onPhotoFile,
+  showHeading = true,
   ref,
 }: {
   disabled: boolean
   onDocumentFiles: (files: File[]) => void
   onPhotoFile: (file: File) => void
+  // False inside the universal Upload sheet (round 16), whose own title is the
+  // heading; the group is then named by that title's text instead.
+  showHeading?: boolean
   ref?: Ref<HTMLDivElement>
 }) {
   const { t } = useTranslation()
@@ -74,19 +81,21 @@ export function UploadChoice({
   }
 
   return (
-    <div ref={ref} role="group" aria-labelledby="upload-choice-heading">
-      <h2 id="upload-choice-heading" className="mb-1 text-[15px] font-medium text-ink">
-        {t('ops.upload.pictureQuestion')}
-      </h2>
+    <div ref={ref} role="group" aria-label={showHeading ? undefined : t('ops.upload.pictureQuestion')} aria-labelledby={showHeading ? 'upload-choice-heading' : undefined}>
+      {showHeading && (
+        <h2 id="upload-choice-heading" className="mb-1 text-[15px] font-medium text-ink">
+          {t('ops.upload.pictureQuestion')}
+        </h2>
+      )}
       <div className="divide-y divide-line border-y border-line">
-        <Choice
+        <ChoiceRow
           icon={FileText}
           title={t('ops.upload.choice.document.title')}
           hint={t('ops.upload.choice.document.hint')}
           disabled={disabled}
           onClick={() => documentInput.current?.click()}
         />
-        <Choice
+        <ChoiceRow
           icon={Camera}
           title={t('ops.upload.choice.photo.title')}
           hint={t('ops.upload.choice.photo.hint')}

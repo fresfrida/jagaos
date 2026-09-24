@@ -382,3 +382,33 @@ def test_a_correct_invoice_still_extracts_and_verifies_cleanly_with_the_groundin
     assert "Straits Print" in parse_description(doc["description"])["en"], doc["description"]
     assert doc["vendor_name"] and "Straits Print" in doc["vendor_name"]
     assert doc["lane"] == "invoice" and item["reason"] == "clean", item["reason"]
+
+
+def test_a_ppn_invoice_keeps_its_tax_label_through_the_real_gateway(tmp_path):
+    """Round 16, item 11: the extraction prompt says tax_label is copied verbatim and
+    never assumed to be GST. The offline tests (tests/test_tax_label_verbatim.py)
+    cover the code around the model; this asks the real model, on a real
+    Indonesian PPN invoice in IDR, and checks the label and currency come back as
+    printed and that nothing flags a correct foreign invoice."""
+    import json
+
+    from reportlab.pdfgen import canvas
+
+    path = tmp_path / "ppn_invoice.pdf"
+    page = canvas.Canvas(str(path))
+    for i, line in enumerate([
+        "PT SUMBER MAKMUR ABADI", "Jl. Jenderal Sudirman No. 12, Jakarta", "FAKTUR PENJUALAN / INVOICE",
+        "Invoice No: SMA-2026-0417", "Date: 3 July 2026", "Customer: Bright Harbour Pte Ltd",
+        "Item: Kertas HVS A4 (500 rim)", "Subtotal: IDR 10000000", "PPN 11%: IDR 1100000", "Total: IDR 11100000",
+    ]):
+        page.drawString(72, 780 - i * 18, line)
+    page.save()
+
+    doc, item = _upload_real(path, "liveppn@example.com", company="Bright Harbour Pte Ltd")
+
+    assert doc["lane"] == "invoice"
+    proposed = json.loads(item["proposed_json"])
+    assert "PPN" in proposed["tax_label"]["value"], proposed["tax_label"]
+    assert "GST" not in proposed["tax_label"]["value"].upper()
+    assert proposed["currency"]["value"].upper() in ("IDR", "RP"), proposed["currency"]
+    assert item["reason"] == "clean", item["reason"]

@@ -50,6 +50,8 @@ from app.db import (  # noqa: E402
 )
 from app.extract.merge import PageImageError, merge_images_to_pdf  # noqa: E402
 from app.extract.ocr import MAX_PDF_OCR_PAGES  # noqa: E402
+from app.graph.classify import is_company_profile_doc_type  # noqa: E402
+from app.graph.derive_expectations import backfill_expectation_evidence  # noqa: E402
 from app.graph.ingest import ingest  # noqa: E402
 from app.graph.pipeline import PIPELINE  # noqa: E402
 from app.rules.company_profile import (  # noqa: E402
@@ -57,10 +59,12 @@ from app.rules.company_profile import (  # noqa: E402
     extraction_values,
     may_prefill_company_from,
 )
+from app.rules.expectations import LABEL_BY_DOC_TYPE  # noqa: E402
 from app.rules.transitions import InvalidTransition, transition_document  # noqa: E402
 from app.models import (  # noqa: E402
     AddMemberRequest,
     AuthResponse,
+    BusinessProfileOut,
     CompanyEditRequest,
     CompanyOut,
     CompanyProfilePrefill,
@@ -113,6 +117,9 @@ app.add_middleware(
 @app.on_event("startup")
 def startup() -> None:
     init_db(DB_PATH)
+    # Round 16 (DECISIONS #90): an expectation satisfied before evidence_document_id
+    # existed gets the document that satisfies it. Idempotent; a no-op once done.
+    backfill_expectation_evidence(DB_PATH)
 
 
 def _can_see(membership: CurrentMembership, row: sqlite3.Row | dict) -> bool:
@@ -130,6 +137,18 @@ def _hidden_or_missing(membership: CurrentMembership, row: sqlite3.Row | None) -
     caller — every one of which is answered with the same 404, so a document
     the caller may not see cannot be told apart from one that does not exist."""
     return row is None or row["company_id"] != membership.company_id or not _can_see(membership, row)
+
+
+def _in_company_files(row: sqlite3.Row | dict) -> bool:
+    """Whether a document belongs in the Company Files / Search / Calendar lists.
+    A company's business profile does not: it is a settings artifact, kept in
+    Company Settings and never listed with the paperwork (round 16, DECISIONS
+    #90). Decided by doc_type, the same test that already routes it to its own
+    extraction shape (classify.is_company_profile_doc_type), so there is no
+    third visibility value and no schema change. It is a filter on what the LIST
+    endpoints return, not on access: the file, the review queue and the settings
+    endpoint still reach the document by id."""
+    return not is_company_profile_doc_type(row["doc_type"])
 
 
 # One column list and one row->CompanyOut mapping for every endpoint that
@@ -441,6 +460,7 @@ def _caption_document_background(document_id: int, stored_path: str) -> None:
 def _process_upload(
     membership: CurrentMembership, background_tasks: BackgroundTasks, tmp_path: str, filename: str,
     source_channel: str, is_picture: bool, language: str, visibility: str,
+    doc_type_hint: str | None = None,
 ) -> dict:
     """Run one already-written temp file through ingest and the pipeline and
     build the upload response. Shared by the single-file upload and the
@@ -475,6 +495,10 @@ def _process_upload(
     ingest_state["is_picture"] = is_picture
     ingest_state["language"] = language
     ingest_state["visibility"] = visibility
+    # Round 16 (DECISIONS #90): only a real checklist slug is carried; anything
+    # else is dropped here, so the pipeline never holds client-chosen text.
+    if doc_type_hint in LABEL_BY_DOC_TYPE:
+        ingest_state["doc_type_hint"] = doc_type_hint
 
     thread_id = ingest_state["run_id"]
     result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
@@ -559,6 +583,11 @@ async def upload_document(
     # personal afterwards with the lock toggle (PATCH visibility) — but the
     # parameter stays for any other client.
     visibility: Visibility = "company",
+    # Round 16 (DECISIONS #90): the doc_type slug of the compliance checklist
+    # item this upload was started from. Ignored unless it is a real slug
+    # (rules/expectations.LABEL_BY_DOC_TYPE); it only adds a hint to classify's
+    # prompt and never decides the classification.
+    doc_type_hint: str | None = None,
 ) -> dict:
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
         tmp.write(await file.read())
@@ -578,7 +607,7 @@ async def upload_document(
     try:
         return _process_upload(
             membership, background_tasks, tmp_path, file.filename, source_channel, is_picture, language,
-            visibility,
+            visibility, doc_type_hint,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -589,6 +618,7 @@ async def upload_document_pages(
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
     background_tasks: BackgroundTasks,
     files: list[UploadFile], language: str = "en", visibility: Visibility = "company",
+    doc_type_hint: str | None = None,
 ) -> dict:
     """Several photos of one document, in page order -> ONE document
     (2026-09-24, round 12, DECISIONS #78). The pages are merged into a single
@@ -624,7 +654,7 @@ async def upload_document_pages(
         stem = Path(files[0].filename or "scan").stem
         return _process_upload(
             membership, background_tasks, merged.name, f"{stem}-{len(files)}-pages.pdf", "web", False, language,
-            visibility,
+            visibility, doc_type_hint,
         )
     finally:
         for path in temp_paths:
@@ -820,13 +850,33 @@ def list_review_items(
 def list_expectations(
     membership: Annotated[CurrentMembership, Depends(get_current_membership)],
 ) -> list[dict]:
-    """The gap analysis. INDEXING.md §0 — dashed lines on the timeline."""
+    """The gap analysis (the web app's "compliance checklist"). INDEXING.md §0 —
+    dashed lines on the timeline.
+
+    Round 16 (DECISIONS #90): each row carries `evidence_document_id`, the document
+    that satisfied it. It is sent only when this caller may see that document (the
+    same rule as every list, auth.may_see_document) and it is not archived —
+    otherwise null, so the checklist never reveals a pending colleague's upload or
+    links to a deleted file. The status itself is unchanged."""
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
-            "SELECT * FROM expectation WHERE company_id = ? ORDER BY status, due_on",
+            "SELECT e.*, d.status AS ev_status, d.uploaded_by_user_id AS ev_uploader, "
+            "d.visibility AS ev_visibility FROM expectation e "
+            "LEFT JOIN document d ON d.id = e.evidence_document_id "
+            "WHERE e.company_id = ? ORDER BY e.status, e.due_on",
             (membership.company_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+    out = []
+    for row in rows:
+        expectation = {key: row[key] for key in row.keys() if not key.startswith("ev_")}
+        visible = row["ev_status"] is not None and row["ev_status"] != "archived" and may_see_document(
+            membership, status=row["ev_status"], uploaded_by_user_id=row["ev_uploader"],
+            visibility=row["ev_visibility"],
+        )
+        if not visible:
+            expectation["evidence_document_id"] = None
+        out.append(expectation)
+    return out
 
 
 @app.get("/api/obligations")
@@ -845,17 +895,16 @@ def _document_row_for(membership: CurrentMembership, row: sqlite3.Row) -> dict:
     """A document as list/search return it: the row minus the uploader's
     user id (the client never needs it), plus `can_edit` — the caller's own
     answer from auth.may_edit_document, so the UI does not offer an Edit
-    that the server would refuse — and `can_prefill_company`, likewise from
-    rules.company_profile.may_prefill_company_from."""
+    that the server would refuse. (It used to carry `can_prefill_company` too;
+    a business profile is no longer listed at all, round 16, DECISIONS #90, so
+    the flag had nothing left to describe. The rule itself still gates
+    GET /api/business-profile and the company-profile endpoint.)"""
     doc = dict(row)
     uploader = doc.pop("uploaded_by_user_id")
     doc["can_edit"] = may_edit_document(membership, uploader)
     # Round 14 (DECISIONS #86): whether the lock toggle is offered — the
     # uploader only, so it is NOT the same answer as can_edit.
     doc["can_change_visibility"] = may_change_visibility(membership, uploaded_by_user_id=uploader)
-    # 2026-09-24 (round 12): same idea for the ACRA "pre-fill company
-    # settings" action — the caller's own answer from one rule function.
-    doc["can_prefill_company"] = may_prefill_company_from(membership.role, doc["doc_type"], doc["status"])
     return doc
 
 
@@ -887,7 +936,7 @@ def list_documents(
         # file — is left out exactly the way an archived one is, so it is
         # absent from Company Files, from Search and from the Calendar (which
         # reads this same list), not merely hidden by the UI.
-        return [_document_row_for(membership, r) for r in rows if _can_see(membership, r)]
+        return [_document_row_for(membership, r) for r in rows if _can_see(membership, r) and _in_company_files(r)]
 
 
 @app.get("/api/search")
@@ -935,7 +984,9 @@ def search_documents(
         # no status or visibility of its own, so a hidden document still
         # MATCHES on its text — this join-back is where it stops being
         # returned, which is the same place archived documents are dropped.
-        docs_by_id = {d["id"]: _document_row_for(membership, d) for d in docs if _can_see(membership, d)}
+        docs_by_id = {
+            d["id"]: _document_row_for(membership, d) for d in docs if _can_see(membership, d) and _in_company_files(d)
+        }
     # FTS5's rank order (relevance), not the IN-clause's arbitrary order.
     return [docs_by_id[doc_id] for doc_id in ordered_ids if doc_id in docs_by_id]
 
@@ -1090,6 +1141,36 @@ def get_document_file(
         doc["stored_path"], media_type=doc["media_type"],
         filename=doc["filename"], content_disposition_type="inline",
     )
+
+
+@app.get("/api/business-profile")
+def get_business_profile(
+    membership: Annotated[CurrentMembership, Depends(require_role("owner"))],
+) -> BusinessProfileOut:
+    """The company's current business-profile document, for the Company Settings
+    section (round 16, DECISIONS #90) — the only place such a document is shown,
+    because it is filtered out of the Company Files, Search and Calendar lists.
+
+    Owner only, like editing company settings. The newest one that is not
+    archived and that this caller may see (a pending profile is visible to the
+    owner, who is the reviewer; someone else's personal file is not); older ones
+    stay stored and hidden. `can_prefill` is the same rule that gates the
+    company-profile endpoint below, so the page offers "fill in the form" only
+    once a person has confirmed the extracted values in the review queue."""
+    with get_conn(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT id, filename, media_type, doc_type, status, received_at, uploaded_by_user_id, visibility "
+            "FROM document WHERE company_id = ? AND status != 'archived' ORDER BY received_at DESC, id DESC",
+            (membership.company_id,),
+        ).fetchall()
+    for row in rows:
+        if is_company_profile_doc_type(row["doc_type"]) and _can_see(membership, row):
+            return BusinessProfileOut(document={
+                "id": row["id"], "filename": row["filename"], "media_type": row["media_type"],
+                "status": row["status"], "received_at": row["received_at"],
+                "can_prefill": may_prefill_company_from(membership.role, row["doc_type"], row["status"]),
+            })
+    return BusinessProfileOut(document=None)
 
 
 @app.get("/api/documents/{document_id}/company-profile")

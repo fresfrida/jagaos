@@ -8,10 +8,29 @@
     }
   },
   "home": {
-    "heading": "Welcome to JagaOS",
-    "subheading": "Company memory for growing teams. Capture documents, decisions and deadlines, then find them again in seconds.",
     "signIn": "Sign in",
-    "getStarted": "Get started"
+    "pitch": "Stop hunting for paperwork and missing deadlines.",
+    "demo": {
+      "button": "Take a look around",
+      "hint": "Opens a demo company as its owner. No sign-up needed.",
+      "opening": "Opening the demo…",
+      "failed": "Couldn't open the demo right now. You can still sign in."
+    },
+    "haveAccount": "Already have an account?",
+    "features": {
+      "capture": {
+        "title": "Capture",
+        "text": "Snap or upload an invoice, contract or notice. We read it for you."
+      },
+      "review": {
+        "title": "Review",
+        "text": "You confirm what we read. Nothing is filed until a person has checked it."
+      },
+      "obligations": {
+        "title": "Obligations",
+        "text": "Deadlines and required filings land on your calendar, each with the rule behind it."
+      }
+    }
   },
   "header": {
     "primaryNav": "Primary",
@@ -44,7 +63,40 @@
       "banner": "Pre-filled from {{filename}}. Nothing is saved yet. Review the values, change anything that's wrong, then Save.",
       "loading": "Reading the business profile…",
       "failed": "Couldn't pre-fill from that document.",
-      "discard": "Discard pre-fill"
+      "discard": "Discard pre-fill",
+      "confirmTitle": "Use these details?",
+      "confirmIntro": "The business profile would change these settings:",
+      "now": "Now",
+      "fromProfile": "Profile",
+      "empty": "(empty)",
+      "apply": "Apply to the form",
+      "noChanges": "Nothing to change. The profile matches your current settings.",
+      "saveNote": "Nothing is saved until you press Save."
+    },
+    "businessProfile": {
+      "title": "Business profile",
+      "hint": "Upload it to fill in the details below.",
+      "loading": "Checking for a business profile…",
+      "loadFailed": "Couldn't check for a business profile.",
+      "uploading": "Reading your document…",
+      "view": "View the business profile",
+      "fill": "Fill in the form",
+      "replace": "Replace",
+      "remove": "Remove",
+      "removeConfirm": "Remove {{filename}}? This can't be undone.",
+      "openQueue": "Open the review queue",
+      "status": {
+        "filed": "Confirmed. Ready to fill in the form.",
+        "needsReview": "Waiting for you to confirm what we read.",
+        "quarantined": "Blocked for a safety check."
+      },
+      "notice": {
+        "uploaded": "Uploaded. Confirm what we read in the review queue, then fill in the form.",
+        "notAProfile": "That didn't look like a business profile, so it was filed with your other documents.",
+        "duplicate": "That file was already uploaded.",
+        "quarantined": "That file was blocked for a safety check. See the review queue.",
+        "failed": "That didn't work. Please try again."
+      }
     }
   },
   "auth": {
@@ -95,7 +147,7 @@
       "review": "Upload & Review",
       "documents": "Documents",
       "dates": "Dates",
-      "gaps": "Gap Analysis",
+      "gaps": "Compliance checklist",
       "obligations": "Obligations"
     },
     "upload": {
@@ -133,6 +185,19 @@
           "mixed": "Choose either one PDF or several photos. A PDF can't be combined with photos.",
           "tooMany": "A document can have at most {{max}} pages."
         }
+      },
+      "rejectedTitle": "Replace the rejected file?",
+      "rejectedDismiss": "Not now",
+      "progress": {
+        "reading": "Reading your document…",
+        "details": "Pulling out the details…",
+        "almost": "Almost filed…",
+        "announce": "Uploading {{name}}",
+        "pages": "{{count}} pages"
+      },
+      "hint": {
+        "filingFor": "Filing this for: {{label}}",
+        "clear": "Clear this suggestion"
       }
     },
     "review": {
@@ -235,8 +300,7 @@
         "tokens": "Tokens in/out",
         "cost": "Cost",
         "decision": "Decision"
-      },
-      "prefillCompany": "Pre-fill company settings from this"
+      }
     },
     "dates": {
       "uploadDate": "Upload date",
@@ -246,15 +310,30 @@
       "prevMonth": "Previous month",
       "nextMonth": "Next month",
       "selectADay": "Tap a day with documents to see them here.",
-      "noneOnDay": "No documents on this day."
+      "noneOnDay": "No documents on this day.",
+      "basis": {
+        "filed": "When filed",
+        "document": "Document dates"
+      },
+      "prevYear": "Previous year",
+      "nextYear": "Next year",
+      "prevYears": "Earlier years",
+      "nextYears": "Later years",
+      "pickMonth": "{{label}}: choose a year and month",
+      "backToDays": "{{label}}: back"
     },
     "gaps": {
-      "heading": "Gap analysis: {{satisfied}} of {{total}} held",
-      "empty": "No expectations yet. Upload a statutory document that reads as a company event (incorporation, corp sec change)."
+      "heading": "Compliance checklist: {{satisfied}} of {{total}} held",
+      "empty": "Nothing on the checklist yet. Upload a statutory document that reads as a company event (incorporation, corp sec change) and what it needs appears here.",
+      "viewDocument": "View document",
+      "upload": "Upload"
     },
     "obligations": {
       "heading": "Obligations ({{count}})",
-      "empty": "No obligations derived yet."
+      "empty": "No obligations derived yet.",
+      "due": "Due {{date}}",
+      "showMore": "Show more",
+      "showLess": "Show less"
     },
     "documentViewer": {
       "loadFailed": "Couldn't load the source file.",
@@ -265,7 +344,8 @@
     "documentPreview": {
       "loadFailed": "Couldn't load the source file.",
       "loading": "Loading source…",
-      "openSourcePdf": "Open source PDF"
+      "openSourcePdf": "Open source PDF",
+      "openImage": "Open the full-size image"
     },
     "voiceCaption": {
       "stopRecording": "Stop recording caption",

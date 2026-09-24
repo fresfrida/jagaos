@@ -15,7 +15,7 @@ row.
 
 | Action | viewer | user | admin | owner |
 |---|---|---|---|---|
-| View documents, search, calendar, obligations, gap analysis | ✅ | ✅ | ✅ | ✅ |
+| View documents, search, calendar, obligations, compliance checklist (called gap analysis until round 16) | ✅ | ✅ | ✅ | ✅ |
 | Upload a document | ❌ | ✅ | ✅ | ✅ |
 | Edit a document's description/bucket/vendor/doc_type/filename | ❌ | ✅ own uploads only | ✅ any | ✅ any |
 | See the review queue (open review items) — round 12 | ❌ none | ✅ only items on their own uploads | ✅ all | ✅ all |
@@ -29,7 +29,7 @@ row.
 | Add a team member | ❌ | ❌ | ✅ | ✅ |
 | See the Company Settings page | ❌ | ❌ | ✅ read-only | ✅ editable |
 | Edit company settings (name, FYE, UEN, GST status, registered address) | ❌ | ❌ | ❌ | ✅ |
-| Pre-fill company settings from a confirmed ACRA business profile — round 12 | ❌ | ❌ | ❌ | ✅ |
+| Upload, view and fill company settings from a business profile (Company Settings, first row) — round 12, moved in round 16: it is not in Company Files or Search for anyone | ❌ | ❌ | ❌ | ✅ |
 | Switch between companies — round 12 (only if they hold 2+ memberships; nearly everyone holds one) | own memberships only | own memberships only | own memberships only | own memberships only |
 
 Server-side enforcement (the real check — the frontend only mirrors it for
@@ -46,6 +46,9 @@ UI affordances):
 - **Document visibility (round 13, DECISIONS #83/#85) — one rule, `auth.may_see_document`, applied at `GET /api/documents`, `GET /api/search`, `GET /api/documents/{id}/file`, `GET /api/trace/{id}`, `PATCH /api/documents/{id}`, `POST /api/documents/{id}/archive`, `POST /api/review/{id}/resolve`, `GET /api/documents/{id}/company-profile`, the review queue and the duplicate-upload answer.** In order: (1) a personal file (`visibility` other than `company`) is visible to its uploader **and no one else — not admin, not owner** (a personal file with no recorded uploader is visible to nobody); (2) a document with status `needs_review` follows the review-queue rule below; (3) everything else is visible to the whole company. A document the caller may not see is **invisible, not forbidden**: left out of lists and a **404** on any direct fetch or action, before any ownership/role 403 — the same as an archived document (#53). A hidden document's id is also never returned in a duplicate-upload answer.
 - `GET /api/review` — any authenticated member, **filtered per caller** by `auth.may_see_review_item` (round 12, DECISIONS #80): admin/owner see every open item in the company; a `user` only items on documents they uploaded themselves (`uploaded_by_user_id` equals their id — a document with no recorded uploader is admin/owner-only, deliberately failing closed unlike the edit rule); a `viewer` none.
 - `GET /api/auth/companies`, `POST /api/auth/switch-company` — any authenticated member (round 12, DECISIONS #77). The list is the caller's own memberships only, with a group's name only on an owner membership; the switch is 403 for a company the caller has no membership in (the same 403 whether or not it exists). The role afterwards is the one held in the newly active company.
+- `GET /api/business-profile` — `require_role("owner")` (round 16, DECISIONS #90): the company's newest non-archived business-profile document that the caller may see (`auth.may_see_document`), with `can_prefill`. The list endpoints (`GET /api/documents`, `GET /api/search`) skip a business profile for EVERY role, by doc_type (`main._in_company_files`); this is a filter on lists, not on access: the file, the review queue and this endpoint still reach it by id under the normal rules.
+- `GET /api/expectations` — any authenticated member; each row's `evidence_document_id` is sent only when the caller may see that document and it is not archived, else null (round 16, DECISIONS #90).
+- `POST /api/documents` and `/api/documents/pages` accept `doc_type_hint` (round 16): any user+ may send it; it is ignored unless it is a real checklist slug and only adds a hint line to the classify prompt.
 - `GET /api/documents/{id}/company-profile` — `require_role("owner")` **plus** `rules.company_profile.may_prefill_company_from` (round 12, DECISIONS #79): a business-profile document in the caller's own company that a person has already confirmed (`filed`); 404 for another company's or an archived document, 409 for one not yet confirmed. Read-only — it changes nothing; the write is the owner's Save on `PATCH /api/companies/{id}`.
 - `POST /api/review/{id}/resolve` — admin+ **plus, since round 13, the uploader of their own personal file** (`auth.may_resolve_review_item`; without it a `user`'s private upload could never leave review — see "Flagged decision 5"); a `thread_id` that is not the item's own is a 400. Otherwise **deliberately
   not extended** to let a `user` resolve their own upload's review item —

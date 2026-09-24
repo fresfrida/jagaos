@@ -62,6 +62,20 @@ export interface CompanyProfilePrefill {
   registered_address: string | null
 }
 
+/** GET /api/business-profile (owner only): the company's current business-profile
+ * document for the Company Settings section, or null. A business profile is not in
+ * the Company Files / Search / Calendar lists (round 16, DECISIONS #90); this is
+ * the one place it is fetched. `can_prefill` is true once a person has confirmed
+ * its extracted values in the review queue. */
+export interface BusinessProfileDocument {
+  id: number
+  filename: string
+  media_type: string
+  status: string
+  received_at: string
+  can_prefill: boolean
+}
+
 export interface CompanyUpdate {
   name?: string
   fye_month?: number
@@ -167,6 +181,9 @@ export const authApi = {
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ company_id: companyId }),
     }),
+
+  getBusinessProfile: () =>
+    apiRequest<{ document: BusinessProfileDocument | null }>('/api/business-profile', { headers: authHeaders() }),
 
   // Owner-only, read-only (app/main.py::get_company_profile_prefill) — the
   // values for the settings form; nothing is written until the owner saves.

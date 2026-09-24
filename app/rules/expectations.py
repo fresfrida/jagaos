@@ -69,6 +69,21 @@ BY_EVENT_KIND: dict[str, list[ExpectationRule]] = {
     "corpsec_change": EXPECTED_ON_CORPSEC_CHANGE,
 }
 
+# Every checklist item there is, keyed by its doc_type slug. The upload's
+# `doc_type_hint` (round 16, DECISIONS #90) may only be one of these: the slug
+# is looked up here and the LABEL is what reaches the classify prompt, so no
+# client-supplied text is ever put in front of the model.
+LABEL_BY_DOC_TYPE: dict[str, str] = {
+    rule.doc_type: rule.label for rules in BY_EVENT_KIND.values() for rule in rules
+}
+
+
+def hint_label(doc_type_hint: str | None) -> str | None:
+    """The checklist label a doc_type_hint names, or None for no hint or one
+    that is not a real checklist slug (ignored rather than rejected: a hint is a
+    suggestion, never a reason to refuse an upload)."""
+    return LABEL_BY_DOC_TYPE.get(doc_type_hint) if doc_type_hint else None
+
 
 def derive_expectations(company_id: int, event_id: int, event_kind: str, occurred_on: str) -> list[dict]:
     """Pure function: an event -> the document set it should have produced.

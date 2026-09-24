@@ -129,12 +129,6 @@ export interface DocumentRow {
   // frontend deploys on push, the Lightsail backend only when someone
   // redeploys it) sends nothing — see opsShared.tsx's documentIsEditable.
   can_edit?: boolean
-  // 2026-09-24 (round 12, DECISIONS #79): the server's answer for THIS caller
-  // (rules/company_profile.py::may_prefill_company_from) — true only for an
-  // owner looking at a confirmed ACRA business profile. Optional for the same
-  // skew reason as can_edit, but the fallback differs: absent means "not
-  // offered", which is exactly what the app did before this existed.
-  can_prefill_company?: boolean
   // 2026-09-24 (round 13, DECISIONS #85): 'only_me' for a personal file — only
   // its uploader ever receives such a row, so this is for the badge, not a
   // filter. Absent from an older backend, which has no personal files.
@@ -153,6 +147,10 @@ export interface Expectation {
   label: string
   due_on: string | null
   status: string
+  // 2026-09-24 (round 16, DECISIONS #90): the document that made a 'satisfied' row
+  // satisfied, sent only when THIS caller may see it (else null). Optional: a
+  // backend older than the field sends none, and the row then simply has no link.
+  evidence_document_id?: number | null
 }
 
 export interface Obligation {
@@ -238,10 +236,14 @@ export const opsApi = {
   // upload is a company file, and its uploader flips it afterwards with the lock
   // toggle (editDocument's `visibility`). The backend still accepts a
   // `visibility` query parameter for any other client.
-  uploadDocument: (file: File, isPicture: boolean, language: string) => {
+  // docTypeHint (2026-09-24, round 16, DECISIONS #90): the doc_type slug of the
+  // compliance checklist item the upload was started from. A suggestion to the
+  // classifier only; the server ignores anything that is not a real checklist slug.
+  uploadDocument: (file: File, isPicture: boolean, language: string, docTypeHint?: string | null) => {
     const form = new FormData()
     form.append('file', file)
     const params = new URLSearchParams({ source_channel: 'web', is_picture: String(isPicture), language })
+    if (docTypeHint) params.set('doc_type_hint', docTypeHint)
     return request<UploadResult>(`/api/documents?${params}`, { method: 'POST', body: form })
   },
 
@@ -249,10 +251,12 @@ export const opsApi = {
   // DECISIONS #78): the backend merges them into one PDF and runs it through
   // the same pipeline as any upload — one document, one review item. The
   // order of `pages` IS the page order. app/main.py::upload_document_pages.
-  uploadPages: (pages: File[], language: string) => {
+  uploadPages: (pages: File[], language: string, docTypeHint?: string | null) => {
     const form = new FormData()
     for (const page of pages) form.append('files', page)
-    return request<UploadResult>(`/api/documents/pages?${new URLSearchParams({ language })}`, { method: 'POST', body: form })
+    const params = new URLSearchParams({ language })
+    if (docTypeHint) params.set('doc_type_hint', docTypeHint)
+    return request<UploadResult>(`/api/documents/pages?${params}`, { method: 'POST', body: form })
   },
 
   listDocuments: () => request<DocumentRow[]>('/api/documents'),

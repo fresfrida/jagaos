@@ -10,10 +10,10 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { FileName } from '../../components/ui/FileName'
 import { ApiError } from '../../lib/apiClient'
 import { formatShortDate, localeFor } from '../../lib/dates'
-import { Link } from '../../router/Link'
-import { routeHref } from '../../router/routes'
+import { middleEllipsis } from '../../lib/filename'
 import {
   BucketField,
   descriptionFor,
@@ -99,7 +99,7 @@ export function DocumentViewerModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-          <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{filename}</p>
+          <p className="min-w-0 flex-1 text-sm font-medium text-ink"><FileName name={filename} max={36} /></p>
           {doc.can_change_visibility === true ? (
             <VisibilityToggle visibility={lock.visibility} busy={lock.busy} error={lock.error} onToggle={() => void lock.toggle()} />
           ) : (
@@ -352,20 +352,9 @@ export function DocumentCard({
             {t('ops.documents.edit')}
           </button>
         )}
-        {/* Pre-fill company settings (2026-09-24, round 12, DECISIONS #79):
-           offered only when the server says so for THIS caller
-           (can_prefill_company — an owner, on a confirmed ACRA business
-           profile). Absent from an older backend means not offered, which
-           is what the app did before. It only opens the settings form
-           pre-filled; nothing is saved until the owner saves it there. */}
-        {doc.can_prefill_company === true && (
-          <Link
-            href={`${routeHref('company-settings')}?prefill=${doc.id}`}
-            className="text-[12px] font-mono uppercase tracking-wide text-ink underline underline-offset-2 hover:text-muted"
-          >
-            {t('ops.documents.prefillCompany')}
-          </Link>
-        )}
+        {/* The "Pre-fill company settings from this" link that used to sit here (round 12,
+           DECISIONS #79) moved into Company Settings itself in round 16 (DECISIONS #90):
+           a business profile is no longer listed with the paperwork at all. */}
         {/* No doc.status !== 'archived' guard needed (2026-09-23, DECISIONS
            #53) — the server never sends an archived document to this list
            at all anymore, so every doc rendered here is guaranteed live.
@@ -423,7 +412,7 @@ export function DocumentCard({
 
       <ConfirmDialog
         open={showDeleteConfirm}
-        message={t('ops.documents.deleteConfirmMessage', { filename: doc.filename })}
+        message={t('ops.documents.deleteConfirmMessage', { filename: middleEllipsis(doc.filename, 40) })}
         confirmLabel={t('common.buttons.delete')}
         cancelLabel={t('common.buttons.cancel')}
         onConfirm={() => {

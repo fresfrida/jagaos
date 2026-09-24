@@ -124,11 +124,47 @@ def transition_document(
         )
 
 
+def reopen_expectation(
+    expectation_id: int,
+    actor: str,
+    db_path: str = DB_PATH,
+    conn=None,
+) -> None:
+    """satisfied -> missing, for ONE case only: the document that satisfied the
+    expectation has been hard-deleted (scripts/purge_document.py, DECISIONS #91).
+
+    Deliberately not a transition in _EXPECTATION_TRANSITIONS (a satisfied row
+    never goes back through the state machine): it is an administrative
+    correction, kept here so that every write to an expectation's status still
+    lives in this one module. Refuses anything that is not currently satisfied.
+    Pass `conn` to run inside the caller's transaction (a second connection
+    would wait on the caller's write lock); the caller then commits."""
+    def apply(c) -> None:
+        row = c.execute("SELECT status FROM expectation WHERE id = ?", (expectation_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"expectation {expectation_id} not found")
+        if row["status"] != "satisfied":
+            raise InvalidTransition(f"expectation {row['status']} cannot be reopened, only a satisfied one")
+        c.execute("UPDATE expectation SET status = 'missing', evidence_document_id = NULL WHERE id = ?", (expectation_id,))
+        c.execute(
+            "INSERT INTO trace (run_id, node, decision, at) "
+            "VALUES ('transition', 'rules.reopen_expectation', ?, datetime('now'))",
+            (f"satisfied->missing by {actor} (evidence purged)",),
+        )
+
+    if conn is not None:
+        apply(conn)
+        return
+    with get_conn(db_path) as own:
+        apply(own)
+
+
 def transition_expectation(
     expectation_id: int,
     new_status: ExpectationStatus,
     actor: str,
     db_path: str = DB_PATH,
+    evidence_document_id: int | None = None,
 ) -> None:
     with get_conn(db_path) as conn:
         row = conn.execute(
@@ -139,9 +175,13 @@ def transition_expectation(
         current = row["status"]
         if new_status not in _EXPECTATION_TRANSITIONS.get(current, set()):
             raise InvalidTransition(f"expectation {current} -> {new_status} not allowed")
+        # evidence_document_id (round 16, DECISIONS #90): the document that
+        # satisfied it. COALESCE so a transition that names none (waive,
+        # acknowledge) never erases one that is already recorded.
         conn.execute(
-            "UPDATE expectation SET status = ? WHERE id = ?",
-            (new_status, expectation_id),
+            "UPDATE expectation SET status = ?, "
+            "evidence_document_id = COALESCE(?, evidence_document_id) WHERE id = ?",
+            (new_status, evidence_document_id, expectation_id),
         )
         conn.execute(
             "INSERT INTO trace (run_id, node, decision, at) "

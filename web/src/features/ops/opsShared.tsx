@@ -7,7 +7,7 @@
 
 import type { TFunction } from 'i18next'
 import { File, FileSpreadsheet, FileText, Image as ImageIcon, Lock, Mic, MicOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSpeechCaption } from '../../hooks/useSpeechCaption'
 import { BUCKETS, DOC_TYPES, opsApi, type DocumentRow, type ReviewReason } from './opsApi'
@@ -439,6 +439,15 @@ export function useDocumentBlobUrl(documentId: number, enabled = true): { blobUr
   return { blobUrl, failed }
 }
 
+/** The words of a form field's label, always two lines tall (round 16, item 5).
+ * A label that wraps in Tamil but not in English used to push its input down, so a
+ * form's rows sat at different heights in different languages. Reserving two lines
+ * for every label puts each input in the same place whatever the language; a label
+ * longer than two lines is cut with an ellipsis rather than growing the row. */
+export function FieldLabelText({ children }: { children: ReactNode }) {
+  return <span className="line-clamp-2 h-8 overflow-hidden text-[12px] leading-4">{children}</span>
+}
+
 export const FIELD_CLASS =
   'block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted'
 
@@ -466,14 +475,19 @@ export function PillPicker({
   clearLabel?: string
   labels?: Record<string, string>
 }) {
+  // Round 16 (item 5): a fixed three-column grid of equal-width cells, not wrapping
+  // flex. The same pills used to reflow by the length of their words, so switching
+  // language moved every pill; here a pill is always in the same place and a long
+  // word is cut with an ellipsis (its whole text is in the tooltip) instead of
+  // pushing its neighbours.
   const pillClass = (active: boolean) =>
-    `rounded-md border px-2.5 py-1 text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+    `min-w-0 truncate rounded-md border px-2 py-1 text-center text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
       active ? 'border-ink bg-ink text-white' : 'border-line bg-white text-muted hover:border-ink/40 hover:text-ink'
     }`
   return (
-    <div className="flex flex-wrap gap-1.5" role="group">
+    <div className="grid grid-cols-3 gap-1.5" role="group">
       {clearLabel !== undefined && (
-        <button type="button" disabled={disabled} onClick={() => onChange('')} className={pillClass(value === '')}>
+        <button type="button" disabled={disabled} onClick={() => onChange('')} title={clearLabel} className={pillClass(value === '')}>
           {clearLabel}
         </button>
       )}
@@ -484,6 +498,7 @@ export function PillPicker({
           disabled={disabled}
           onClick={() => onChange(opt)}
           aria-pressed={value === opt}
+          title={labels?.[opt] ?? opt}
           className={pillClass(value === opt)}
         >
           {labels?.[opt] ?? opt}

@@ -1,34 +1,73 @@
-/** Signed-out landing content (2026-09-23, role/permission work) —
- * deliberately minimal: heading, one supporting line, two buttons, no
- * scroll, no marketing chrome below the fold. Both buttons go to /login,
- * not GetStartedPage — per the explicit ask, this is a doorway into the
- * app, not a second marketing surface. Replaces the previous unconditional
- * <Hero/> (deleted — see docs/DECISIONS.md): Page.tsx's `home` case never
- * branched on session status the way `calendar`/`tags` already did, so a
- * signed-in visitor to / saw this same marketing hero instead of the app,
- * a confirmed gap this task closes.
+/** Signed-out landing (round 16, item 2; the round 9 version was a centred
+ * heading and two buttons that both went to /login). Designed for a phone first
+ * and only stretched for a desktop: one pitch line that names the pain, one warm
+ * button that opens the demo company, and three small cards saying what the
+ * product does. Compact, not a full-screen hero: the page starts under the header
+ * and the cards are on screen at 375px without scrolling past a wall of text.
  *
- * Footer suppression: App.tsx already hides the Footer for `route ===
- * 'home'` (a pre-existing check, unchanged) — this component doesn't
- * need its own "no footer" logic, it inherits it from the route. */
+ * The button signs in as the seeded demo owner through the ordinary login flow
+ * (features/auth/useDemoLogin.ts, config/demo.ts): no bypass. "Sign in" stays as a
+ * quiet link for someone with a real account. A signed-in visitor never renders
+ * this: Page.tsx redirects `home` into the Calendar. */
 
+import { CalendarClock, ClipboardCheck, Loader2, ScanLine } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { ButtonLink } from '../components/ui/ButtonLink'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
 import { Container } from '../components/ui/Container'
+import { useDemoLogin } from '../features/auth/useDemoLogin'
+import { Link } from '../router/Link'
 import { routeHref } from '../router/routes'
+
+const FEATURES = [
+  { id: 'capture', icon: ScanLine },
+  { id: 'review', icon: ClipboardCheck },
+  { id: 'obligations', icon: CalendarClock },
+] as const
 
 export function WelcomeHero() {
   const { t } = useTranslation()
+  const demo = useDemoLogin()
+
   return (
-    <section className="flex min-h-[calc(100svh-65px)] items-center justify-center py-10">
-      <Container className="w-full">
-        <div className="mx-auto flex max-w-lg flex-col items-center text-center">
-          <h1 className="text-4xl font-semibold leading-tight text-ink sm:text-5xl">{t('home.heading')}</h1>
-          <p className="mt-4 text-base leading-7 text-muted sm:text-lg">{t('home.subheading')}</p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <ButtonLink href={routeHref('login')}>{t('home.signIn')}</ButtonLink>
-            <ButtonLink href={routeHref('login')} variant="secondary">{t('home.getStarted')}</ButtonLink>
+    <section className="py-8 sm:py-14">
+      <Container>
+        <div className="mx-auto max-w-3xl">
+          <h1 className="max-w-xl text-[28px] font-semibold leading-[1.15] text-ink sm:text-4xl">{t('home.pitch')}</h1>
+
+          <div className="mt-6">
+            <Button
+              size="md"
+              className="w-full sm:w-auto"
+              disabled={demo.busy}
+              onClick={() => void demo.start()}
+              icon={demo.busy ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : undefined}
+            >
+              {demo.busy ? t('home.demo.opening') : t('home.demo.button')}
+            </Button>
+            <p className="mt-2 text-[13px] text-muted">{t('home.demo.hint')}</p>
+            {demo.failed && (
+              <p role="alert" className="mt-2 text-[13px] text-red-700">{t('home.demo.failed')}</p>
+            )}
+            <p className="mt-4 text-[13px] text-muted">
+              {t('home.haveAccount')}{' '}
+              <Link href={routeHref('login')} className="text-ink underline underline-offset-2 hover:text-muted">
+                {t('home.signIn')}
+              </Link>
+            </p>
           </div>
+
+          <ul className="mt-8 grid gap-3 sm:grid-cols-3">
+            {FEATURES.map(({ id, icon: Icon }) => (
+              <li key={id}>
+                <Card className="h-full p-4" interactive={false}>
+                  <Icon size={20} strokeWidth={1.75} className="text-sage-ink" aria-hidden="true" />
+                  <h2 className="mt-3 text-[15px] font-semibold text-ink">{t(`home.features.${id}.title`)}</h2>
+                  <p className="mt-1 text-[13px] leading-5 text-muted">{t(`home.features.${id}.text`)}</p>
+                </Card>
+              </li>
+            ))}
+          </ul>
         </div>
       </Container>
     </section>

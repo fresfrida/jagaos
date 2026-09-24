@@ -10,16 +10,18 @@
  * own RequireSession guard. */
 
 import { useTranslation } from 'react-i18next'
-import { Badge } from '../../components/ui/Badge'
 import { Card } from '../../components/ui/Card'
-import { formatShortDate, localeFor } from '../../lib/dates'
+import { useAuth } from '../auth/AuthContext'
+import { roleAtLeast } from '../auth/authApi'
 import { OpsStatusBar } from '../ops/OpsStatusBar'
-import { StatusPill, riskLabel } from '../ops/opsShared'
 import { useOpsData } from '../ops/useOpsData'
+import { ComplianceChecklist } from './ComplianceChecklist'
 import { DatesView } from './DatesView'
+import { ObligationRow } from './ObligationRow'
 
 export function CalendarHub() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
+  const { role } = useAuth()
   const { documents, expectations, obligations, apiUp, error, refresh } = useOpsData()
 
   return (
@@ -46,48 +48,19 @@ export function CalendarHub() {
             {obligations.length === 0 ? (
               <p className="p-6 text-sm text-muted">{t('ops.obligations.empty')}</p>
             ) : (
-              <table className="w-full text-left text-[13px]">
-                <tbody>
-                  {obligations.map((ob) => (
-                    <tr key={ob.id} className="border-b border-line last:border-0 align-top">
-                      <td className="px-4 py-2.5 text-ink">
-                        {ob.label}
-                        <Badge tone="neutral" className="ml-2">{riskLabel(t, ob.risk)}</Badge>
-                      </td>
-                      {/* 2026-09-23 (live regression report, item 8):
-                         used to render the raw ISO string. */}
-                      <td className="px-4 py-2.5 text-muted">{formatShortDate(ob.due_on, localeFor(i18n.language))}</td>
-                      <td className="px-4 py-2.5"><StatusPill status={ob.status} /></td>
-                      <td className="max-w-xs px-4 py-2.5 text-[12px] text-muted">{ob.citation}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ul className="divide-y divide-line">
+                {obligations.map((ob) => <ObligationRow key={ob.id} obligation={ob} />)}
+              </ul>
             )}
           </Card>
         </section>
 
-        <section>
-          <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">
-            {t('ops.gaps.heading', { satisfied: expectations.filter((e) => e.status === 'satisfied').length, total: expectations.length })}
-          </h2>
-          <Card className="overflow-hidden p-0" interactive={false}>
-            {expectations.length === 0 ? (
-              <p className="p-6 text-sm text-muted">{t('ops.gaps.empty')}</p>
-            ) : (
-              <table className="w-full text-left text-[13px]">
-                <tbody>
-                  {expectations.map((exp) => (
-                    <tr key={exp.id} className="border-b border-line last:border-0">
-                      <td className="px-4 py-2.5 text-ink">{exp.label}</td>
-                      <td className="px-4 py-2.5"><StatusPill status={exp.status} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Card>
-        </section>
+        <ComplianceChecklist
+          expectations={expectations}
+          documents={documents}
+          canUpload={role !== null && roleAtLeast(role, 'user')}
+          onChanged={() => void refresh()}
+        />
       </div>
     </div>
   )
