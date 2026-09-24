@@ -412,3 +412,78 @@ def test_a_ppn_invoice_keeps_its_tax_label_through_the_real_gateway(tmp_path):
     assert "GST" not in proposed["tax_label"]["value"].upper()
     assert proposed["currency"]["value"].upper() in ("IDR", "RP"), proposed["currency"]
     assert item["reason"] == "clean", item["reason"]
+
+
+# ---- round 18 (DECISIONS #93): a company's own constitution is statutory --------------------
+
+CORPUS = None
+
+
+def _corpus(name: str):
+    from pathlib import Path
+
+    return Path(__file__).parent.parent / "evals" / "demo_corpus" / "files" / name
+
+
+def test_a_constitution_classifies_as_a_statutory_company_constitution_through_the_real_pipeline():
+    """Round 15's rewording of the statutory lane moved 02_constitution.pdf to important/contract,
+    where it could never satisfy the checklist. Real gateway, real classify node."""
+    doc, item = _upload_real(_corpus("02_constitution.pdf"), "liveconstitution@example.com", company="Bright Harbour Pte Ltd")
+
+    assert doc["lane"] == "statutory", (doc["lane"], doc["doc_type"])
+    assert "constitution" in (doc["doc_type"] or "").lower(), doc["doc_type"]
+    assert doc["bucket"] == "Statutory"
+    assert "ACRA" not in (doc["doc_type"] or ""), "round 15's no-invented-authority rule still holds"
+
+
+def test_a_lease_still_classifies_as_an_important_contract_through_the_real_pipeline():
+    doc, _ = _upload_real(_corpus("08_lease_important.pdf"), "liveleaseguard@example.com", company="Bright Harbour Pte Ltd")
+
+    assert (doc["lane"], doc["doc_type"], doc["bucket"]) == ("important", "contract", "Contracts")
+
+
+@pytest.mark.parametrize("filename,lane", [
+    ("01_certificate_of_incorporation.pdf", "statutory"),
+    ("03_notice_office_change.pdf", "statutory"),
+    ("04_notice_corpsec_change.pdf", "statutory"),
+    ("05_invoice_clean.pdf", "invoice"),
+    ("06_invoice_bad_gst.pdf", "invoice"),
+])
+def test_the_rest_of_the_demo_corpus_keeps_its_lane_with_the_constitution_clause_in_the_prompt(filename, lane):
+    doc, _ = _upload_real(_corpus(filename), f"livecorpus-{filename[:2]}@example.com", company="Bright Harbour Pte Ltd")
+
+    assert doc["lane"] == lane, (filename, doc["lane"], doc["doc_type"])
+
+
+def test_a_confirmed_certificate_and_constitution_satisfy_both_checklist_rows_with_links_through_the_real_gateway():
+    """The user-facing goal, end to end and unmocked: upload and confirm the certificate and
+    the constitution; both checklist rows end up satisfied by THEIR document (round 18)."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    owner = client.post("/api/auth/dev-login", json={
+        "email": "liveboth@example.com", "company_name": "Bright Harbour Pte Ltd", "fye_month": 12, "fye_day": 31}).json()
+    headers = {"Authorization": f"Bearer {owner['token']}"}
+
+    def upload_and_confirm(name: str) -> int:
+        path = _corpus(name)
+        resp = client.post("/api/documents", headers=headers, files={"file": (path.name, path.read_bytes(), "application/pdf")})
+        assert resp.status_code == 200, resp.text
+        document_id = resp.json()["document_id"]
+        item = next(i for i in client.get("/api/review", headers=headers).json() if i["document_id"] == document_id)
+        done = client.post(f"/api/review/{item['id']}/resolve?thread_id={item['thread_id']}",
+                           json={"action": "confirm", "corrected_fields": {}}, headers=headers)
+        assert done.status_code == 200, done.text
+        return document_id
+
+    certificate = upload_and_confirm("01_certificate_of_incorporation.pdf")
+    constitution = upload_and_confirm("02_constitution.pdf")
+
+    rows = {r["doc_type"]: r for r in client.get("/api/expectations", headers=headers).json()}
+    assert (rows["certificate_of_incorporation"]["status"], rows["certificate_of_incorporation"]["evidence_document_id"]) == ("satisfied", certificate)
+    assert (rows["constitution"]["status"], rows["constitution"]["evidence_document_id"]) == ("satisfied", constitution)
+    # a second incorporation-like document must not double the obligations
+    rule_ids = [o["rule_id"] for o in client.get("/api/obligations", headers=headers).json()]
+    assert len(rule_ids) == len(set(rule_ids)), rule_ids

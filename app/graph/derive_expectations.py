@@ -3,12 +3,16 @@ Event -> expected document set -> gap analysis. THE table that makes gap
 analysis a feature, not a slide (INDEXING.md §0). The web app calls it the
 "compliance checklist" (round 16)."""
 
+import logging
 import re
 
 from app.db import DB_PATH, get_conn
 from app.graph.state import PipelineState
 from app.rules.expectations import derive_expectations as rule_derive
 from app.rules.transitions import transition_expectation
+
+
+logger = logging.getLogger(__name__)
 
 
 def _slug(text: str) -> str:
@@ -67,7 +71,7 @@ def _evidence_for(expected_doc_type: str, held: list[HeldDocument]) -> int | Non
     return None
 
 
-def reconcile_expectations(company_id: int, db_path: str | None = None) -> None:
+def reconcile_expectations(company_id: int, db_path: str | None = None) -> list[str]:
     """Re-check a company's open gaps against what it holds now.
 
     Expectation status is set once, at creation, against whatever documents
@@ -82,18 +86,33 @@ def reconcile_expectations(company_id: int, db_path: str | None = None) -> None:
     Round 16 (DECISIONS #90): also fills in the evidence document of a row that
     is already 'satisfied' but has none (satisfied before the column existed).
     The reads finish before any write, so a transition never waits on an open
-    connection of this function's own."""
+    connection of this function's own.
+
+    Returns one plain-English line per satisfied row it could NOT link (round 16
+    follow-up, DECISIONS #92): that used to be a silent `continue`, which made
+    "why is this row still without a link" impossible to answer from a log. Such a
+    row stays satisfied with no evidence: it was satisfied by a document that is no
+    longer HELD (archived, personal, quarantined, or re-typed to a doc_type that no
+    longer matches), and only a person can say which document should stand in."""
     db_path = db_path or DB_PATH  # read at call time, so a test that repoints DB_PATH is honoured
     with get_conn(db_path) as conn:
         held = _held_documents(conn, company_id)
         candidates = conn.execute(
-            "SELECT id, doc_type, status FROM expectation WHERE company_id = ? "
+            "SELECT id, doc_type, label, status FROM expectation WHERE company_id = ? "
             "AND (status = 'missing' OR (status = 'satisfied' AND evidence_document_id IS NULL))",
             (company_id,),
         ).fetchall()
+    unlinked: list[str] = []
     for exp in candidates:
         document_id = _evidence_for(exp["doc_type"], held)
         if document_id is None:
+            if exp["status"] == "satisfied":
+                held_types = sorted({doc_type for _, doc_type in held})
+                unlinked.append(
+                    f"expectation {exp['id']} '{exp['label']}' (company {company_id}) is satisfied but no held document "
+                    f"matches its doc_type '{exp['doc_type']}'; the company holds doc_types {held_types} "
+                    "(archived, personal and quarantined documents do not count)"
+                )
             continue
         if exp["status"] == "missing":
             transition_expectation(exp["id"], "satisfied", actor="rules_engine",
@@ -102,11 +121,14 @@ def reconcile_expectations(company_id: int, db_path: str | None = None) -> None:
             with get_conn(db_path) as conn:
                 conn.execute("UPDATE expectation SET evidence_document_id = ? WHERE id = ?",
                              (document_id, exp["id"]))
+    return unlinked
 
 
-def backfill_expectation_evidence(db_path: str | None = None) -> None:
-    """Startup step (app/main.py): give every already-satisfied expectation the
-    document that satisfies it. Idempotent, and a no-op once nothing is left."""
+def backfill_expectation_evidence(db_path: str | None = None) -> list[str]:
+    """Startup step (app/main.py::startup, EVERY start, not a one-time script):
+    give every already-satisfied expectation the document that satisfies it.
+    Idempotent, and a no-op once nothing is left. Returns, and logs as warnings, the
+    rows it could not link (see reconcile_expectations) so the service log says why."""
     db_path = db_path or DB_PATH
     with get_conn(db_path) as conn:
         company_ids = [
@@ -115,8 +137,12 @@ def backfill_expectation_evidence(db_path: str | None = None) -> None:
                 "WHERE status = 'satisfied' AND evidence_document_id IS NULL"
             ).fetchall()
         ]
+    unlinked: list[str] = []
     for company_id in company_ids:
-        reconcile_expectations(company_id, db_path)
+        unlinked += reconcile_expectations(company_id, db_path)
+    for line in unlinked:
+        logger.warning("expectation evidence backfill: %s", line)
+    return unlinked
 
 
 def derive_expectations(state: PipelineState) -> PipelineState:

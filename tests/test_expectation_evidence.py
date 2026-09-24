@@ -249,3 +249,87 @@ def test_the_checklist_is_still_scoped_to_the_callers_company(team, model):
     ).json()["token"]
 
     assert client.get("/api/expectations", headers=_headers(outsider)).json() == []
+
+
+# ---- the startup backfill: does it run, and what does it say when it cannot link a row --------
+
+def _satisfied_row_without_evidence(doc_type_held: str | None, *, status: str = "filed", visibility: str = "company") -> dict:
+    """A company with one expectation that is 'satisfied' but has no evidence (the shape of a row
+    satisfied before the column existed), and, unless doc_type_held is None, one document."""
+    with get_conn() as conn:
+        company = conn.execute("INSERT INTO company (name, fye_month, fye_day) VALUES ('Backfill Co', 12, 31)").lastrowid
+        document = None
+        if doc_type_held is not None:
+            document = conn.execute(
+                "INSERT INTO document (company_id, sha256, filename, media_type, bytes, stored_path, source_channel, doc_type, status, visibility) "
+                "VALUES (?, 'sha-backfill', 'held.pdf', 'application/pdf', 1, 'x', 'web', ?, ?, ?)",
+                (company, doc_type_held, status, visibility),
+            ).lastrowid
+        expectation = conn.execute(
+            "INSERT INTO expectation (company_id, doc_type, label, rule_id, status) VALUES (?, 'certificate_of_incorporation', 'Certificate of Incorporation', 'k1', 'satisfied')",
+            (company,),
+        ).lastrowid
+    return {"company": company, "document": document, "expectation": expectation}
+
+
+def _evidence_of(expectation_id: int):
+    with get_conn() as conn:
+        return conn.execute("SELECT status, evidence_document_id FROM expectation WHERE id = ?", (expectation_id,)).fetchone()
+
+
+def test_the_app_startup_runs_the_backfill_on_every_start():
+    """Through the real startup hook, not by calling the function: the round-16 tests called
+    backfill_expectation_evidence() directly, so nothing failed when the call in startup() was
+    not what made a production row link."""
+    world = _satisfied_row_without_evidence("Certificate of Incorporation")
+    assert _evidence_of(world["expectation"])["evidence_document_id"] is None
+
+    with TestClient(app):  # entering the context runs the app's startup events
+        pass
+
+    row = _evidence_of(world["expectation"])
+    assert (row["status"], row["evidence_document_id"]) == ("satisfied", world["document"])
+
+    with TestClient(app):  # a second start changes nothing
+        pass
+    assert _evidence_of(world["expectation"])["evidence_document_id"] == world["document"]
+
+
+@pytest.mark.parametrize("held,status,visibility,why", [
+    (None, "filed", "company", "the company holds no document at all"),
+    ("Certificate of Incorporation", "archived", "company", "its document was deleted (archived)"),
+    ("Certificate of Incorporation", "filed", "only_me", "its document is a personal file"),
+    ("Certificate of Incorporation", "quarantined", "company", "its document is quarantined"),
+    ("contract", "filed", "company", "its document is now typed as something that does not match"),
+])
+def test_a_satisfied_row_no_held_document_matches_stays_as_it_is_and_the_startup_says_why(held, status, visibility, why, caplog):
+    world = _satisfied_row_without_evidence(held, status=status, visibility=visibility)
+
+    with caplog.at_level("WARNING"):
+        with TestClient(app):
+            pass
+
+    row = _evidence_of(world["expectation"])
+    assert (row["status"], row["evidence_document_id"]) == ("satisfied", None), why
+    lines = [r.getMessage() for r in caplog.records if "expectation evidence backfill" in r.getMessage()]
+    assert len(lines) == 1, why
+    assert f"expectation {world['expectation']}" in lines[0] and "'certificate_of_incorporation'" in lines[0]
+    assert "no held document matches" in lines[0]
+    assert ("['contract']" in lines[0]) is (held == "contract"), "the log names what the company DOES hold"
+
+
+def test_only_the_rows_it_could_not_link_are_reported():
+    from app.graph.derive_expectations import backfill_expectation_evidence
+
+    world = _satisfied_row_without_evidence("Certificate of Incorporation")
+    with get_conn() as conn:
+        stray = conn.execute(
+            "INSERT INTO expectation (company_id, doc_type, label, rule_id, status) VALUES (?, 'constitution', 'Company Constitution', 'k2', 'satisfied')",
+            (world["company"],),
+        ).lastrowid
+
+    unlinked = backfill_expectation_evidence()
+
+    assert len(unlinked) == 1 and f"expectation {stray}" in unlinked[0]
+    assert _evidence_of(world["expectation"])["evidence_document_id"] == world["document"]
+    assert _evidence_of(stray)["evidence_document_id"] is None

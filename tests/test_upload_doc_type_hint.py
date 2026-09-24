@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from reportlab.pdfgen import canvas
 
 import app.graph.classify as classify_module
+from app.graph.classify import render_system_prompt
 from app.llm import LLMResult
 from app.main import app
 from app.rules.expectations import hint_label
@@ -79,7 +80,9 @@ def test_a_real_checklist_slug_puts_its_label_in_the_prompt_as_an_expectation(pr
 def test_no_hint_leaves_the_prompt_exactly_as_it_was(prompts, headers):
     _upload(headers, "no-hint")
 
-    assert "checklist item" not in prompts[0] and "Company Constitution" not in prompts[0]
+    # byte for byte the base prompt (which itself now names "Company Constitution", round 18,
+    # so the label cannot be used as the signal that a hint was added)
+    assert prompts[0] == render_system_prompt("English")
 
 
 @pytest.mark.parametrize("hint", [
@@ -90,8 +93,8 @@ def test_anything_that_is_not_a_real_slug_is_ignored_not_rejected(prompts, heade
     result = _upload(headers, f"bad-{abs(hash(hint))}", f"?doc_type_hint={hint}")
 
     assert result["status"] == "needs_review", "an unusable hint must not refuse the upload"
+    assert prompts[0] == render_system_prompt("English"), "an unusable hint changes nothing the model is told"
     assert "checklist item" not in prompts[0]
-    assert hint == "" or hint not in prompts[0], "client-chosen text must never reach the model"
 
 
 def test_the_models_answer_still_decides_the_classification(prompts, headers):

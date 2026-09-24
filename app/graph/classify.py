@@ -31,7 +31,7 @@ from app.graph.state import PipelineState
 from app.guards.injection import scan, untrusted_prompt
 from app.llm import MODEL_NAME, call
 from app.models import BucketName, ClassifyResult, to_tool
-from app.rules.expectations import hint_label
+from app.rules.expectations import LABEL_BY_DOC_TYPE, hint_label
 from app.rules.grounding import ground_classification
 
 TOOL = to_tool(
@@ -81,8 +81,9 @@ UNREADABLE_EXAMPLE_EN = "Image with no clear readable text"
 
 SYSTEM_TEMPLATE = """You classify Singapore SME documents into one of four lanes:
 statutory (letters, notices and filings from a company registry, regulator or
-tax authority), invoice (bills, receipts), important (contracts, leases,
-insurance), or memory (photos, notes with no formal filing purpose).
+tax authority, and a company's own constitution), invoice (bills, receipts),
+important (contracts, leases, insurance), or memory (photos, notes with no
+formal filing purpose).
 
 Ground everything in the text. Every organisation, person, place and product
 name in description, description_en, doc_type and vendor_name must appear in
@@ -98,7 +99,10 @@ doc_type:
   Office"). Do not put an authority's name or acronym in it unless the text
   prints it. A company's own business profile or BizFile, a printout stating
   its registered name, UEN, registered address and officers, is statutory
-  with doc_type exactly "{company_profile_doc_type}".
+  with doc_type exactly "{company_profile_doc_type}". A company's own
+  constitution (its memorandum and articles of association, or a document
+  titled Constitution) is statutory too, even though the company wrote it and
+  no authority issued it, with doc_type exactly "{company_constitution_doc_type}".
 - For lane=invoice, important, or memory: pick exactly one of invoice,
   receipt, PO, quotation, delivery_order, contract, photo, other.
 
@@ -161,6 +165,14 @@ Call classify_document with your answer."""
 # extraction shape by it) and app/rules/company_profile.py (which decides who
 # may pre-fill company settings from it), so the phrase cannot drift.
 COMPANY_PROFILE_DOC_TYPE = "Business Profile"
+
+# Round 18 (DECISIONS #93): the doc_type a company's own constitution must carry
+# to satisfy the "Company Constitution" compliance-checklist row. It is the
+# checklist rule's own label, read from rules/expectations.py rather than typed
+# again here, so the prompt cannot drift from what derive_expectations matches
+# (a plain substring test on the slug "constitution"; there is no exact-match gate
+# like the business profile's, so this is a prompt string and not a helper).
+COMPANY_CONSTITUTION_DOC_TYPE = LABEL_BY_DOC_TYPE["constitution"]
 _COMPANY_PROFILE_SLUGS = ("business_profile", "bizfile")
 
 
@@ -196,6 +208,7 @@ def render_system_prompt(language_name: str, expected_document: str | None = Non
         unreadable_example=UNREADABLE_EXAMPLE_EN,
         bucket_names=BUCKET_NAMES_FOR_PROMPT,
         company_profile_doc_type=COMPANY_PROFILE_DOC_TYPE,
+        company_constitution_doc_type=COMPANY_CONSTITUTION_DOC_TYPE,
     )
     return prompt + EXPECTED_DOCUMENT_NOTE.format(label=expected_document) if expected_document else prompt
 
