@@ -163,6 +163,16 @@ export function dedupeReasons(reasons: ReviewReason[]): ReviewReason[] {
   })
 }
 
+/** Whether to offer Edit on a document. Only an explicit `false` from the
+ * server hides it: the frontend deploys on every push but the backend only
+ * when redeployed, so against an older backend `can_edit` is simply absent —
+ * and "absent" must fall back to the role check (the server still enforces
+ * the real rule and a refused save shows a translated message), not hide
+ * Edit from every role, which is what `roleCanEdit && doc.can_edit` did. */
+export function documentIsEditable(roleCanEdit: boolean, doc: Pick<DocumentRow, 'can_edit'>): boolean {
+  return roleCanEdit && doc.can_edit !== false
+}
+
 /** verify.py joins raw extract-field names ("vendor, issued_on") into one
  * param; translate each through the same label table the Extracted fields
  * grid uses, so a Malay sentence never carries English field names. */

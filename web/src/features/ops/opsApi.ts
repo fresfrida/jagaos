@@ -117,8 +117,11 @@ export interface DocumentRow {
   // 2026-09-24 (round 11): the server's own answer (app/auth.py::
   // may_edit_document) for THIS caller — a `user` can only edit documents
   // they uploaded, so an Edit button on someone else's would only ever
-  // 403. Always trust this over re-deriving the rule from the role here.
-  can_edit: boolean
+  // 403. Trust this over re-deriving the rule from the role here.
+  // Optional on purpose: a backend older than this field (the Vercel
+  // frontend deploys on push, the Lightsail backend only when someone
+  // redeploys it) sends nothing — see opsShared.tsx's documentIsEditable.
+  can_edit?: boolean
 }
 
 export interface Expectation {

@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { Card } from '../../components/ui/Card'
 import { DocumentCard, DocumentViewerModal } from './DocumentCard'
 import { opsApi, type DocumentRow, type TraceReport } from './opsApi'
+import { documentIsEditable } from './opsShared'
 
 export function DocumentResultsList({
   documents,
@@ -64,7 +65,7 @@ export function DocumentResultsList({
             <DocumentCard
               key={doc.id}
               doc={doc}
-              canEdit={canEdit && doc.can_edit}
+              canEdit={documentIsEditable(canEdit, doc)}
               canArchive={canArchive}
               onView={() => setViewingDocument(doc)}
               onTrace={() => void viewTrace(doc.id)}

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import i18n from '../../i18n'
 import type { ReviewReason } from './opsApi'
 import { BUCKETS } from './opsApi'
-import { bucketLabel, dedupeReasons, reasonDisplay } from './opsShared'
+import { bucketLabel, dedupeReasons, documentIsEditable, reasonDisplay } from './opsShared'
 import { ReviewReasons } from './ReviewReasons'
 
 const UNREADABLE_PHRASE = 'image with no clear readable text'
@@ -109,5 +109,21 @@ describe('bucket labels', () => {
       expect(label, `${bucket} in ${lang}`).not.toMatch(/^ops\./)
       if (lang !== 'en') expect(label, `${bucket} in ${lang} is still English`).not.toBe(bucket)
     }
+  })
+})
+
+describe('documentIsEditable (frontend deploys before the backend does)', () => {
+  it('follows the server when it answers', () => {
+    expect(documentIsEditable(true, { can_edit: true })).toBe(true)
+    expect(documentIsEditable(true, { can_edit: false })).toBe(false)
+  })
+
+  it('never offers Edit to a role that cannot edit, whatever the server says', () => {
+    expect(documentIsEditable(false, { can_edit: true })).toBe(false)
+  })
+
+  it('falls back to the role check against a backend that predates can_edit', () => {
+    expect(documentIsEditable(true, {})).toBe(true)
+    expect(documentIsEditable(false, {})).toBe(false)
   })
 })
