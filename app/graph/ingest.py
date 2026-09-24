@@ -34,7 +34,7 @@ def _local_text(path: Path, media_type: str) -> tuple[str, str]:
     if media_type == "application/pdf":
         if pdf.has_extractable_text(str(path)):
             return pdf.extract_text(str(path)), "pdfplumber"
-        return ocr.extract_text(str(path)), "ocr"
+        return ocr.extract_pdf_text(str(path)), "ocr"
     if media_type.startswith("image/"):
         text = ocr.extract_text(str(path))
         if len(text.strip()) >= 10:
@@ -71,26 +71,40 @@ def ingest(
             )
             return {"document_id": existing["id"], "text": "", "text_source": "duplicate"}
 
-        DOCS_PATH.mkdir(parents=True, exist_ok=True)
-        stored_path = DOCS_PATH / f"{sha}{src.suffix}"
-        if str(stored_path) != str(src):
-            shutil.copyfile(src, stored_path)
-
+        # 2026-09-24: text is extracted from the incoming file BEFORE it is
+        # copied into permanent storage. This used to copy first, so any
+        # extraction failure (an image-only PDF crashed here) left a stored
+        # file with no document row — confirmed live, 67 to 68 files in
+        # data/docs. Nothing below needs the stored copy to exist yet.
         text, text_source = _local_text(src, media_type)
         exif_data = exif.read_exif(str(src)) if media_type.startswith("image/") else {}
 
-        cur = conn.execute(
-            "INSERT INTO document "
-            "(company_id, sha256, filename, media_type, bytes, stored_path, "
-            " source_channel, source_identity, uploaded_by_user_id, occurred_on, status, "
-            " extracted_text, text_source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?)",
-            (
-                company_id, sha, filename, media_type, src.stat().st_size,
-                str(stored_path), source_channel, source_identity, uploaded_by_user_id,
-                exif_data.get("occurred_on"), text, text_source,
-            ),
-        )
+        DOCS_PATH.mkdir(parents=True, exist_ok=True)
+        stored_path = DOCS_PATH / f"{sha}{src.suffix}"
+        # Only a copy THIS call created may be removed if the insert fails:
+        # a concurrent identical upload can already have stored (and be about
+        # to reference) the same sha-named file.
+        created_copy = str(stored_path) != str(src) and not stored_path.exists()
+        if str(stored_path) != str(src):
+            shutil.copyfile(src, stored_path)
+
+        try:
+            cur = conn.execute(
+                "INSERT INTO document "
+                "(company_id, sha256, filename, media_type, bytes, stored_path, "
+                " source_channel, source_identity, uploaded_by_user_id, occurred_on, status, "
+                " extracted_text, text_source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?)",
+                (
+                    company_id, sha, filename, media_type, src.stat().st_size,
+                    str(stored_path), source_channel, source_identity, uploaded_by_user_id,
+                    exif_data.get("occurred_on"), text, text_source,
+                ),
+            )
+        except Exception:
+            if created_copy:
+                stored_path.unlink(missing_ok=True)
+            raise
         document_id = cur.lastrowid
 
     # First time extracted_text exists for this document — index it so

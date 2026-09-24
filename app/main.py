@@ -248,29 +248,6 @@ def add_member(
     return MemberOut(user_id=user_id, email=email, name=name, role=body.role)
 
 
-@app.get("/api/companies")
-def list_companies() -> list[dict]:
-    with get_conn(DB_PATH) as conn:
-        rows = conn.execute(
-            "SELECT id, name, uen, fye_month, fye_day, dormant, gst_registered FROM company ORDER BY id"
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-
-@app.post("/api/companies")
-def create_company(
-    name: str, fye_month: int, fye_day: int, uen: str | None = None,
-    dormant: bool = False, gst_registered: bool = False,
-) -> dict:
-    with get_conn(DB_PATH) as conn:
-        cur = conn.execute(
-            "INSERT INTO company (uen, name, fye_month, fye_day, dormant, gst_registered) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (uen, name, fye_month, fye_day, int(dormant), int(gst_registered)),
-        )
-        return {"id": cur.lastrowid, "name": name}
-
-
 @app.patch("/api/companies/{company_id}")
 def edit_company(
     company_id: int, body: CompanyEditRequest,

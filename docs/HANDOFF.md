@@ -1790,10 +1790,31 @@ with pdfplumber). Parked, not built. **Checks:** `pytest tests/` 88/88,
 `python evals/run.py` 14/14, `npm run test` 23/23, `npm run typecheck` and
 `npm run build` clean. Screenshots: `docs/screenshots/round11-*.png`.
 
+**Urgent pair (outside the batch), 2026-09-24 — committed and pushed, NOT
+redeployed (DECISIONS #76).** Deleted the two unauthenticated company
+handlers (`GET`/`POST /api/companies`: anonymous callers got every company's
+name, UEN, FYE and GST flag; nothing called them, re-confirmed by grep) — the
+same no-header curl now returns 404, and a new test requires HTTP 401 with no
+credentials for every registered route except `/api/health` and
+`/api/auth/dev-login`. Fixed image-only (scanned) PDF uploads, which returned
+HTTP 500 and left an orphaned file: `app/extract/ocr.py::extract_pdf_text`
+rasterizes pages with pdfplumber (pypdfium2 is already installed), 200 dpi,
+10-page cap; `app/graph/ingest.py` now extracts text before copying into
+storage and removes a copy it created if the insert fails. Verified live with
+the real gateway on a 2-page scanned invoice (HTTP 200, OCR text from both
+pages, all fields extracted, exactly one stored file matching its row); a
+genuinely broken PDF still 500s but leaves 0 files. Multi-page decision recorded
+(inline mobile preview loss accepted; first-page thumbnail if cheap). Also fixed
+a #74 regression under deploy skew: against a backend without `can_edit`, Edit
+vanished for every role — now only an explicit `false` hides it. `pytest tests/`
+113/113, `python evals/run.py` 14/14, `npm run test` 26/26, typecheck/build clean.
+**Not deployed: the leak is still open on the live box until the backend is
+redeployed, which needs the user's own explicit ask.**
+
 **Known gaps, in the order they'll bite:**
 - **⚠ Lightsail needs a redeploy to pick up rounds 9, 10 and 11 as well as DECISIONS #69's fix** (2026-09-24) — rounds 9 and 10 are committed and pushed (`1c43ffe`, `304c49e`), round 11 is not yet; none is redeployed as far as this session can verify. Original round-9 note: — company-timezone dates, bilingual descriptions, session-purge, currency/locality-aware tax all live only in this checkout; round 9 is committed and pushed (`1c43ffe`) but, as far as this session can verify, not redeployed to the box (DECISIONS #72); round 10's changes (DECISIONS #73) are still uncommitted. The extract.py/classify.py 500-on-zero-tool-calls bug and the schema-mismatch trace-insert crash from DECISIONS #69 are separately already pushed but still await their own redeploy. Redeploy needs the user's own explicit go-ahead, not a peer's, per this project's standing rule.
-- **⚠ `GET /api/companies` is readable by an anonymous caller** (verified live 2026-09-24: HTTP 200, all 23 companies with name, `uen`, FYE, GST flag; `POST /api/companies` is equally open) — nothing calls either; on the internet-reachable box it lists every tenant. `docs/PERMISSIONS.md`, `docs/KANBAN.md` Backlog. Needs an explicit call (delete the handlers or gate them).
-- **⚠ An image-only (scanned) PDF upload returns HTTP 500 and leaves an orphaned file in `data/docs`** (verified live 2026-09-24, DECISIONS #75) — `ocr.extract_text` cannot open a PDF, and `ingest` has already copied the file. Small fix, no new dependency; independent of multi-image upload.
+- **⚠⚠ The anonymous company-list leak is FIXED IN THE REPO but STILL LIVE on the deployed box** (2026-09-24, DECISIONS #76) — `GET`/`POST /api/companies` were deleted (nothing called them); until the Lightsail backend is redeployed, the internet-reachable server still returns every tenant's company list to anyone. Redeploy needs the user's own explicit ask. Check with `curl -s -o /dev/null -w '%{http_code}' https://13-251-52-222.nip.io/api/companies` (200 = still leaking, 404 = fixed).
+- **Scanned-PDF upload is fixed in the repo, not yet on the box** (2026-09-24, DECISIONS #76) — image-only PDFs are rasterized (pdfplumber, 200 dpi, 10-page cap) and OCR'd instead of raising; `ingest` extracts before copying so a failure leaves no orphaned file. Still open: a corrupt PDF/image returns 500; later pages of a long scan are dropped; OCR blocks the event loop; orphans already on the box are not cleaned up.
 - **Sparse OCR noise on a non-document photo still reaches the LLM** (round 10, DECISIONS #73) — `app/graph/ingest.py` treats image OCR under 10 characters as "no text" (deterministic, no LLM call, "Untitled photo"), but four real non-document photos measured 3, 5, 5 and 17 alphanumeric characters: the 17-character one still went to the model. The new prompt handles it honestly and both review reasons fire, so this is a consistency/cost option (raise the threshold, count alphanumerics), not a bug — at the price of false alarms on genuinely tiny text images. Not changed.
 - **The unreadable-image review reason quotes the English detector phrase inside a translated sentence** (round 10) — `description_signals_problem`'s `{{word}}` is the matched English phrase, shown as-is in the zh/ms/ta sentence (visible in `docs/screenshots/round10-locked-text-review-ta.png`). Pre-existing for every matched word; more visible now that the phrase is longer. Redundant with the plain "we couldn't read this file" reason shown beside it.
 - **`GET /api/documents` is genuinely unpaginated** (confirmed by grep, DECISIONS #70) — returns every non-archived row for the company on every call; `useOpsData.ts` already refetches on every route navigation by design. Verified this, not FTS5 search, is the first real bottleneck as a company's own document history grows. No urgency at today's real row counts.

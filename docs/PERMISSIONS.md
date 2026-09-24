@@ -55,7 +55,7 @@ viewer token against the running server, not from the docs above:
 | `PATCH /api/documents/{id}` | `user`, plus `auth.may_edit_document` (below) |
 | `POST /api/review/{id}/resolve`, `POST /api/documents/{id}/archive`, `POST /api/companies/{id}/members` | `admin` |
 | `PATCH /api/companies/{id}` | `owner` |
-| `GET /api/companies`, `POST /api/companies` | **none — see "Found, not fixed"** |
+| `GET /api/companies`, `POST /api/companies` | **removed 2026-09-24** (they had no auth at all) — see "Fixed" below; still present on the deployed box until it is redeployed |
 
 Read access is uniform; only writes are gated. Cross-company access is
 refused everywhere by scoping every query to `membership.company_id`, never a
@@ -114,7 +114,7 @@ extended to actually return `fye_month`/`fye_day` for the first time —
 previously write-once at signup and never read back, so there was nothing
 to show a form the current values with.
 
-## Found, not fixed
+## Fixed 2026-09-24 (in the repo; not yet on the deployed box)
 
 **`GET /api/companies` and `POST /api/companies` have no session/role
 check at all** — **re-verified live 2026-09-24: an anonymous request (no
@@ -128,6 +128,16 @@ round — out of this task's stated scope (adding new enforcement, not
 auditing every pre-existing endpoint) and removing/gating a live endpoint
 without knowing why it's unauthenticated risked a bigger, riskier change
 than asked for. Flagged in `docs/KANBAN.md` Backlog for an explicit call.
+
+**Resolved (DECISIONS #76):** both handlers were **deleted outright** rather
+than gated — nothing calls them (re-confirmed by grep across app, web, scripts,
+tests, evals and deploy), so there is no legitimate caller to keep access for and
+no role check left to stay correct. With no header the same request now returns
+404, and `tests/test_route_auth.py` walks every route the app registers and
+requires HTTP 401 with no credentials unless the route is on a two-item
+allowlist (`/api/health`, `/api/auth/dev-login`), so a handler added without an
+auth dependency fails the suite. **This is fixed in the repo only — the deployed
+Lightsail backend keeps the leak until it is redeployed.**
 
 ## Seeding test accounts
 

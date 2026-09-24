@@ -15,12 +15,21 @@ before each test instead of swapping paths.
 """
 
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
 
 _TEST_DB = str(Path(__file__).parent / "_test.db")
 os.environ["JAGA_DB_PATH"] = _TEST_DB
+
+# 2026-09-24: uploads in tests used to land in the real ./data/docs — the dev
+# app's own document store (JAGA_DOCS_PATH became a real setting in round 9).
+# A private directory per session keeps test files out of it, and lets a test
+# assert "no file was left behind" against a directory it fully controls.
+_TEST_DOCS = Path(tempfile.mkdtemp(prefix="jaga-test-docs-"))
+os.environ["JAGA_DOCS_PATH"] = str(_TEST_DOCS)
 
 _TABLES = [
     "notification", "security_event", "trace", "review_item", "obligation",
@@ -44,4 +53,6 @@ def _reset_test_db():
     with get_conn(_TEST_DB) as conn:
         for table in _TABLES:
             conn.execute(f"DELETE FROM {table}")
+    for leftover in _TEST_DOCS.iterdir():
+        leftover.unlink() if leftover.is_file() else shutil.rmtree(leftover)
     yield
