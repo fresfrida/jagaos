@@ -22,12 +22,10 @@ export function ComplianceChecklist({
   expectations,
   documents,
   canUpload,
-  onChanged,
 }: {
   expectations: Expectation[]
   documents: DocumentRow[]
   canUpload: boolean
-  onChanged?: () => void
 }) {
   const { t } = useTranslation()
   const [viewing, setViewing] = useState<DocumentRow | null>(null)
@@ -75,7 +73,7 @@ export function ComplianceChecklist({
         )}
       </Card>
 
-      {viewing && <DocumentViewerModal doc={viewing} onClose={() => setViewing(null)} onChanged={onChanged} />}
+      {viewing && <DocumentViewerModal doc={viewing} onClose={() => setViewing(null)} />}
     </section>
   )
 }

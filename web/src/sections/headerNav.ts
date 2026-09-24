@@ -7,12 +7,18 @@ import { roleAtLeast, type Role } from '../features/auth/authApi'
 import { ACCOUNT_MENU_ROUTES, type RouteId } from '../router/routes'
 
 /** The pages listed in the account menu for this role: Tags and Search for
- * everyone, then Company Settings for admin and owner. Admin sees the page
- * read-only, so the entry is theirs too (the same call DECISIONS #64 made;
- * the fields stay owner-only editable, enforced in CompanySettingsPage and the
- * backend). A role of null (still loading) gets the common two. */
+ * everyone, Only me for user and above (round 19, DECISIONS #94: a viewer cannot
+ * upload, so a private space has nothing for them), then Company Settings for admin
+ * and owner. Admin sees the settings page read-only, so the entry is theirs too (the
+ * same call DECISIONS #64 made; the fields stay owner-only editable, enforced in
+ * CompanySettingsPage and the backend). A role of null (still loading) gets the
+ * common two. */
 export function accountMenuRoutes(role: Role | null): readonly RouteId[] {
-  return [...ACCOUNT_MENU_ROUTES, ...(role !== null && roleAtLeast(role, 'admin') ? (['company-settings'] as const) : [])]
+  return [
+    ...ACCOUNT_MENU_ROUTES,
+    ...(role !== null && roleAtLeast(role, 'user') ? (['only-me'] as const) : []),
+    ...(role !== null && roleAtLeast(role, 'admin') ? (['company-settings'] as const) : []),
+  ]
 }
 
 /** Whether the header offers the Upload button. A viewer is refused by the

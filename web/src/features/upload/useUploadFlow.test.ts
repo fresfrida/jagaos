@@ -19,8 +19,8 @@ const uploadPages = vi.mocked(opsApi.uploadPages)
 const pdf = new File(['%PDF'], 'invoice.pdf', { type: 'application/pdf' })
 const jpg = (name: string) => new File(['x'], name, { type: 'image/jpeg' })
 
-const hook = (docTypeHint?: string | null) =>
-  renderHook(() => useUploadFlow({ language: 'en', refresh: vi.fn(async () => undefined), onOutcome: vi.fn(), onError: vi.fn(), docTypeHint }))
+const hook = (docTypeHint?: string | null, visibility?: 'company' | 'only_me') =>
+  renderHook(() => useUploadFlow({ language: 'en', refresh: vi.fn(async () => undefined), onOutcome: vi.fn(), onError: vi.fn(), docTypeHint, visibility }))
 
 beforeEach(() => { vi.resetAllMocks() })
 
@@ -46,7 +46,7 @@ describe('useUploadFlow', () => {
 
     await act(async () => { result.current.chooseDocumentFiles([pdf]) })
 
-    expect(uploadDocument).toHaveBeenCalledWith(pdf, false, 'en', 'constitution')
+    expect(uploadDocument).toHaveBeenCalledWith(pdf, false, 'en', { docTypeHint: 'constitution', visibility: undefined })
   })
 
   it('does not send it with a photo, which is never classified from its text', async () => {
@@ -55,7 +55,7 @@ describe('useUploadFlow', () => {
 
     await act(async () => { result.current.uploadPhoto(jpg('room.jpg')) })
 
-    expect(uploadDocument).toHaveBeenCalledWith(expect.any(File), true, 'en', null)
+    expect(uploadDocument).toHaveBeenCalledWith(expect.any(File), true, 'en', { docTypeHint: null, visibility: undefined })
   })
 
   it('sends it with several photos merged into one document, and reports the page count', async () => {
@@ -66,7 +66,7 @@ describe('useUploadFlow', () => {
 
     await act(async () => { await result.current.submitPages() })
 
-    expect(uploadPages).toHaveBeenCalledWith(expect.any(Array), 'en', 'agm_minutes')
+    expect(uploadPages).toHaveBeenCalledWith(expect.any(Array), 'en', { docTypeHint: 'agm_minutes', visibility: undefined })
     expect(uploadPages.mock.calls[0]![0]).toHaveLength(3)
   })
 
@@ -76,6 +76,21 @@ describe('useUploadFlow', () => {
 
     await act(async () => { result.current.chooseDocumentFiles([pdf]) })
 
-    expect(uploadDocument).toHaveBeenCalledWith(pdf, false, 'en', undefined)
+    expect(uploadDocument).toHaveBeenCalledWith(pdf, false, 'en', { docTypeHint: undefined, visibility: undefined })
+  })
+
+  it('a flow made for the Only me section sends every upload as a personal file: a document, a photo and merged pages', async () => {
+    uploadDocument.mockResolvedValue({ document_id: 1, status: 'needs_review' })
+    uploadPages.mockResolvedValue({ document_id: 2, status: 'needs_review' })
+    const { result } = hook(null, 'only_me')
+
+    await act(async () => { result.current.chooseDocumentFiles([pdf]) })
+    await act(async () => { result.current.uploadPhoto(jpg('private.jpg')) })
+    act(() => result.current.chooseDocumentFiles([jpg('p1.jpg'), jpg('p2.jpg')]))
+    await act(async () => { await result.current.submitPages() })
+
+    expect(uploadDocument).toHaveBeenNthCalledWith(1, pdf, false, 'en', { docTypeHint: null, visibility: 'only_me' })
+    expect(uploadDocument).toHaveBeenNthCalledWith(2, expect.any(File), true, 'en', { docTypeHint: null, visibility: 'only_me' })
+    expect(uploadPages).toHaveBeenCalledWith(expect.any(Array), 'en', { docTypeHint: null, visibility: 'only_me' })
   })
 })

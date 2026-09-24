@@ -95,7 +95,8 @@
       "search": "搜索",
       "companyFiles": "公司文件",
       "upload": "上传",
-      "companySettings": "公司设置"
+      "companySettings": "公司设置",
+      "onlyMe": "仅我可见"
     },
     "switchCompany": "切换公司"
   },
@@ -387,10 +388,37 @@
       "low": "低"
     },
     "visibility": {
-      "onlyYou": "仅你可见",
-      "makePrivate": "设为私密。只有你能看到。",
-      "shareWithCompany": "只有你能看到此文件。点按可再次与公司共享。",
-      "uploaderOnly": "只有上传此文件的人才能更改谁可以看到它。"
+      "onlyYou": "仅你可见"
+    }
+  },
+  "onlyMe": {
+    "heading": "仅我可见",
+    "description": "私人空间，只有您能看到您在这里添加的内容。",
+    "intro": "您在此添加的文件是私密的，只有您能看到，队友、管理员和所有者都看不到。它们不会出现在公司文件、搜索或日历中。",
+    "reviewHint": "新文件需要您确认我们读取的内容。",
+    "reviewLink": "打开上传页面",
+    "filesHeading": "您的私人文件（{{count}}）",
+    "loading": "正在加载您的私人文件…",
+    "loadFailed": "无法加载您的私人文件。",
+    "retry": "重试",
+    "empty": "这里还没有内容。在上方添加文件或照片，只有您能看到。",
+    "noMatches": "没有与“{{query}}”匹配的私人文件。",
+    "searchPlaceholder": "搜索您的私人文件",
+    "searchLabel": "搜索您的私人文件",
+    "searchClear": "清除搜索",
+    "searchCount": "{{total}} 个中有 {{shown}} 个匹配",
+    "toast": {
+      "saved": "已添加到“仅我可见”。只有您能看到。请在上传页面确认。",
+      "quarantined": "上传因安全审核被拦截。"
+    },
+    "scratchpad": {
+      "title": "便笺",
+      "rowHint": "随手画一张便条，只有您能看到",
+      "close": "关闭便笺",
+      "canvasLabel": "绘图区域。可用手指、笔或鼠标绘制。",
+      "clear": "清除",
+      "save": "保存为图片",
+      "hint": "将作为私人图片保存到下方您的文件中。"
     }
   }
 }

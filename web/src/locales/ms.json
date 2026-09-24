@@ -95,7 +95,8 @@
       "search": "Carian",
       "companyFiles": "Fail Syarikat",
       "upload": "Muat Naik",
-      "companySettings": "Tetapan Syarikat"
+      "companySettings": "Tetapan Syarikat",
+      "onlyMe": "Hanya saya"
     },
     "switchCompany": "Tukar syarikat"
   },
@@ -387,10 +388,37 @@
       "low": "rendah"
     },
     "visibility": {
-      "onlyYou": "Hanya anda",
-      "makePrivate": "Jadikan peribadi. Hanya anda boleh melihatnya.",
-      "shareWithCompany": "Hanya anda boleh melihat fail ini. Ketik untuk kongsi semula dengan syarikat.",
-      "uploaderOnly": "Hanya orang yang memuat naik fail ini boleh menukar siapa yang boleh melihatnya."
+      "onlyYou": "Hanya anda"
+    }
+  },
+  "onlyMe": {
+    "heading": "Hanya saya",
+    "description": "Ruang peribadi. Hanya anda boleh melihat apa yang anda tambah di sini.",
+    "intro": "Fail yang anda tambah di sini adalah peribadi. Hanya anda boleh melihatnya: bukan rakan sepasukan, bukan pentadbir, bukan pemilik. Ia tidak muncul dalam Fail Syarikat, Carian atau Kalendar.",
+    "reviewHint": "Fail baharu menunggu anda mengesahkan apa yang kami baca.",
+    "reviewLink": "Buka halaman Muat naik",
+    "filesHeading": "Fail peribadi anda ({{count}})",
+    "loading": "Memuatkan fail peribadi anda…",
+    "loadFailed": "Tidak dapat memuatkan fail peribadi anda.",
+    "retry": "Cuba lagi",
+    "empty": "Belum ada apa-apa di sini. Tambah dokumen atau foto di atas dan hanya anda yang akan melihatnya.",
+    "noMatches": "Tiada fail peribadi sepadan dengan \"{{query}}\".",
+    "searchPlaceholder": "Cari fail peribadi anda",
+    "searchLabel": "Cari fail peribadi anda",
+    "searchClear": "Kosongkan carian",
+    "searchCount": "{{shown}} daripada {{total}} sepadan",
+    "toast": {
+      "saved": "Ditambah ke Hanya saya. Hanya anda boleh melihatnya. Sahkan di halaman Muat naik.",
+      "quarantined": "Muat naik disekat untuk semakan keselamatan."
+    },
+    "scratchpad": {
+      "title": "Buku conteng",
+      "rowHint": "Lukis nota ringkas, hanya untuk anda",
+      "close": "Tutup buku conteng",
+      "canvasLabel": "Ruang lukisan. Lukis dengan jari, pen atau tetikus.",
+      "clear": "Kosongkan",
+      "save": "Simpan sebagai imej",
+      "hint": "Disimpan sebagai imej peribadi dalam fail anda di bawah."
     }
   }
 }

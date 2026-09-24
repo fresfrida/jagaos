@@ -22,15 +22,12 @@ import {
   VENDOR_NAMES_DATALIST_ID,
   VoiceCaptionButton,
   DocTypeField,
-  PersonalFileBadge,
   bucketLabel,
   docTypeLabel,
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type DocumentRow } from './opsApi'
-import { useDocumentVisibility } from './useDocumentVisibility'
 import { useEditableDescription } from './useEditableDescription'
-import { VisibilityToggle } from './VisibilityToggle'
 
 /** Small preview next to each row in the Documents list (2026-09-22, doc
  * 2's preview UX pass) — a photo is often more recognizable at a glance
@@ -64,19 +61,13 @@ export function DocumentThumbnail({ documentId, mediaType }: { documentId: numbe
 export function DocumentViewerModal({
   doc,
   onClose,
-  onChanged,
 }: {
-  doc: Pick<DocumentRow, 'id' | 'filename' | 'media_type' | 'visibility' | 'can_change_visibility'>
+  doc: Pick<DocumentRow, 'id' | 'filename' | 'media_type'>
   onClose: () => void
-  // Called after the lock toggle changes the file, so whatever list opened
-  // this viewer refetches (round 14). Optional: a caller with nothing to
-  // refresh still gets a working toggle.
-  onChanged?: () => void
 }) {
   const { t } = useTranslation()
   const { id: documentId, filename, media_type: mediaType } = doc
   const { blobUrl, failed } = useDocumentBlobUrl(documentId)
-  const lock = useDocumentVisibility(documentId, doc.visibility ?? 'company', onChanged ?? (() => undefined))
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -100,11 +91,6 @@ export function DocumentViewerModal({
       >
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
           <p className="min-w-0 flex-1 text-sm font-medium text-ink"><FileName name={filename} max={36} /></p>
-          {doc.can_change_visibility === true ? (
-            <VisibilityToggle visibility={lock.visibility} busy={lock.busy} error={lock.error} onToggle={() => void lock.toggle()} />
-          ) : (
-            doc.visibility === 'only_me' && <PersonalFileBadge />
-          )}
           <button
             onClick={onClose}
             className="shrink-0 rounded-control p-1 text-muted hover:bg-canvas hover:text-ink"
@@ -169,7 +155,6 @@ export function DocumentCard({
   const [error, setError] = useState<string | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const lock = useDocumentVisibility(doc.id, doc.visibility ?? 'company', onSaved)
   const isPictureLane = doc.lane === 'memory'
   const isPendingCaption = isPictureLane && doc.description === null
 
@@ -270,14 +255,6 @@ export function DocumentCard({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <StatusPill status={doc.status} />
-          {/* The lock toggle is both the indicator and the control for the
-             uploader (round 14); anyone else who can see a personal file gets
-             the read-only marker. */}
-          {doc.can_change_visibility === true ? (
-            <VisibilityToggle visibility={lock.visibility} busy={lock.busy} error={lock.error} onToggle={() => void lock.toggle()} />
-          ) : (
-            doc.visibility === 'only_me' && <PersonalFileBadge />
-          )}
           {doc.bucket && <Badge tone="neutral">{bucketLabel(t, doc.bucket)}</Badge>}
         </div>
       </div>

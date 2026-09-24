@@ -130,15 +130,11 @@ export interface DocumentRow {
   // redeploys it) sends nothing — see opsShared.tsx's documentIsEditable.
   can_edit?: boolean
   // 2026-09-24 (round 13, DECISIONS #85): 'only_me' for a personal file — only
-  // its uploader ever receives such a row, so this is for the badge, not a
-  // filter. Absent from an older backend, which has no personal files.
+  // its uploader ever receives such a row. Round 19 (DECISIONS #94): the company
+  // list no longer carries personal files at all; they come from
+  // GET /api/personal-files (the "Only me" section) and every row there says
+  // 'only_me'. Absent from an older backend, which has no personal files.
   visibility?: Visibility
-  // 2026-09-24 (round 14, DECISIONS #86): the server's answer for THIS caller
-  // (auth.may_change_visibility) — true only for the uploader, NOT the same as
-  // can_edit (an admin may edit but may not decide who sees someone's file).
-  // Optional: an older backend sends none and the lock toggle is then not
-  // offered, which is what the app did before it existed.
-  can_change_visibility?: boolean
 }
 
 export interface Expectation {
@@ -183,7 +179,6 @@ export interface ReviewItem {
   // personal file. Both optional: an older backend sends neither, and the card
   // then falls back to the role check it always used.
   document_visibility?: Visibility
-  can_change_visibility?: boolean
   can_resolve?: boolean
   thread_id: string
   // reason: a short debug/trace string (codes joined, e.g. "gst_mismatch"),
@@ -216,6 +211,19 @@ export interface TraceReport {
   total_cost_usd: number
 }
 
+/** What a caller may attach to an upload beyond the file itself. */
+export interface UploadOptions {
+  /** The compliance-checklist item's doc_type slug this upload was started from. */
+  docTypeHint?: string | null
+  /** 'only_me' for a personal file (the "Only me" section); omitted means the company's. */
+  visibility?: Visibility
+}
+
+function applyUploadOptions(params: URLSearchParams, { docTypeHint, visibility }: UploadOptions): void {
+  if (docTypeHint) params.set('doc_type_hint', docTypeHint)
+  if (visibility && visibility !== 'company') params.set('visibility', visibility)
+}
+
 /** Every ops call carries the session automatically — callers never pass
  * a token or a company_id by hand. */
 function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -232,18 +240,18 @@ export const opsApi = {
   // language (2026-09-24, item 5): the uploader's currently-selected UI
   // language (i18n.language) — read by classify.py to generate
   // description directly in that language instead of always English.
-  // Who a file is visible to is not chosen here (round 14, DECISIONS #86): every
-  // upload is a company file, and its uploader flips it afterwards with the lock
-  // toggle (editDocument's `visibility`). The backend still accepts a
-  // `visibility` query parameter for any other client.
-  // docTypeHint (2026-09-24, round 16, DECISIONS #90): the doc_type slug of the
-  // compliance checklist item the upload was started from. A suggestion to the
+  // options.visibility (round 19, DECISIONS #94): who the file is for. Every upload
+  // is a company file unless it is sent to the "Only me" section, which passes
+  // 'only_me' (a personal file: its uploader alone, for every role). There is no
+  // per-file switch afterwards any more (the lock toggle was removed).
+  // options.docTypeHint (2026-09-24, round 16, DECISIONS #90): the doc_type slug of
+  // the compliance checklist item the upload was started from. A suggestion to the
   // classifier only; the server ignores anything that is not a real checklist slug.
-  uploadDocument: (file: File, isPicture: boolean, language: string, docTypeHint?: string | null) => {
+  uploadDocument: (file: File, isPicture: boolean, language: string, options: UploadOptions = {}) => {
     const form = new FormData()
     form.append('file', file)
     const params = new URLSearchParams({ source_channel: 'web', is_picture: String(isPicture), language })
-    if (docTypeHint) params.set('doc_type_hint', docTypeHint)
+    applyUploadOptions(params, options)
     return request<UploadResult>(`/api/documents?${params}`, { method: 'POST', body: form })
   },
 
@@ -251,15 +259,19 @@ export const opsApi = {
   // DECISIONS #78): the backend merges them into one PDF and runs it through
   // the same pipeline as any upload — one document, one review item. The
   // order of `pages` IS the page order. app/main.py::upload_document_pages.
-  uploadPages: (pages: File[], language: string, docTypeHint?: string | null) => {
+  uploadPages: (pages: File[], language: string, options: UploadOptions = {}) => {
     const form = new FormData()
     for (const page of pages) form.append('files', page)
     const params = new URLSearchParams({ language })
-    if (docTypeHint) params.set('doc_type_hint', docTypeHint)
+    applyUploadOptions(params, options)
     return request<UploadResult>(`/api/documents/pages?${params}`, { method: 'POST', body: form })
   },
 
   listDocuments: () => request<DocumentRow[]>('/api/documents'),
+
+  // The caller's OWN personal files, for the "Only me" section (round 19, DECISIONS
+  // #94). Same row shape as listDocuments; nobody else's, ever.
+  listPersonalFiles: () => request<DocumentRow[]>('/api/personal-files'),
 
   listExpectations: () => request<Expectation[]>('/api/expectations'),
 
@@ -317,9 +329,6 @@ export const opsApi = {
       // document as a picture (lane/doc_type/bucket set deterministically
       // server-side, app/main.py::edit_document); there's no reverse.
       is_picture?: boolean
-      // visibility (2026-09-24, round 14): the lock toggle. Only the uploader
-      // may send it (403 otherwise, refused whole).
-      visibility?: Visibility
     },
   ) =>
     request<{ status: string }>(`/api/documents/${documentId}`, {

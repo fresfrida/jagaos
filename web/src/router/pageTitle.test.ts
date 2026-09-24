@@ -8,6 +8,7 @@ describe('pageTitle', () => {
     expect(pageTitle('company-files')).toBe('JagaOS: Company Files')
     expect(pageTitle('search')).toBe('JagaOS: Search')
     expect(pageTitle('company-settings')).toBe('JagaOS: Company Settings')
+    expect(pageTitle('only-me')).toBe('JagaOS: Only me')
     expect(pageTitle('login')).toBe('JagaOS: Log in')
   })
 

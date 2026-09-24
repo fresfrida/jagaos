@@ -280,21 +280,21 @@ def may_see_document(
     return True
 
 
-def may_change_visibility(membership: CurrentMembership, *, uploaded_by_user_id: int | None) -> bool:
-    """Who may flip a document between 'company' and 'only_me' (round 14,
-    DECISIONS #86): the person who uploaded it, and no one else — in BOTH
-    directions, whatever their role.
-
-    Deliberately narrower than may_edit_document (which lets admin/owner edit
-    any company document). If admin/owner could make someone else's company
-    file private, that admin would lock themselves out of it the instant they
-    did it — a personal file is invisible even to them (may_see_document) — and
-    the whole team would lose a company record on one person's say-so. Making a
-    file personal is the uploader's own call about their own file; the reverse
-    can only be done by the person who can see it, which is the same person.
-    A document with no recorded uploader can be changed by nobody."""
+def _admin_or_uploader_of_own_personal_file(
+    membership: CurrentMembership, *, uploaded_by_user_id: int | None, visibility: str,
+) -> bool:
+    """The one predicate behind "may act on this document": admin and owner for
+    any document they can see, and a `user` only for a PERSONAL file they
+    uploaded themselves (a viewer never; a company document, never). Two actions
+    share it, so they cannot drift: resolving a review item (round 13, DECISIONS
+    #85) and archiving a document (round 19, DECISIONS #95). Whether the caller
+    may SEE the document is a separate question (may_see_document) and is checked
+    first, so this only answers "may they act on it"."""
+    if ROLE_ORDER[membership.role] >= ROLE_ORDER["admin"]:
+        return True
     return (
         ROLE_ORDER[membership.role] >= ROLE_ORDER["user"]
+        and visibility != VISIBILITY_COMPANY
         and uploaded_by_user_id is not None
         and uploaded_by_user_id == membership.user_id
     )
@@ -310,13 +310,23 @@ def may_resolve_review_item(
     it. The second-pair-of-eyes reasoning of DECISIONS #40 protects company
     records; a personal file is not one. Visibility itself is checked
     separately (may_see_document) — this is only "may they act on it"."""
-    if ROLE_ORDER[membership.role] >= ROLE_ORDER["admin"]:
-        return True
-    return (
-        ROLE_ORDER[membership.role] >= ROLE_ORDER["user"]
-        and visibility != VISIBILITY_COMPANY
-        and uploaded_by_user_id is not None
-        and uploaded_by_user_id == membership.user_id
+    return _admin_or_uploader_of_own_personal_file(
+        membership, uploaded_by_user_id=uploaded_by_user_id, visibility=visibility,
+    )
+
+
+def may_archive_document(
+    membership: CurrentMembership, *, uploaded_by_user_id: int | None, visibility: str,
+) -> bool:
+    """Who may archive ("Delete") a document: admin and owner, as always
+    (DECISIONS #37/#53), and, new in round 19 (DECISIONS #95), the uploader of
+    their own PERSONAL file. A personal file is invisible to admin and owner, so
+    without this its own author could never remove it: nobody else can reach it.
+    Scoped to personal files on purpose: a `user` still cannot delete a company
+    document, not even one they uploaded (a company record is the company's,
+    DECISIONS #37). Visibility itself is checked first (may_see_document)."""
+    return _admin_or_uploader_of_own_personal_file(
+        membership, uploaded_by_user_id=uploaded_by_user_id, visibility=visibility,
     )
 
 

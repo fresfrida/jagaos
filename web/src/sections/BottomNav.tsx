@@ -64,6 +64,9 @@ const ICONS: Record<RouteId, typeof CalendarDays> = {
   // slot. A filler value only, same as the other non-nav RouteIds above,
   // just satisfying Record<RouteId, ...>.
   'company-settings': CalendarDays,
+  // Only me is in the account menu, not a bottom-nav slot (round 19, DECISIONS #94), so this is
+  // another filler value satisfying Record<RouteId, ...>.
+  'only-me': CalendarDays,
 }
 
 function NavItem({ id, active }: { id: RouteId; active: boolean }) {

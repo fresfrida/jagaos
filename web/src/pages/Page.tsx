@@ -16,6 +16,7 @@ import { FramePage } from './FramePage'
 import { GetStartedPage } from './GetStartedPage'
 import { LoginPage } from './LoginPage'
 import { NotFoundPage } from './NotFoundPage'
+import { OnlyMePage } from './OnlyMePage'
 import { SearchPage } from './SearchPage'
 import { UploadPage } from './UploadPage'
 
@@ -112,6 +113,12 @@ export function Page({ route }: { route: ResolvedRoute }) {
       return (
         <FramePage route="company-settings">
           <CompanySettingsPage />
+        </FramePage>
+      )
+    case 'only-me':
+      return (
+        <FramePage route="only-me">
+          <OnlyMePage />
         </FramePage>
       )
     case 'not-found':

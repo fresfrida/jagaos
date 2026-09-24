@@ -6,7 +6,7 @@
 
 import { useCallback, useState } from 'react'
 import { normalizeImageForUpload } from '../../lib/imageNormalize'
-import { opsApi, type UploadResult } from '../ops/opsApi'
+import { opsApi, type UploadResult, type Visibility } from '../ops/opsApi'
 import {
   appendPages, interpretDocumentSelection, movePage, removePage, type SelectionError,
 } from './uploadSelection'
@@ -22,6 +22,9 @@ interface Deps {
   /** The checklist item this upload was started from (round 16, DECISIONS #90): a
    * doc_type slug sent to classify as a hint. Applies to documents, not photos. */
   docTypeHint?: string | null
+  /** 'only_me' when this flow serves the "Only me" section (round 19, DECISIONS #94):
+   * every upload it makes is a personal file. Omitted means the company's. */
+  visibility?: Visibility
 }
 
 /** What is being sent right now, for the progress moment. */
@@ -31,7 +34,10 @@ export interface Uploading {
   pages?: number
 }
 
-export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHint }: Deps) {
+/** What useUploadFlow returns, for the components that render it (UploadPanel). */
+export type UploadFlow = ReturnType<typeof useUploadFlow>
+
+export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHint, visibility }: Deps) {
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState<Uploading | null>(null)
   const [staged, setStaged] = useState<File[] | null>(null)
@@ -61,14 +67,19 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
   const uploadOne = useCallback(
     (file: File, isPicture: boolean) =>
       run(
-        async () => opsApi.uploadDocument(await normalizeImageForUpload(file), isPicture, language, isPicture ? null : docTypeHint),
+        async () =>
+          opsApi.uploadDocument(await normalizeImageForUpload(file), isPicture, language, {
+            docTypeHint: isPicture ? null : docTypeHint,
+            visibility,
+          }),
         { name: file.name },
       ),
-    [docTypeHint, language, run],
+    [docTypeHint, language, run, visibility],
   )
 
-  /** PHOTO: exactly one image, marked as a picture. */
-  const uploadPhoto = useCallback((file: File) => void uploadOne(file, true), [uploadOne])
+  /** PHOTO: exactly one image, marked as a picture. Resolves true when it was sent
+   * (the Only me scratchpad clears itself only then). */
+  const uploadPhoto = useCallback((file: File) => uploadOne(file, true), [uploadOne])
 
   /** DOCUMENT: one file uploads at once; several photos are staged as pages. */
   const chooseDocumentFiles = useCallback(
@@ -106,12 +117,12 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
         : await run(
             async () => {
               const pages = await Promise.all(staged.map(normalizeImageForUpload))
-              return opsApi.uploadPages(pages, language, docTypeHint)
+              return opsApi.uploadPages(pages, language, { docTypeHint, visibility })
             },
             { name: only.name, pages: staged.length },
           )
     if (done) cancelStaging()
-  }, [cancelStaging, docTypeHint, language, run, staged, uploadOne])
+  }, [cancelStaging, docTypeHint, language, run, staged, uploadOne, visibility])
 
   return {
     busy, uploading, staged, selectionError,

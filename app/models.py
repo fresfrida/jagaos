@@ -242,12 +242,6 @@ class DocumentEditRequest(BaseModel):
     # English when omitted, matching every other language default in this
     # codebase (app/graph/classify.py, app/db.py).
     language: str | None = None
-    # 2026-09-24 (round 14, DECISIONS #86): flip the document between
-    # "company" and "only_me" after upload — the lock toggle on a file. Only the
-    # uploader may (app/auth.py::may_change_visibility), NOT everyone who may
-    # edit the other fields; a request that carries it from anyone else is
-    # refused whole (403), so a refused change never half-applies.
-    visibility: Visibility | None = None
 
 
 class ReviewResolution(BaseModel):

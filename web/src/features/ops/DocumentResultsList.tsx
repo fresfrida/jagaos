@@ -111,7 +111,7 @@ export function DocumentResultsList({
       )}
 
       {viewingDocument && (
-        <DocumentViewerModal doc={viewingDocument} onClose={() => setViewingDocument(null)} onChanged={onSaved} />
+        <DocumentViewerModal doc={viewingDocument} onClose={() => setViewingDocument(null)} />
       )}
     </div>
   )

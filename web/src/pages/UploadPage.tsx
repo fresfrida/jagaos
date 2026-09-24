@@ -33,12 +33,9 @@ import { VENDOR_NAMES_DATALIST_ID } from '../features/ops/opsShared'
 import { type UploadResult } from '../features/ops/opsApi'
 import { useOpsData } from '../features/ops/useOpsData'
 import { HintBanner } from '../features/upload/HintBanner'
-import { PageStager } from '../features/upload/PageStager'
 import { onSelectionHandedOff, takePendingSelection } from '../features/upload/pendingSelection'
-import { UploadChoice } from '../features/upload/UploadChoice'
-import { UploadProgress } from '../features/upload/UploadProgress'
+import { UploadPanel } from '../features/upload/UploadPanel'
 import { hintLabel, hintSlugFromSearch } from '../features/upload/uploadHint'
-import { MAX_PAGES } from '../features/upload/uploadSelection'
 import { useUploadFlow } from '../features/upload/useUploadFlow'
 import { openUploadSheet } from '../lib/uploadTrigger'
 import { routeHref } from '../router/routes'
@@ -123,33 +120,7 @@ function UploadReviewContent() {
             <>
               {activeHintLabel && <HintBanner label={activeHintLabel} onClear={clearHint} />}
 
-              {flow.busy && flow.uploading ? (
-                <UploadProgress name={flow.uploading.name} pages={flow.uploading.pages} />
-              ) : (
-                <UploadChoice
-                  disabled={flow.busy}
-                  onDocumentFiles={flow.chooseDocumentFiles}
-                  onPhotoFile={flow.uploadPhoto}
-                />
-              )}
-
-              {flow.selectionError && !flow.staged && (
-                <p role="alert" className="mt-3 text-[13px] text-red-700">
-                  {t(`ops.upload.pages.error.${flow.selectionError}`, { max: MAX_PAGES })}
-                </p>
-              )}
-              {flow.staged && !flow.busy && (
-                <PageStager
-                  files={flow.staged}
-                  busy={flow.busy}
-                  error={flow.selectionError}
-                  onMove={flow.move}
-                  onRemove={flow.remove}
-                  onAddMore={flow.addPages}
-                  onSubmit={() => void flow.submitPages()}
-                  onCancel={flow.cancelStaging}
-                />
-              )}
+              <UploadPanel flow={flow} />
             </>
           ) : (
             <p className="flex h-24 items-center justify-center rounded-card border border-dashed border-line text-sm text-muted">
@@ -176,7 +147,6 @@ function UploadReviewContent() {
                   onResolved={() => void refresh()}
                   onRejected={setJustRejectedFilename}
                   onPoll={() => void refresh()}
-                  onVisibilityChanged={() => void refresh()}
                 />
               ))}
             </div>

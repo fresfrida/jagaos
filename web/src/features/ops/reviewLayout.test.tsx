@@ -29,7 +29,7 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 const renderCard = (over: Partial<ReviewItem> = {}) =>
-  render(<ReviewQueueCard item={item(over)} canResolve onResolved={vi.fn()} onRejected={vi.fn()} onPoll={vi.fn()} onVisibilityChanged={vi.fn()} />)
+  render(<ReviewQueueCard item={item(over)} canResolve onResolved={vi.fn()} onRejected={vi.fn()} onPoll={vi.fn()} />)
 
 describe('review card source preview (item 4)', () => {
   it('opens the shared viewer when the image is tapped, with no new-tab link anywhere', async () => {

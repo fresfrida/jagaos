@@ -29,6 +29,7 @@ from app.auth import (
     CurrentMembership,
     VISIBILITY_COMPANY,
     VISIBILITY_ONLY_ME,
+    may_archive_document,
     may_resolve_review_item,
     may_see_document,
 )
@@ -106,10 +107,15 @@ def _reach(team: dict, actor: str, document_id: int, tag: str) -> dict[str, bool
         "file": client.get(f"/api/documents/{document_id}/file", headers=h).status_code == 200,
         "trace": client.get(f"/api/trace/{document_id}", headers=h).status_code == 200,
         "queue": document_id in {i["document_id"] for i in client.get("/api/review", headers=h).json()},
+        # round 19 (DECISIONS #94): the Only me section's own list
+        "personal": document_id in {d["id"] for d in client.get("/api/personal-files", headers=h).json()},
     }
 
 
 ALL_READS = {"list", "search", "file", "trace"}
+# A personal file is NOT in the company lists or search for anyone, its uploader included (round 19,
+# DECISIONS #94); the uploader reaches it by id and through their own Only me list.
+PERSONAL_READS = {"file", "trace", "personal"}
 
 
 def _assert_reach(team, document_id, tag, expected: dict[str, set[str] | None]):
@@ -117,7 +123,7 @@ def _assert_reach(team, document_id, tag, expected: dict[str, set[str] | None]):
     for actor in ROLES:
         reach = _reach(team, actor, document_id, tag)
         allowed = expected.get(actor, set())
-        for path in ALL_READS:
+        for path in ALL_READS | {"personal"}:
             assert reach[path] == (path in allowed), f"{actor} via {path}: expected {path in allowed}, got {reach[path]}"
 
 
@@ -183,7 +189,7 @@ def test_the_calendar_reads_the_same_list_so_a_hidden_document_is_not_on_it(team
 
 def test_a_personal_file_reaches_only_its_uploader_on_every_path_while_pending(team):
     doc = _upload(team, "user1", "prva", visibility="only_me")
-    _assert_reach(team, doc, "prva", {"user1": ALL_READS})
+    _assert_reach(team, doc, "prva", {"user1": PERSONAL_READS})
     assert _reach(team, "user1", doc, "prva")["queue"] is True
     for actor in ("owner", "admin", "user2", "viewer"):
         assert _reach(team, actor, doc, "prva")["queue"] is False, actor
@@ -193,7 +199,7 @@ def test_a_personal_file_stays_invisible_to_admin_and_owner_after_it_is_filed(te
     doc = _upload(team, "user1", "prvb", visibility="only_me")
     assert _resolve(team, "user1", doc).status_code == 200  # the uploader resolves their own
 
-    _assert_reach(team, doc, "prvb", {"user1": ALL_READS})
+    _assert_reach(team, doc, "prvb", {"user1": PERSONAL_READS})
 
 
 @pytest.mark.parametrize("actor", ["owner", "admin"])
@@ -223,12 +229,12 @@ def _thread(document_id: int) -> str:
 
 def test_the_owners_own_personal_file_is_hidden_from_the_admin(team):
     doc = _upload(team, "owner", "prvd", visibility="only_me")
-    _assert_reach(team, doc, "prvd", {"owner": ALL_READS})
+    _assert_reach(team, doc, "prvd", {"owner": PERSONAL_READS})
 
 
 def test_an_admins_own_personal_file_is_hidden_from_the_owner(team):
     doc = _upload(team, "admin", "prve", visibility="only_me")
-    _assert_reach(team, doc, "prve", {"admin": ALL_READS})
+    _assert_reach(team, doc, "prve", {"admin": PERSONAL_READS})
 
 
 def test_a_company_document_is_unaffected_by_a_colleagues_personal_file(team):
@@ -239,10 +245,12 @@ def test_a_company_document_is_unaffected_by_a_colleagues_personal_file(team):
     assert _reach(team, "viewer", company_doc, "cmpa")["list"] is True
 
 
-def test_the_list_says_which_documents_are_personal(team):
+def test_the_personal_files_list_says_which_documents_are_personal_and_the_company_list_has_none(team):
     doc = _upload(team, "user1", "vsbx", visibility="only_me")
-    rows = client.get("/api/documents", headers=_headers(team["tokens"]["user1"])).json()
-    assert next(d for d in rows if d["id"] == doc)["visibility"] == "only_me"
+    h = _headers(team["tokens"]["user1"])
+    personal = client.get("/api/personal-files", headers=h).json()
+    assert next(d for d in personal if d["id"] == doc)["visibility"] == "only_me"
+    assert doc not in {d["id"] for d in client.get("/api/documents", headers=h).json()}
 
 
 def test_a_bad_visibility_value_is_refused_not_stored_as_company(team):
@@ -266,7 +274,8 @@ def test_several_photos_merged_into_one_document_can_be_personal_too(team):
     )
     assert resp.status_code == 200, resp.text
     doc = resp.json()["document_id"]
-    assert not _reach(team, "admin", doc, "pages")["list"] and _reach(team, "user1", doc, "pages")["list"]
+    assert not _reach(team, "admin", doc, "pages")["personal"] and _reach(team, "user1", doc, "pages")["personal"]
+    assert not _reach(team, "user1", doc, "pages")["list"], "personal files are not in the company list, even for their uploader"
 
 
 # --- who may resolve, and the thread binding ---------------------------------------------
@@ -365,6 +374,63 @@ def test_an_unrecognised_visibility_value_fails_closed_as_personal():
 ])
 def test_who_may_resolve(role, visibility, uploader, expected):
     assert may_resolve_review_item(_member(role), uploaded_by_user_id=uploader, visibility=visibility) is expected
+
+
+# --- who can change a file's visibility: nobody (round 19, DECISIONS #95) ---------------------------
+
+
+def _visibility_of(doc: int) -> str:
+    with get_conn() as conn:
+        return conn.execute("SELECT visibility FROM document WHERE id = ?", (doc,)).fetchone()["visibility"]
+
+
+def test_uploads_default_to_company_and_take_an_explicit_value(team):
+    plain, explicit = _upload(team, "user1", "dfla"), _upload(team, "user1", "dflb", visibility="only_me")
+    assert (_visibility_of(plain), _visibility_of(explicit)) == ("company", "only_me")
+
+
+@pytest.mark.parametrize("actor", ["owner", "admin", "user1"])
+@pytest.mark.parametrize("value", ["only_me", "company"])
+def test_a_patch_carrying_visibility_changes_nothing_for_anyone(team, actor, value):
+    """The lock toggle and PATCH visibility were removed. The field is not part of the edit body any more, so it is
+    ignored like any unknown field, and (the point) it can neither hide a company file nor expose a private one."""
+    company_doc = _upload(team, "user1", "ptca")
+    private_doc = _upload(team, "user1", "ptcb", visibility="only_me")
+    for doc in (company_doc, private_doc):
+        client.patch(f"/api/documents/{doc}", json={"visibility": value}, headers=_headers(team["tokens"][actor]))
+    assert (_visibility_of(company_doc), _visibility_of(private_doc)) == ("company", "only_me")
+
+
+def test_the_rows_no_longer_carry_a_toggle_flag(team):
+    doc = _upload(team, "user1", "flga")
+    private = _upload(team, "user1", "flgb", visibility="only_me")
+    h = _headers(team["tokens"]["user1"])
+    company_rows = client.get("/api/documents", headers=h).json()
+    personal_rows = client.get("/api/personal-files", headers=h).json()
+    assert doc in {r["id"] for r in company_rows} and private in {r["id"] for r in personal_rows}  # both lists really are checked
+    assert not any("can_change_visibility" in r for r in company_rows + personal_rows)
+    queue = client.get("/api/review", headers=h).json()
+    assert {i["document_id"] for i in queue} >= {doc, private}
+    assert not any("can_change_visibility" in i for i in queue)
+
+@pytest.mark.parametrize("role,visibility,uploader,expected", [
+    ("owner", "company", 8, True), ("admin", "company", 8, True), ("admin", "only_me", 7, True),
+    ("user", "company", 7, False), ("user", "company", 8, False),  # a company document is never a user's to delete
+    ("user", "only_me", 7, True), ("user", "only_me", 8, False), ("user", "only_me", None, False),
+    ("user", "something", 7, True),  # an unrecognised value is personal (fails closed), so its uploader may
+    ("viewer", "only_me", 7, False), ("viewer", "company", 7, False),
+])
+def test_who_may_archive(role, visibility, uploader, expected):
+    assert may_archive_document(_member(role), uploaded_by_user_id=uploader, visibility=visibility) is expected
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "user", "viewer"])
+@pytest.mark.parametrize("visibility", ["company", "only_me", "something"])
+@pytest.mark.parametrize("uploader", [7, 8, None])
+def test_archive_and_resolve_are_the_same_rule(role, visibility, uploader):
+    """One shared predicate (auth._admin_or_uploader_of_own_personal_file) behind both, so they cannot drift."""
+    args = dict(uploaded_by_user_id=uploader, visibility=visibility)
+    assert may_archive_document(_member(role), **args) is may_resolve_review_item(_member(role), **args)
 
 
 # --- the migration --------------------------------------------------------------------------

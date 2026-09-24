@@ -45,7 +45,8 @@
       "search": "Search",
       "companyFiles": "Company Files",
       "upload": "Upload",
-      "companySettings": "Company Settings"
+      "companySettings": "Company Settings",
+      "onlyMe": "Only me"
     },
     "switchCompany": "Switch company"
   },
@@ -387,10 +388,37 @@
       "low": "low"
     },
     "visibility": {
-      "onlyYou": "Only you",
-      "makePrivate": "Make private. Only you will be able to see it.",
-      "shareWithCompany": "Only you can see this file. Tap to share it with the company again.",
-      "uploaderOnly": "Only the person who uploaded this file can change who can see it."
+      "onlyYou": "Only you"
+    }
+  },
+  "onlyMe": {
+    "heading": "Only me",
+    "description": "A private space. Only you can see what you add here.",
+    "intro": "Files you add here are private. Only you can see them: not your teammates, not an admin, not the owner. They never appear in Company Files, Search or the Calendar.",
+    "reviewHint": "New files wait for you to confirm what we read.",
+    "reviewLink": "Open the Upload page",
+    "filesHeading": "Your private files ({{count}})",
+    "loading": "Loading your private files…",
+    "loadFailed": "Couldn't load your private files.",
+    "retry": "Try again",
+    "empty": "Nothing here yet. Add a document or a photo above and only you will see it.",
+    "noMatches": "No private file matches \"{{query}}\".",
+    "searchPlaceholder": "Search your private files",
+    "searchLabel": "Search your private files",
+    "searchClear": "Clear the search",
+    "searchCount": "{{shown}} of {{total}} match",
+    "toast": {
+      "saved": "Added to Only me. Only you can see it. Confirm it on the Upload page.",
+      "quarantined": "Upload blocked for safety review."
+    },
+    "scratchpad": {
+      "title": "Scratchpad",
+      "rowHint": "Draw a quick note, kept only for you",
+      "close": "Close the scratchpad",
+      "canvasLabel": "Drawing area. Draw with a finger, a pen or the mouse.",
+      "clear": "Clear",
+      "save": "Save as image",
+      "hint": "Saved as a private image in your files below."
     }
   }
 }

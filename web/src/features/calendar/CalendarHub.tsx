@@ -22,7 +22,7 @@ import { ObligationRow } from './ObligationRow'
 export function CalendarHub() {
   const { t } = useTranslation()
   const { role } = useAuth()
-  const { documents, expectations, obligations, apiUp, error, refresh } = useOpsData()
+  const { documents, expectations, obligations, apiUp, error } = useOpsData()
 
   return (
     <div>
@@ -37,7 +37,7 @@ export function CalendarHub() {
       <div className="space-y-10">
         <section>
           <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">{t('ops.tabs.dates')}</h2>
-          <DatesView documents={documents} onChanged={() => void refresh()} />
+          <DatesView documents={documents} />
         </section>
 
         <section>
@@ -59,7 +59,6 @@ export function CalendarHub() {
           expectations={expectations}
           documents={documents}
           canUpload={role !== null && roleAtLeast(role, 'user')}
-          onChanged={() => void refresh()}
         />
       </div>
     </div>

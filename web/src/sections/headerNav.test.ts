@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { accountMenuRoutes, canOfferUpload } from './headerNav'
 
 describe('accountMenuRoutes', () => {
-  it('lists Tags and Search for everyone, and Company Settings only for admin and owner', () => {
+  it('lists Tags and Search for everyone, Only me from user up, and Company Settings only for admin and owner', () => {
     expect(accountMenuRoutes('viewer')).toEqual(['tags', 'search'])
-    expect(accountMenuRoutes('user')).toEqual(['tags', 'search'])
-    expect(accountMenuRoutes('admin')).toEqual(['tags', 'search', 'company-settings'])
-    expect(accountMenuRoutes('owner')).toEqual(['tags', 'search', 'company-settings'])
+    expect(accountMenuRoutes('user')).toEqual(['tags', 'search', 'only-me'])
+    expect(accountMenuRoutes('admin')).toEqual(['tags', 'search', 'only-me', 'company-settings'])
+    expect(accountMenuRoutes('owner')).toEqual(['tags', 'search', 'only-me', 'company-settings'])
   })
 
   it('gives the common two before the role is known', () => {

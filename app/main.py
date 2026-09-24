@@ -31,7 +31,7 @@ from app.auth import (  # noqa: E402
     hash_token,
     issue_session,
     list_memberships,
-    may_change_visibility,
+    may_archive_document,
     may_edit_document,
     may_resolve_review_item,
     may_see_document,
@@ -140,15 +140,24 @@ def _hidden_or_missing(membership: CurrentMembership, row: sqlite3.Row | None) -
 
 
 def _in_company_files(row: sqlite3.Row | dict) -> bool:
-    """Whether a document belongs in the Company Files / Search / Calendar lists.
-    A company's business profile does not: it is a settings artifact, kept in
-    Company Settings and never listed with the paperwork (round 16, DECISIONS
-    #90). Decided by doc_type, the same test that already routes it to its own
-    extraction shape (classify.is_company_profile_doc_type), so there is no
-    third visibility value and no schema change. It is a filter on what the LIST
-    endpoints return, not on access: the file, the review queue and the settings
-    endpoint still reach the document by id."""
-    return not is_company_profile_doc_type(row["doc_type"])
+    """Whether a document belongs in the Company Files / Search / Calendar lists,
+    the company's own view of its paperwork. Two kinds do not:
+
+    - A company's business profile: a settings artifact, kept in Company Settings
+      (round 16, DECISIONS #90). Decided by doc_type, the same test that already
+      routes it to its own extraction shape (classify.is_company_profile_doc_type).
+    - A personal file (visibility other than 'company'; round 19, DECISIONS #94):
+      it lives in the uploader's "Only me" section (GET /api/personal-files) and
+      nowhere else, not even for the person who uploaded it. Until the per-file lock
+      toggle was removed a private file was listed inline for its uploader with a
+      badge; now that a file is private only by being uploaded to Only me, mixing it
+      into the company's views would blur exactly what the section makes structural.
+      An unrecognised visibility value fails closed as personal (auth.may_see_document).
+
+    It is a filter on what the LIST endpoints return, not on access: the file, the
+    trace, the review queue and the by-id endpoints still reach a document under the
+    normal rules (auth.may_see_document is unchanged)."""
+    return not is_company_profile_doc_type(row["doc_type"]) and row["visibility"] == "company"
 
 
 # One column list and one row->CompanyOut mapping for every endpoint that
@@ -579,9 +588,10 @@ async def upload_document(
     # 2026-09-24 (round 13, DECISIONS #85): "company" (default — every existing
     # caller) or "only_me", a personal file only the uploader can ever see.
     # A Literal, so anything else is a 422, not a silently company-visible file.
-    # Round 14 (DECISIONS #86): the web UI no longer sends it — a file is made
-    # personal afterwards with the lock toggle (PATCH visibility) — but the
-    # parameter stays for any other client.
+    # Round 19 (DECISIONS #94/#95): the web UI's Only me section sends "only_me"
+    # for every upload; that is the ONLY way a file becomes personal now, since
+    # the lock toggle and PATCH visibility that could convert an existing file
+    # are gone.
     visibility: Visibility = "company",
     # Round 16 (DECISIONS #90): the doc_type slug of the compliance checklist
     # item this upload was started from. Ignored unless it is a real slug
@@ -841,7 +851,6 @@ def list_review_items(
             item["can_resolve"] = may_resolve_review_item(
                 membership, uploaded_by_user_id=uploader, visibility=item["document_visibility"],
             )
-            item["can_change_visibility"] = may_change_visibility(membership, uploaded_by_user_id=uploader)
             visible.append(item)
         return visible
 
@@ -902,9 +911,6 @@ def _document_row_for(membership: CurrentMembership, row: sqlite3.Row) -> dict:
     doc = dict(row)
     uploader = doc.pop("uploaded_by_user_id")
     doc["can_edit"] = may_edit_document(membership, uploader)
-    # Round 14 (DECISIONS #86): whether the lock toggle is offered — the
-    # uploader only, so it is NOT the same answer as can_edit.
-    doc["can_change_visibility"] = may_change_visibility(membership, uploaded_by_user_id=uploader)
     return doc
 
 
@@ -937,6 +943,31 @@ def list_documents(
         # absent from Company Files, from Search and from the Calendar (which
         # reads this same list), not merely hidden by the UI.
         return [_document_row_for(membership, r) for r in rows if _can_see(membership, r) and _in_company_files(r)]
+
+
+@app.get("/api/personal-files")
+def list_personal_files(
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> list[dict]:
+    """The caller's OWN personal files, for the "Only me" section (round 19,
+    DECISIONS #94). Same row shape as GET /api/documents, so the frontend renders
+    both with one component.
+
+    Any authenticated member may call it, because it can only ever return what
+    that caller uploaded to their own private space: the rule is
+    auth.may_see_document (a personal file is its uploader's alone, no role and no
+    exception), applied to every row, and a personal file is never in the company
+    lists. Archived rows are left out like everywhere else. A caller with no
+    personal files gets an empty list, and no other role or member can see these."""
+    with get_conn(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT id, filename, media_type, lane, doc_type, status, received_at, "
+            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility "
+            "FROM document WHERE company_id = ? AND uploaded_by_user_id = ? AND visibility != 'company' "
+            "AND status != 'archived' ORDER BY received_at DESC, id DESC",
+            (membership.company_id, membership.user_id),
+        ).fetchall()
+        return [_document_row_for(membership, r) for r in rows if _can_see(membership, r)]
 
 
 @app.get("/api/search")
@@ -1034,13 +1065,6 @@ def edit_document(
     # (round 13) must not be confirmed to exist by a "you can't edit this".
     if _hidden_or_missing(membership, doc):
         raise HTTPException(404, "document not found")
-    # Round 14 (DECISIONS #86): who a file is visible to is the uploader's call
-    # alone, narrower than "may edit". Checked for the whole request before
-    # anything is written, so a refused change never half-applies.
-    if body.visibility is not None and not may_change_visibility(
-        membership, uploaded_by_user_id=doc["uploaded_by_user_id"],
-    ):
-        raise HTTPException(403, "Only the person who uploaded a file can change who can see it")
     if not may_edit_document(membership, doc["uploaded_by_user_id"]):
         raise HTTPException(403, "You can only edit documents you uploaded yourself")
 
@@ -1083,8 +1107,6 @@ def edit_document(
         updates["lane"] = "memory"
         updates["doc_type"] = "photo"
         updates["bucket"] = "Memory Lane"
-    if body.visibility is not None:
-        updates["visibility"] = body.visibility
 
     if updates:
         # Column names come from a fixed set of hardcoded keys above,
@@ -1208,7 +1230,7 @@ def get_company_profile_prefill(
 @app.post("/api/documents/{document_id}/archive")
 def archive_document(
     document_id: int,
-    membership: Annotated[CurrentMembership, Depends(require_role("admin"))],
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
 ) -> dict:
     """Soft-delete, added 2026-09-22 (DECISIONS #37). Archive, not hard
     delete: the row, file, and full audit trail (extractions, trace,
@@ -1217,18 +1239,29 @@ def archive_document(
     contradict that. Archiving only hides it from the default Documents-tab
     list. Routed through transition_document() (never raw SQL, unlike
     app/guards/injection.py::quarantine() — a separate, already-flagged
-    pre-existing issue, not copied here). admin+ gated: archiving is a real
-    action on shared company data, the same bar as resolving a review.
+    pre-existing issue, not copied here).
+
+    Who: admin and owner (archiving is a real action on shared company data,
+    the same bar as resolving a review), and, since round 19 (DECISIONS #95),
+    the uploader of their own PERSONAL file — auth.may_archive_document. It is
+    "your file, you can remove it": nobody else can even see a personal file,
+    so without this its author could never delete it. A `user` still cannot
+    delete a company document, not even one they uploaded (403).
     """
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
             "SELECT company_id, status, uploaded_by_user_id, visibility FROM document WHERE id = ?",
             (document_id,),
         ).fetchone()
-    # An admin cannot delete what they cannot see (round 13): a personal file
-    # or a colleague's pending upload answers 404, not "deleted".
+    # A caller cannot delete what they cannot see (round 13): a personal file
+    # that is not theirs, or a colleague's pending upload, answers 404, not
+    # "deleted" and not "forbidden" (a 403 would confirm it exists).
     if _hidden_or_missing(membership, doc):
         raise HTTPException(404, "document not found")
+    if not may_archive_document(
+        membership, uploaded_by_user_id=doc["uploaded_by_user_id"], visibility=doc["visibility"],
+    ):
+        raise HTTPException(403, f"Requires role 'admin' or higher, caller is '{membership.role}'")
 
     try:
         transition_document(document_id, "archived", actor=membership.email, db_path=DB_PATH)

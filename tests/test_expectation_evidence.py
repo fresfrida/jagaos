@@ -333,3 +333,47 @@ def test_only_the_rows_it_could_not_link_are_reported():
     assert len(unlinked) == 1 and f"expectation {stray}" in unlinked[0]
     assert _evidence_of(world["expectation"])["evidence_document_id"] == world["document"]
     assert _evidence_of(stray)["evidence_document_id"] is None
+
+
+def test_uploading_and_confirming_fresh_documents_relinks_satisfied_rows_whose_originals_were_archived(team, model):
+    """The production situation of 2026-09-25: two checklist rows were satisfied long ago by documents that
+    are now archived, so they are 'satisfied' with no evidence (the backfill correctly declines to link them
+    to a deleted file). Uploading and confirming a fresh certificate and constitution must give each row its
+    new document as evidence, without creating a second copy of any row."""
+    me = client.get("/api/auth/me", headers=_headers(team["owner"])).json()
+    company = me["company"]["id"]
+    with get_conn() as conn:
+        archived = {}
+        for name, doc_type in (("cert", "Certificate of Incorporation"), ("constitution", "constitution")):
+            archived[name] = conn.execute(
+                "INSERT INTO document (company_id, sha256, filename, media_type, bytes, stored_path, source_channel, doc_type, status) "
+                "VALUES (?, ?, ?, 'application/pdf', 1, 'x', 'web', ?, 'archived')", (company, f"old-{name}", f"{name}.pdf", doc_type)).lastrowid
+        for rule_id, doc_type, label, status in (
+            ("incorp_certificate", "certificate_of_incorporation", "Certificate of Incorporation", "satisfied"),
+            ("incorp_constitution", "constitution", "Company Constitution", "satisfied"),
+            ("incorp_share_register", "share_register", "Register of Members / Share Register", "missing"),
+            ("incorp_first_annual_return", "annual_return", "First Annual Return", "missing"),  # all four incorporation rules exist
+        ):
+            conn.execute("INSERT INTO expectation (company_id, doc_type, label, rule_id, status) VALUES (?, ?, ?, ?, ?)",
+                         (company, doc_type, label, rule_id, status))
+    rows_before = len(client.get("/api/expectations", headers=_headers(team["owner"])).json())
+    assert all(r["evidence_document_id"] is None for r in client.get("/api/expectations", headers=_headers(team["owner"])).json())
+
+    model["doc_type"] = "Certificate of Incorporation"
+    certificate = _upload(team["owner"], "fresh-certificate")
+    _confirm(team["owner"], certificate)
+    after_certificate = _checklist(team["owner"])
+    assert after_certificate["certificate_of_incorporation"]["evidence_document_id"] == certificate
+    assert after_certificate["constitution"]["evidence_document_id"] is None, "nothing held matches it yet"
+
+    model["doc_type"], model["event"] = "Company Constitution", None
+    constitution = _upload(team["owner"], "fresh-constitution")
+    _confirm(team["owner"], constitution)
+
+    rows = client.get("/api/expectations", headers=_headers(team["owner"])).json()
+    by_type = {r["doc_type"]: r for r in rows}
+    assert (by_type["certificate_of_incorporation"]["status"], by_type["certificate_of_incorporation"]["evidence_document_id"]) == ("satisfied", certificate)
+    assert (by_type["constitution"]["status"], by_type["constitution"]["evidence_document_id"]) == ("satisfied", constitution)
+    assert by_type["share_register"]["status"] == "missing"
+    assert len(rows) == rows_before, "no second copy of any row was created"
+    assert archived["cert"] not in {r["evidence_document_id"] for r in rows} and archived["constitution"] not in {r["evidence_document_id"] for r in rows}

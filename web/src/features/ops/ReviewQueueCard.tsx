@@ -33,9 +33,7 @@ import {
 import { opsApi, type Bucket, type ReviewItem } from './opsApi'
 import { DocumentViewerModal } from './DocumentCard'
 import { ReviewReasons } from './ReviewReasons'
-import { useDocumentVisibility } from './useDocumentVisibility'
 import { useEditableDescription } from './useEditableDescription'
-import { VisibilityToggle } from './VisibilityToggle'
 
 /** One field from a review_item.proposed_json blob — matches
  * app/models.py's Provenance[T], or a bare bool for injection_suspected. */
@@ -111,7 +109,6 @@ export function ReviewQueueCard({
   onResolved,
   onRejected,
   onPoll,
-  onVisibilityChanged,
 }: {
   item: ReviewItem
   canResolve: boolean
@@ -127,13 +124,8 @@ export function ReviewQueueCard({
   // caption. Not a generic "refresh me" the card invents on its own: one
   // existing data path, reused.
   onPoll: () => void
-  // 2026-09-24 (round 14, DECISIONS #86): after the lock toggle changes this
-  // document, the page refetches the queue (an item can leave the admin's
-  // queue the moment its uploader makes it personal).
-  onVisibilityChanged: () => void
 }) {
   const { t, i18n } = useTranslation()
-  const lock = useDocumentVisibility(item.document_id, item.document_visibility ?? 'company', onVisibilityChanged)
   const [viewingSource, setViewingSource] = useState(false)
   const proposed = parseProposed(item.proposed_json)
   const fieldNames = Object.keys(proposed).filter((k) => k !== 'injection_suspected' && isProvenance(proposed[k]))
@@ -381,14 +373,10 @@ export function ReviewQueueCard({
          render alongside a "no issues found"/isRoutine state, since
          app/graph/verify.py's file_missing check overrides every other
          reason rather than joining them. */}
-      {/* The lock toggle (round 14, DECISIONS #86) is the uploader's, and both
-         marks a personal file and changes it. Anyone else who can see a
-         personal file's card gets the read-only marker. */}
-      {item.can_change_visibility === true ? (
-        <VisibilityToggle visibility={lock.visibility} busy={lock.busy} error={lock.error} onToggle={() => void lock.toggle()} className="mb-2" />
-      ) : (
-        item.document_visibility === 'only_me' && <PersonalFileBadge className="mb-2" />
-      )}
+      {/* A personal file's card sits in this shared queue (its uploader confirms it here), so it
+         carries the "Only you" marker. The lock toggle that used to sit here was removed in
+         round 19 (DECISIONS #94): a file is private by being uploaded to Only me. */}
+      {item.document_visibility === 'only_me' && <PersonalFileBadge className="mb-2" />}
       <ReviewReasons
         reasons={reasons}
         className={`text-[13px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}
@@ -650,15 +638,8 @@ export function ReviewQueueCard({
 
       {viewingSource && (
         <DocumentViewerModal
-          doc={{
-            id: item.document_id,
-            filename: item.document_filename,
-            media_type: item.document_media_type,
-            visibility: item.document_visibility,
-            can_change_visibility: item.can_change_visibility,
-          }}
+          doc={{ id: item.document_id, filename: item.document_filename, media_type: item.document_media_type }}
           onClose={() => setViewingSource(false)}
-          onChanged={onVisibilityChanged}
         />
       )}
     </Card>

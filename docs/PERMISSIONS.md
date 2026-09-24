@@ -21,11 +21,13 @@ row.
 | See the review queue (open review items) — round 12 | ❌ none | ✅ only items on their own uploads | ✅ all | ✅ all |
 | See a document that is still pending review (Company Files, search, file, trace) — round 13 | ❌ | ✅ only their own upload | ✅ all | ✅ all |
 | See a document once it is filed | ✅ | ✅ | ✅ | ✅ |
-| See a **personal file** (`Only me`) — round 13 | ❌ | ✅ only their own | ✅ only their own — **not** others' | ✅ only their own — **not** others' |
-| Change who can see a file (the lock toggle: Company / Only you) — round 14 | ❌ | ✅ only their own uploads | ✅ only their own uploads (**not** others'; they could not undo it) | ✅ only their own uploads (**not** others') |
+| See a **personal file** (`Only me`) — round 13; since round 19 (DECISIONS #94) it is listed only in the uploader's Only me section (`GET /api/personal-files`), no longer in Company Files, Search or the Calendar | ❌ (has no personal files; cannot upload) | ✅ only their own | ✅ only their own — **not** others' | ✅ only their own — **not** others' |
+| Open the **Only me page** (`/only-me`) and upload into it — round 19 | ❌ redirected to the Calendar; no menu entry | ✅ | ✅ | ✅ |
+| Change who can see a file after upload (the round 14 lock toggle) — **removed in round 19 (DECISIONS #94/#95): the toggle, `PATCH visibility` and `may_change_visibility` are gone; nobody can change a file's visibility, it is set once at upload** | — | — | — | — |
 | Resolve the review item of a **personal file** — round 13 | ❌ | ✅ only their own | ✅ only their own (they cannot see others') | ✅ only their own |
 | Resolve (accept/reject) a flagged review item | ❌ | ❌ | ✅ | ✅ |
-| Archive ("Delete") a document | ❌ | ❌ | ✅ | ✅ |
+| Archive ("Delete") a **company** document | ❌ | ❌ | ✅ | ✅ |
+| Archive ("Delete") a **personal file** — round 19 (DECISIONS #95) | ❌ (has none) | ✅ only their own | ✅ only their own — **not** others' (a 404, they cannot see it) | ✅ only their own — **not** others' |
 | Add a team member | ❌ | ❌ | ✅ | ✅ |
 | See the Company Settings page | ❌ | ❌ | ✅ read-only | ✅ editable |
 | Edit company settings (name, FYE, UEN, GST status, registered address) | ❌ | ❌ | ❌ | ✅ |
@@ -42,7 +44,7 @@ UI affordances):
   uploader (`uploaded_by_user_id IS NULL` — pre-existing seed data, or any
   future non-web ingestion path) is left editable by any `user`+ account;
   there's no real uploader to protect it from.
-- `PATCH /api/documents/{id}` with `visibility` (round 14, DECISIONS #86) — `require_role("user")` **plus `auth.may_change_visibility`: only the person who uploaded the document**, in both directions, whatever their role. A non-uploader gets 403 "Only the person who uploaded a file can change who can see it", and a request that mixes `visibility` with other fields is refused whole. A document with no recorded uploader can be changed by nobody. `can_change_visibility` on list, search and review rows is this caller's own answer (not the same as `can_edit`).
+- `PATCH /api/documents/{id}` with `visibility` — **removed** (round 19, DECISIONS #95): the field is no longer part of the edit body, so it is ignored like any unknown field and changes nothing for any role. A file's visibility is set once, at upload (`?visibility=only_me`, which the Only me section sends).
 - **Document visibility (round 13, DECISIONS #83/#85) — one rule, `auth.may_see_document`, applied at `GET /api/documents`, `GET /api/search`, `GET /api/documents/{id}/file`, `GET /api/trace/{id}`, `PATCH /api/documents/{id}`, `POST /api/documents/{id}/archive`, `POST /api/review/{id}/resolve`, `GET /api/documents/{id}/company-profile`, the review queue and the duplicate-upload answer.** In order: (1) a personal file (`visibility` other than `company`) is visible to its uploader **and no one else — not admin, not owner** (a personal file with no recorded uploader is visible to nobody); (2) a document with status `needs_review` follows the review-queue rule below; (3) everything else is visible to the whole company. A document the caller may not see is **invisible, not forbidden**: left out of lists and a **404** on any direct fetch or action, before any ownership/role 403 — the same as an archived document (#53). A hidden document's id is also never returned in a duplicate-upload answer.
 - `GET /api/review` — any authenticated member, **filtered per caller** by `auth.may_see_review_item` (round 12, DECISIONS #80): admin/owner see every open item in the company; a `user` only items on documents they uploaded themselves (`uploaded_by_user_id` equals their id — a document with no recorded uploader is admin/owner-only, deliberately failing closed unlike the edit rule); a `viewer` none.
 - `GET /api/auth/companies`, `POST /api/auth/switch-company` — any authenticated member (round 12, DECISIONS #77). The list is the caller's own memberships only, with a group's name only on an owner membership; the switch is 403 for a company the caller has no membership in (the same 403 whether or not it exists). The role afterwards is the one held in the newly active company.
@@ -53,7 +55,7 @@ UI affordances):
 - `POST /api/review/{id}/resolve` — admin+ **plus, since round 13, the uploader of their own personal file** (`auth.may_resolve_review_item`; without it a `user`'s private upload could never leave review — see "Flagged decision 5"); a `thread_id` that is not the item's own is a 400. Otherwise **deliberately
   not extended** to let a `user` resolve their own upload's review item —
   see "Flagged decision 1" below.
-- `POST /api/documents/{id}/archive` — `require_role("admin")`, unchanged.
+- `POST /api/documents/{id}/archive` — since round 19 (DECISIONS #95) `get_current_membership` plus `auth.may_archive_document`: admin and owner, as before, and the uploader of their OWN personal file. Order: a document the caller cannot see is a 404, then 403 if the rule refuses (a `user` or viewer on any company document, even their own), then the soft archive.
 - `POST /api/companies/{id}/members` — `require_role("admin")`, unchanged;
   a second `owner` is a 409 regardless of caller role.
 - `PATCH /api/companies/{id}` — **new this round**, `require_role("owner")`; since round 12 it also accepts `uen`, `gst_registered` and `registered_address` (and rejects an empty `name`). It applies to the ACTIVE company only — after a switch, the owner's other companies are 403 until they switch back.
@@ -65,12 +67,14 @@ viewer token against the running server, not from the docs above:
 
 | Endpoint | Floor actually enforced |
 |---|---|
-| `GET /api/documents`, `/api/search`, `/api/expectations`, `/api/obligations`, `/api/trace/{id}`, `/api/documents/{id}/file`, `/api/auth/me` | any authenticated member — **viewer included** (all 200 for a viewer). **Since round 13 the documents these return are filtered by `auth.may_see_document`** (a pending document for the users the queue hides it from; a personal file for everyone but its uploader) — a hidden document is absent from the lists and a 404 on `/file` and `/trace`, never a 403 |
+| `GET /api/documents`, `/api/search`, `/api/expectations`, `/api/obligations`, `/api/trace/{id}`, `/api/documents/{id}/file`, `/api/auth/me` | any authenticated member — **viewer included** (all 200 for a viewer). **Since round 13 the documents these return are filtered by `auth.may_see_document`** (a pending document for the users the queue hides it from; a personal file for everyone but its uploader). **Since round 19 the two LIST endpoints (`/api/documents`, `/api/search`) also leave personal files out for the uploader too** (`main._in_company_files`), they are in `GET /api/personal-files` only; the by-id `/file` and `/trace` still let the uploader through — a hidden document is absent from the lists and a 404 on `/file` and `/trace`, never a 403 |
+| `GET /api/personal-files` (round 19, DECISIONS #94) | any authenticated member, viewer included (200 with an empty list for anyone with no personal files); it returns ONLY the caller's own uploads with `visibility != 'company'`, applying `auth.may_see_document` to every row, so no role and no member sees another person's personal files through it |
 | `GET /api/review` | any authenticated member, but **since round 12 the result is filtered** (viewer: empty; user: own uploads; admin/owner: all) — the one read endpoint that is no longer uniform |
 | `GET /api/companies/{id}/members` | any authenticated member of that company — so a viewer can list teammates' emails and roles |
 | `POST /api/documents` | `user` |
 | `PATCH /api/documents/{id}` | `user`, plus `auth.may_edit_document` (below) |
-| `POST /api/review/{id}/resolve`, `POST /api/documents/{id}/archive`, `POST /api/companies/{id}/members` | `admin` |
+| `POST /api/review/{id}/resolve`, `POST /api/companies/{id}/members` | `admin` (resolve also lets the uploader act on their own personal file) |
+| `POST /api/documents/{id}/archive` | `admin` for a company document; for a personal file its uploader (round 19, DECISIONS #95) |
 | `PATCH /api/companies/{id}` | `owner` |
 | `GET /api/companies`, `POST /api/companies` | **removed 2026-09-24** (they had no auth at all) — see "Fixed" below; **confirmed gone on the deployed box too** (a `curl` on 2026-09-24 returned HTTP 404) |
 
@@ -88,7 +92,7 @@ same function, so the frontend hides Edit exactly where the server would refuse
 `tests/test_document_permissions.py` — 26 tests with real uploads and logins,
 including the case that had never been exercised: two accounts of the same role
 (`user1`, `user2`) against each other's files. Delete (`archive`) is `admin` with
-no per-uploader carve-out, so a `user` cannot delete even their own upload.
+no per-uploader carve-out for a COMPANY document, so a `user` cannot delete even their own upload of one; the one carve-out is a personal file, whose uploader may delete it (round 19, DECISIONS #95).
 
 ## Flagged decisions (resolved, not silently picked)
 
@@ -135,9 +139,9 @@ to show a form the current values with.
 
 **5. Who resolves a personal file's review item (round 13, DECISIONS #85) — a permission I added, which the user can veto.** Resolving is admin+ so that a second person checks what a document says (#40). A personal file is visible to its uploader alone, so an admin cannot check it and a plain `user` cannot resolve it — the file would sit in review forever. **Resolved: the uploader may resolve the review item of their own personal file, and nothing else about resolving changes** (a `user` still cannot resolve their own company upload). Rationale: that second pair of eyes protects company records; a personal file is not one, and nobody else can be given the job. Consequence to accept: a personal file is confirmed by the same person who uploaded it.
 
-**7. Who may change a file's visibility (round 14, DECISIONS #86) — the uploader only.** The question was whether the toggle should follow `may_edit_document` (admin/owner can edit any company document) or be narrower. **Resolved: narrower — only the uploader.** If admin/owner could make someone else's company file private, they would lock themselves out of it the instant they did (a personal file is invisible even to them, so they could not undo it) and would remove a company record from the whole team on one person's say-so. Admin/owner keep every other edit right on any company document. Cost accepted: nobody can un-private a file except its uploader; if the uploader has left, that is the orphan risk in `docs/KANBAN.md`.
+**7. Who may change a file's visibility (round 14, DECISIONS #86) — the uploader only. SUPERSEDED (round 19, DECISIONS #95): the lock toggle and `PATCH visibility` were deleted, so there is nothing to permit; visibility is set once at upload.** The original analysis, kept for the record: the question was whether the toggle should follow `may_edit_document` or be narrower, and it was narrower (only the uploader), because an admin who made someone else's company file private would lock themselves out of it.
 
-**6. Personal files and deletion (round 13, DECISIONS #85) — OPEN, parked.** Archiving is admin+ and an admin cannot see someone else's personal file, so a `user`'s *filed* personal file can be deleted by no one (a *pending* one can be rejected by its uploader, which archives it). And if the uploader leaves the company, their personal files are permanently unreachable by anyone, admin and owner included. Both are recorded in `docs/KANBAN.md` as product questions for later, not solved.
+**6. Personal files and deletion (round 13, DECISIONS #85) — deletion RESOLVED in round 19 (DECISIONS #95); the orphan half is still OPEN, parked.** Archiving is admin+ and an admin cannot see someone else's personal file, so a `user`'s *filed* personal file used to be deletable by no one. Resolved: the uploader of a personal file may archive it (`auth.may_archive_document`), for any role, scoped to their own personal files. Still open: if the uploader leaves the company, their personal files are permanently unreachable by anyone, admin and owner included; recorded in `docs/KANBAN.md` as a product question for later.
 
 ## Fixed 2026-09-24 (in the repo; not yet on the deployed box)
 

@@ -92,7 +92,7 @@ function DateGroupRow({ doc, onView }: { doc: DocumentRow; onView: () => void })
   )
 }
 
-export function DatesView({ documents, onChanged }: { documents: DocumentRow[]; onChanged?: () => void }) {
+export function DatesView({ documents }: { documents: DocumentRow[] }) {
   const { t, i18n } = useTranslation()
   const { company } = useAuth()
   // 2026-09-24 (company-local dates, item 2): every company row has a
@@ -196,7 +196,7 @@ export function DatesView({ documents, onChanged }: { documents: DocumentRow[]; 
       </div>
 
       {viewingDocument && (
-        <DocumentViewerModal doc={viewingDocument} onClose={() => setViewingDocument(null)} onChanged={onChanged} />
+        <DocumentViewerModal doc={viewingDocument} onClose={() => setViewingDocument(null)} />
       )}
     </div>
   )

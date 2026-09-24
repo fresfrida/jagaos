@@ -670,11 +670,11 @@ export function StatusPill({ status }: { status: string }) {
 }
 
 /** Read-only "Only you" marker for a personal file (2026-09-24, round 13,
- * DECISIONS #85). Only the uploader is ever sent such a document, and the
- * uploader normally gets the lock TOGGLE (VisibilityToggle) instead; this is
- * the fallback for the rare caller who can see a personal file but may not
- * change it (a backend older than the toggle, or an uploader since demoted to
- * viewer). Same pill shape as StatusPill. */
+ * DECISIONS #85). Only the uploader is ever sent such a document. Round 17
+ * (DECISIONS #94): the lock toggle that used to be the marker for the uploader is
+ * gone, and personal files no longer appear in the company lists, so this is now
+ * used where a personal file sits among others: the review queue, where the
+ * uploader confirms it. Same pill shape as StatusPill. */
 export function PersonalFileBadge({ className }: { className?: string }) {
   const { t } = useTranslation()
   return (
