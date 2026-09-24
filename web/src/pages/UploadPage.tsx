@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { Toast, useToast } from '../components/ui/Toast'
 import { useAuth } from '../features/auth/AuthContext'
 import { RequireSession } from '../features/auth/RequireSession'
 import { roleAtLeast } from '../features/auth/authApi'
@@ -22,7 +23,7 @@ import { opsApi } from '../features/ops/opsApi'
 import { useOpsData } from '../features/ops/useOpsData'
 
 function UploadReviewContent() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { role } = useAuth()
   const { documents, reviewItems, apiUp, error, setError, refresh } = useOpsData()
 
@@ -30,6 +31,7 @@ function UploadReviewContent() {
   const [justRejectedFilename, setJustRejectedFilename] = useState<string | null>(null)
   const [isPictureUpload, setIsPictureUpload] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { toast, showToast, dismissToast } = useToast()
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
   const canResolve = role !== null && roleAtLeast(role, 'admin')
@@ -54,14 +56,35 @@ function UploadReviewContent() {
       const normalized = await normalizeImageForUpload(file)
       // 2026-09-23 (live regression report, item 3): the result used to
       // be kept and rendered in a "Last upload result" banner — removed
-      // outright, the review queue below already communicates the
-      // outcome for a needs_review upload. Not read here anymore.
-      await opsApi.uploadDocument(normalized, isPictureUpload)
+      // outright, the review queue below already communicates the full
+      // outcome for a needs_review upload. Read again here (2026-09-24,
+      // item 1) only for the toast's one-line summary — not re-rendered
+      // in full the way the old banner was.
+      // 2026-09-24 (item 5): the uploader's currently-selected UI
+      // language, so classify.py generates its description directly in
+      // that language instead of always English.
+      const result = await opsApi.uploadDocument(normalized, isPictureUpload, i18n.language)
       // 2026-09-23: back to the default (No) after every upload — the
       // common case is still a real document, and leaving Yes stuck on
       // would silently mis-tag the next, unrelated file.
       setIsPictureUpload(false)
       await refresh()
+      // 2026-09-24 (item 1): no document auto-files at upload time
+      // anymore (DECISIONS #40 — every upload needs a human confirm, even
+      // a clean one), so "filed" isn't a real upload-time outcome; the
+      // toast reports what upload-time actually produces instead —
+      // review.reason still carries the same routine ('clean') vs
+      // flagged distinction the review card itself uses (isRoutine,
+      // ReviewQueueCard.tsx), just read here for one line, not rebuilt.
+      if (result.status === 'duplicate') {
+        showToast(t('ops.upload.toast.duplicate'), 'warning')
+      } else if (result.status === 'quarantined') {
+        showToast(t('ops.upload.toast.quarantined'), 'warning')
+      } else if (result.review?.reason === 'clean') {
+        showToast(t('ops.upload.toast.clean'), 'success')
+      } else {
+        showToast(t('ops.upload.toast.needsReview'), 'success')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -185,6 +208,8 @@ function UploadReviewContent() {
           </section>
         )}
       </div>
+
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

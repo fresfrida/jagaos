@@ -175,7 +175,17 @@ const FIELD_LABEL_KEY: Record<string, string> = {
   invoice_no: 'ops.review.fieldLabel.invoiceNo',
   issued_on: 'ops.review.fieldLabel.issuedOn',
   subtotal: 'ops.review.fieldLabel.subtotal',
-  gst: 'ops.review.fieldLabel.gst',
+  // 2026-09-24 (item 10): `gst` renamed to `tax` — a generic label, not
+  // Singapore-specific, since this field now holds whatever tax is on the
+  // invoice (GST, PPN, VAT...). `tax_label` is new: what the document
+  // itself calls that tax, verbatim ("GST", "PPN 11%") — this is where
+  // "GST" as a word ever appears now, only when a document actually says
+  // so, never as a hardcoded universal default the way the old `gst`
+  // label was.
+  tax: 'ops.review.fieldLabel.tax',
+  tax_label: 'ops.review.fieldLabel.taxLabel',
+  // 2026-09-24 (item 9): no currency field existed before this at all.
+  currency: 'ops.review.fieldLabel.currency',
   total: 'ops.review.fieldLabel.total',
   doc_type: 'ops.review.fieldLabel.docType',
   reference_no: 'ops.review.fieldLabel.referenceNo',
@@ -229,11 +239,34 @@ export function dmyToIso(dmy: string): string | null {
  * a separate, already-shipped, already-reasoned-through choice; this
  * matches the Calendar task's own explicit fallback order, not what
  * Company Files currently renders. */
-export function formatDocumentLabel(doc: Pick<DocumentRow, 'vendor_name' | 'doc_type' | 'description'>): string {
+export function formatDocumentLabel(
+  doc: Pick<DocumentRow, 'vendor_name' | 'doc_type' | 'description'>,
+  language: string,
+): string {
   if (doc.vendor_name) return doc.doc_type ? `${doc.vendor_name} — ${doc.doc_type}` : doc.vendor_name
-  if (doc.description) return doc.description
+  const description = descriptionFor(doc.description, language)
+  if (description) return description
   if (doc.doc_type) return doc.doc_type
   return ''
+}
+
+// 2026-09-24 (items 5/6): document.description is JSON-encoded
+// {"en": "...", "<language>": "..."} — server-side mirror is
+// app/db.py's description_for(). Falls back to English, then "" (never
+// null/undefined — every existing caller already treats "" as "nothing
+// to show"). Handles a pre-2026-09-24 legacy plain-text row the same
+// defensive way the backend does: not valid JSON -> the English text
+// directly, not a crash.
+export function descriptionFor(raw: string | null, language: string): string {
+  if (!raw) return ''
+  let byLanguage: Record<string, string>
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    byLanguage = parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : { en: raw }
+  } catch {
+    byLanguage = { en: raw }
+  }
+  return byLanguage[language] || byLanguage.en || ''
 }
 
 // The real upload flow only ever produces two values today — confirmed

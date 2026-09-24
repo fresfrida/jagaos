@@ -2,7 +2,8 @@
 Company FYE -> the statutory clock -> dated duties. The other half of the
 thesis alongside derive_expectations."""
 
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.db import DB_PATH, get_conn
 from app.graph.state import PipelineState
@@ -12,13 +13,25 @@ from app.rules.statutory import derive_obligations as rule_derive
 def derive_obligations(state: PipelineState) -> PipelineState:
     with get_conn(DB_PATH) as conn:
         company = conn.execute(
-            "SELECT fye_month, fye_day FROM company WHERE id = ?",
+            "SELECT fye_month, fye_day, timezone FROM company WHERE id = ?",
             (state["company_id"],),
         ).fetchone()
         if company is None:
             return {"obligations_created": 0}
 
-        today = date.today()
+        # 2026-09-24 (company-local dates): date.today() reads the server's
+        # raw system clock (UTC on Lightsail) — not company-aware at all.
+        # A company whose FYE lands near midnight UTC could get "this
+        # year's" obligation cycle computed against the wrong calendar
+        # year depending purely on server time-of-day. now(tz).date() is
+        # the company's own calendar day, independent of both the server's
+        # clock and the browser's. Falls back to Singapore on a bad/legacy
+        # value rather than crashing obligation derivation entirely.
+        try:
+            tz = ZoneInfo(company["timezone"] or "Asia/Singapore")
+        except ZoneInfoNotFoundError:
+            tz = ZoneInfo("Asia/Singapore")
+        today = datetime.now(tz).date()
         fye_this_year = date(today.year, company["fye_month"], company["fye_day"])
         # Use last FYE that has already passed, so obligations are for the
         # cycle currently in flight, not one that starts next year.

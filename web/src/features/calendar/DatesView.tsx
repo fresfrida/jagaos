@@ -40,7 +40,8 @@ import { ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
-import { formatShortDate, localeFor, startOfMonth, toIsoDate } from '../../lib/dates'
+import { dayInTimezone, formatShortDate, localeFor, startOfMonth } from '../../lib/dates'
+import { useAuth } from '../auth/AuthContext'
 import { DocumentViewerModal } from '../ops/DocumentCard'
 import { DocumentTypeIcon, StatusPill, bucketLabel, formatDocumentLabel } from '../ops/opsShared'
 import type { DocumentRow } from '../ops/opsApi'
@@ -70,7 +71,7 @@ const DATE_BASIS_OPTIONS: { id: DateBasis; labelKey: string }[] = [
 // reading of "show filename + vendor... when available" as filename-as-
 // supporting-detail, not filename-as-primary-label again.
 function DateGroupRow({ doc, onView }: { doc: DocumentRow; onView: () => void }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   return (
     <button
       type="button"
@@ -79,7 +80,7 @@ function DateGroupRow({ doc, onView }: { doc: DocumentRow; onView: () => void })
     >
       <DocumentTypeIcon mediaType={doc.media_type} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-ink">{formatDocumentLabel(doc) || t('ops.documents.noCaptionYet')}</span>
+        <span className="block truncate text-ink">{formatDocumentLabel(doc, i18n.language) || t('ops.documents.noCaptionYet')}</span>
         <span className="block truncate text-[11px] text-muted">{doc.filename}</span>
       </span>
       {doc.bucket && <Badge tone="neutral">{bucketLabel(t, doc.bucket)}</Badge>}
@@ -91,8 +92,14 @@ function DateGroupRow({ doc, onView }: { doc: DocumentRow; onView: () => void })
 
 export function DatesView({ documents }: { documents: DocumentRow[] }) {
   const { t, i18n } = useTranslation()
+  const { company } = useAuth()
+  // 2026-09-24 (company-local dates, item 2): every company row has a
+  // real timezone now (backend default 'Asia/Singapore'), so the fallback
+  // here is just defensive against a not-yet-loaded company on first
+  // render, not a real legacy-data case.
+  const timezone = company?.timezone ?? 'Asia/Singapore'
   const [basis, setBasis] = useState<DateBasis>('upload')
-  const [month, setMonth] = useState(() => startOfMonth(toIsoDate(new Date())))
+  const [month, setMonth] = useState(() => startOfMonth(dayInTimezone(new Date().toISOString(), timezone)))
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [viewingDocument, setViewingDocument] = useState<DocumentRow | null>(null)
 
@@ -105,13 +112,20 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
         withoutDate.push(doc)
         continue
       }
-      const day = raw.slice(0, 10) // "YYYY-MM-DD..." -> "YYYY-MM-DD", both sources agree on this prefix
+      // 2026-09-24 (item 2): received_at is a real UTC timestamp (time of
+      // day matters — a document uploaded near UTC midnight can fall on
+      // the previous UTC calendar day vs. the company's own), so it's
+      // bucketed through the company's timezone. occurred_on is already a
+      // bare date (an invoice's issued_on, EXIF date) with no time-of-day
+      // to convert — its own calendar day is unambiguous regardless of
+      // timezone, so it keeps the plain prefix slice.
+      const day = basis === 'upload' ? dayInTimezone(raw, timezone) : raw.slice(0, 10)
       const existing = map.get(day)
       if (existing) existing.push(doc)
       else map.set(day, [doc])
     }
     return { byDay: map, noDate: withoutDate }
-  }, [documents, basis])
+  }, [documents, basis, timezone])
 
   // Switching basis regroups documents onto different days entirely — a
   // previously-selected day may no longer mean anything under the new basis.
@@ -140,7 +154,7 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
         <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">{t('ops.dates.noneUploaded')}</p>
       ) : (
         <div className="space-y-4">
-          <MonthGrid month={month} documentsByDay={byDay} selectedDay={selectedDay} onSelectDay={setSelectedDay} onMonthChange={setMonth} />
+          <MonthGrid month={month} documentsByDay={byDay} selectedDay={selectedDay} onSelectDay={setSelectedDay} onMonthChange={setMonth} timezone={timezone} />
 
           <section>
             {selectedDay ? (

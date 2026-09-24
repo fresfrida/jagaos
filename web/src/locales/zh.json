@@ -56,7 +56,8 @@
       "cancel": "取消",
       "clear": "清除",
       "close": "关闭",
-      "delete": "删除"
+      "delete": "删除",
+      "dismiss": "关闭"
     }
   },
   "ops": {
@@ -96,7 +97,13 @@
       "uploading": "正在上传…",
       "viewerCantUpload": "查看者无法上传文件 — 请联系管理员或所有者。",
       "uploadReplacement": "上传替换文件",
-      "rejectedPromptSuffix": "已拒绝并删除。要上传替换文件吗？"
+      "rejectedPromptSuffix": "已拒绝并删除。要上传替换文件吗？",
+      "toast": {
+        "clean": "已收到上传文件。未发现问题——请在下方确认。",
+        "needsReview": "已收到上传文件。已标记待审核——详见下方。",
+        "quarantined": "出于安全考虑已拦截此次上传——详见下方。",
+        "duplicate": "该文件已上传过。"
+      }
     },
     "review": {
       "needsReview": "待审核 ({{count}})",
@@ -141,7 +148,9 @@
         "invoiceNo": "发票号",
         "issuedOn": "开具日期",
         "subtotal": "小计",
-        "gst": "消费税",
+        "tax": "税额",
+        "taxLabel": "税种",
+        "currency": "货币",
         "total": "总额",
         "docType": "文件类型",
         "referenceNo": "参考编号",

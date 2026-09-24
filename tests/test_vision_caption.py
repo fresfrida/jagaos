@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 import app.main as main_module
-from app.db import get_conn
+from app.db import description_for, get_conn
 from app.main import app
 
 client = TestClient(app)
@@ -115,7 +115,12 @@ def test_picture_upload_caption_call_fills_pending_description_on_success(monkey
         doc = conn.execute(
             "SELECT description FROM document WHERE id = ?", (document_id,)
         ).fetchone()
-    assert doc["description"] == "a photo of a wooden desk"
+    # 2026-09-24 (items 5/6): description is JSON-encoded now
+    # ({"en": "..."} — jaga-vision's BLIP model is English-only, no
+    # language selection to honor here); description_for() reads it back
+    # the same way a real caller (the frontend, or another backend node)
+    # would, rather than asserting on the raw storage format directly.
+    assert description_for(doc["description"], "en") == "a photo of a wooden desk"
 
 
 def test_non_picture_upload_never_calls_the_vision_service(monkeypatch):

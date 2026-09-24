@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { formatShortDate, localeFor } from '../../lib/dates'
 import {
   BucketField,
+  descriptionFor,
   FIELD_CLASS,
   StatusPill,
   VENDOR_NAMES_DATALIST_ID,
@@ -136,7 +137,11 @@ export function DocumentCard({
 }) {
   const { t, i18n } = useTranslation()
   const [editing, setEditing] = useState(false)
-  const [description, setDescription] = useState(doc.description ?? '')
+  // 2026-09-24 (items 5/6): doc.description is JSON-encoded
+  // {"en": "...", "<language>": "..."} — descriptionFor() reads back
+  // whichever language is currently selected (falling back to English).
+  const localDescription = descriptionFor(doc.description, i18n.language)
+  const [description, setDescription] = useState(localDescription)
   const [bucket, setBucket] = useState(doc.bucket ?? '')
   const [docType, setDocType] = useState(doc.doc_type ?? '')
   const [vendorName, setVendorName] = useState(doc.vendor_name ?? '')
@@ -174,6 +179,7 @@ export function DocumentCard({
       const wantsPictureCorrection = docType === 'photo' && !isPictureLane
       await opsApi.editDocument(doc.id, {
         description,
+        language: i18n.language,
         bucket: (bucket || undefined) as Bucket | undefined,
         vendor_name: vendorName,
         filename,
@@ -204,15 +210,15 @@ export function DocumentCard({
                than a raw filename, and this is its only appearance on
                the card, not a second copy alongside a filename-based one. */}
             <p className="break-words text-sm font-medium text-ink">
-              {doc.description ? (
-                doc.description
+              {localDescription ? (
+                localDescription
               ) : isPendingCaption ? (
                 <span className="italic text-muted">{t('ops.documents.noCaptionYet')}</span>
               ) : (
                 <span className="text-muted">{doc.lane ?? '—'} / {doc.doc_type ? docTypeLabel(t, doc.doc_type) : '—'}</span>
               )}
             </p>
-            {doc.description && (
+            {localDescription && (
               <p className="mt-0.5 break-words text-[12px] text-muted">{doc.lane ?? '—'} / {doc.doc_type ? docTypeLabel(t, doc.doc_type) : '—'}</p>
             )}
             {/* 2026-09-23, live user feedback: both dates already exist in
@@ -297,7 +303,23 @@ export function DocumentCard({
           {t('ops.documents.view')}
         </button>
         {canEdit && !editing && (
-          <button onClick={() => setEditing(true)} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink">
+          <button
+            onClick={() => {
+              // 2026-09-24 (items 5/6): description's local edit state was
+              // only ever initialized once at this component's first
+              // mount — a real bug found live while verifying this exact
+              // feature: switching the language selector after mount but
+              // before ever clicking Edit left the edit form showing
+              // whichever language was current at mount, not the one
+              // currently displayed. Re-syncing to localDescription here
+              // (computed fresh every render from the current language)
+              // means "start editing" always starts from what's actually
+              // on screen right now.
+              setDescription(localDescription)
+              setEditing(true)
+            }}
+            className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink"
+          >
             {t('ops.documents.edit')}
           </button>
         )}

@@ -386,7 +386,7 @@ def test_search_and_edit_are_tenant_isolated_and_edit_updates_bucket_vendor_file
     # tag table this test used to exercise) - inserted directly rather than
     # via a real upload for the same reason test_tenant_isolation_... above
     # does: no live gateway call needed to test tenant scoping.
-    from app.db import get_conn, reindex_document_search
+    from app.db import description_for, get_conn, reindex_document_search
 
     a = _signup("searcha@example.com", "Search Co A")
     b = _signup("searchb@example.com", "Search Co B")
@@ -439,7 +439,11 @@ def test_search_and_edit_are_tenant_isolated_and_edit_updates_bucket_vendor_file
 
     by_new_vendor = client.get("/api/search?q=Consulting", headers=_auth_headers(a["token"])).json()
     assert [d["id"] for d in by_new_vendor] == [a_doc_id]
-    assert by_new_vendor[0]["description"] == "Renamed invoice"
+    # 2026-09-24 (items 5/6): description is JSON-encoded now
+    # ({"en": "...", "<language>": "..."}) — description_for() reads it
+    # back the way a real caller would, rather than asserting on the raw
+    # storage format directly.
+    assert description_for(by_new_vendor[0]["description"], "en") == "Renamed invoice"
     assert by_new_vendor[0]["bucket"] == "Operations"
     assert by_new_vendor[0]["vendor_name"] == "Urgent Consulting Partners"
     assert by_new_vendor[0]["filename"] == "renamed-invoice.pdf"
@@ -457,7 +461,7 @@ def test_search_and_edit_are_tenant_isolated_and_edit_updates_bucket_vendor_file
         still_a_description = conn.execute(
             "SELECT description FROM document WHERE id = ?", (a_doc_id,)
         ).fetchone()["description"]
-    assert still_a_description == "Renamed invoice"
+    assert description_for(still_a_description, "en") == "Renamed invoice"
 
 
 def test_archived_documents_never_appear_in_list_or_search_for_any_role():
@@ -638,3 +642,41 @@ def test_company_settings_patch_requires_owner_and_persists():
     assert owner_patch.status_code == 200, owner_patch.text
     me = client.get("/api/auth/me", headers=_auth_headers(owner["token"])).json()
     assert me["company"]["name"] == "Renamed by owner"
+
+
+def test_issuing_a_session_purges_old_expired_and_revoked_rows():
+    # 2026-09-24 (item 7, lifecycle audit): confirmed live against this
+    # project's own dev DB — nothing ever deleted an old session row;
+    # _membership_from_token only ever checked expires_at/revoked_at at
+    # auth time. session grew by exactly one row per login, forever (149
+    # rows already accumulated from ordinary testing). app/auth.py
+    # ::issue_session now purges expired/revoked rows on every new login —
+    # this proves that actually happens, not just that new logins still
+    # work.
+    from app.db import get_conn
+
+    user = _signup("purge-user@example.com", "Purge Co")
+
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE session SET expires_at = '2020-01-01T00:00:00+00:00' "
+            "WHERE user_id = (SELECT id FROM app_user WHERE email = 'purge-user@example.com')"
+        )
+        conn.execute(
+            "INSERT INTO session (user_id, token_hash, expires_at, revoked_at) "
+            "VALUES ((SELECT id FROM app_user WHERE email = 'purge-user@example.com'), "
+            "'fake-revoked-hash', '2099-01-01T00:00:00+00:00', datetime('now'))"
+        )
+        before = conn.execute(
+            "SELECT COUNT(*) c FROM session WHERE user_id = ?", (user["user"]["id"],)
+        ).fetchone()["c"]
+        assert before == 2, "expected the original (now-expired) session plus the fake revoked one"
+
+    # A fresh login purges both stale rows and adds exactly one new one.
+    client.post("/api/auth/dev-login", json={"email": "purge-user@example.com"})
+
+    with get_conn() as conn:
+        after = conn.execute(
+            "SELECT COUNT(*) c FROM session WHERE user_id = ?", (user["user"]["id"],)
+        ).fetchone()["c"]
+    assert after == 1, "expired/revoked rows should be purged, leaving only the fresh session"

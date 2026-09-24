@@ -5,6 +5,7 @@ inspectable in the trace panel. One connection per request, WAL mode so the
 scheduler and the API can both write without locking each other out.
 """
 
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -246,6 +247,15 @@ _MIGRATIONS = [
     # exists) so these don't need the try/except below.
     "DROP TABLE IF EXISTS document_tag",
     "DROP TABLE IF EXISTS tag",
+    # 2026-09-24 (company-local dates): every stored timestamp (received_at,
+    # created_at, etc.) is UTC via SQLite's datetime('now') — correct
+    # practice, not the bug. What was missing is a per-company IANA
+    # timezone to convert through before deriving "which calendar day is
+    # this" (app/graph/derive_obligations.py's FYE math, the frontend's
+    # Calendar day-bucketing/"today" highlight). Defaults to Singapore —
+    # every company today is one; changeable via the existing
+    # PATCH /api/companies/{id}.
+    "ALTER TABLE company ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Asia/Singapore'",
 ]
 
 
@@ -318,6 +328,34 @@ def get_conn(db_path: str = DB_PATH):
         conn.close()
 
 
+def parse_description(raw: str | None) -> dict[str, str]:
+    """`document.description` is JSON-encoded `{"en": "...", "ms": "..."}`
+    since items 5/6 (2026-09-24) — one key per language a description has
+    actually been generated/edited in, English always present as the
+    guaranteed fallback. Reads defensively: `None`/empty is `{}` (no
+    caption yet, DECISIONS #52's pending-caption state, unaffected by this
+    — still not a real description); a value that isn't valid JSON is
+    every pre-2026-09-24 document's plain-text description, treated as
+    `{"en": <that text>}` rather than crashing on the format change — a
+    live migration, not a hard cutover that breaks every existing row."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {"en": raw}
+    return parsed if isinstance(parsed, dict) else {"en": raw}
+
+
+def description_for(raw: str | None, language: str) -> str:
+    """The best available description text for `language` — that
+    language's own text if a description has been generated/edited in it,
+    else the guaranteed English fallback, else "" (never None — every
+    caller of this already treats "" as "nothing to show")."""
+    by_language = parse_description(raw)
+    return by_language.get(language) or by_language.get("en") or ""
+
+
 def reindex_document_search(document_id: int, db_path: str = DB_PATH) -> None:
     """Recomputes one document's document_search row from source-of-truth
     columns (document.filename/doc_type/description/extracted_text/bucket/
@@ -327,7 +365,14 @@ def reindex_document_search(document_id: int, db_path: str = DB_PATH) -> None:
     app/graph/ingest.py (extracted_text first set), app/graph/classify.py
     (description/bucket/vendor_name first set), app/graph/extract.py (a
     deterministic bucket correction for the invoice lane — DECISIONS #42),
-    and app/main.py's document-edit endpoint (any of them user-edited)."""
+    and app/main.py's document-edit endpoint (any of them user-edited).
+
+    2026-09-24 (item 6): description's every language variant is pushed
+    into FTS5's single `description` column together (space-joined), not
+    just one — a search for either language's words still has to match,
+    and FTS5 tokenizes whatever text it's given regardless of which
+    language key it came from, so no new search infrastructure is needed
+    for this, just feeding it more text than before."""
     with get_conn(db_path) as conn:
         doc = conn.execute(
             "SELECT company_id, filename, doc_type, description, extracted_text, "
@@ -337,12 +382,15 @@ def reindex_document_search(document_id: int, db_path: str = DB_PATH) -> None:
         if doc is None:
             return
 
+        description_by_language = parse_description(doc["description"])
+        description_for_search = " ".join(description_by_language.values())
+
         conn.execute("DELETE FROM document_search WHERE rowid = ?", (document_id,))
         conn.execute(
             "INSERT INTO document_search "
             "(rowid, filename, doc_type, description, extracted_text, bucket, "
             " vendor_name, company_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (document_id, doc["filename"], doc["doc_type"] or "", doc["description"] or "",
+            (document_id, doc["filename"], doc["doc_type"] or "", description_for_search,
              doc["extracted_text"] or "", doc["bucket"] or "", doc["vendor_name"] or "",
              doc["company_id"]),
         )

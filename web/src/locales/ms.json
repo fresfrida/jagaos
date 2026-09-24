@@ -56,7 +56,8 @@
       "cancel": "Batal",
       "clear": "Kosongkan",
       "close": "Tutup",
-      "delete": "Padam"
+      "delete": "Padam",
+      "dismiss": "Tutup"
     }
   },
   "ops": {
@@ -96,7 +97,13 @@
       "uploading": "Sedang memuat naik…",
       "viewerCantUpload": "Pelihat tidak boleh memuat naik dokumen — hubungi admin atau pemilik.",
       "uploadReplacement": "Muat naik gantian",
-      "rejectedPromptSuffix": "ditolak dan dipadam. Muat naik gantian?"
+      "rejectedPromptSuffix": "ditolak dan dipadam. Muat naik gantian?",
+      "toast": {
+        "clean": "Muat naik diterima. Tiada isu ditemui — sahkan di bawah.",
+        "needsReview": "Muat naik diterima. Ditanda untuk semakan — lihat di bawah.",
+        "quarantined": "Muat naik disekat untuk semakan keselamatan — lihat di bawah.",
+        "duplicate": "Fail ini sudah dimuat naik sebelum ini."
+      }
     },
     "review": {
       "needsReview": "Perlu disemak ({{count}})",
@@ -141,7 +148,9 @@
         "invoiceNo": "No. invois",
         "issuedOn": "Tarikh dikeluarkan",
         "subtotal": "Subjumlah",
-        "gst": "GST",
+        "tax": "Cukai",
+        "taxLabel": "Jenis cukai",
+        "currency": "Mata wang",
         "total": "Jumlah",
         "docType": "Jenis dokumen",
         "referenceNo": "No. rujukan",

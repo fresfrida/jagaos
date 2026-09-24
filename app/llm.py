@@ -15,6 +15,14 @@ from openai import OpenAI
 
 BASE_URL = os.environ.get("LLM_GATEWAY_BASE_URL", "https://api.softwaresystems.app/v1")
 API_KEY = os.environ.get("LLM_GATEWAY_API_KEY", "")
+# 2026-09-24 (item 3, portability audit): the model alias was a hardcoded
+# "sonnet4.5" string literal in every graph node that calls the gateway
+# (classify.py/extract.py/derive_events.py) — this key's own gateway only
+# approves this one alias today (GAPS.md §11), but that's a fact about
+# *this* key, not something that should be baked into the call sites
+# themselves. One env-configurable default, same pattern BASE_URL/API_KEY
+# above already use.
+MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "sonnet4.5")
 
 # USD per 1M tokens. Placeholder Sonnet-4.5 list pricing (Anthropic direct,
 # not necessarily the gateway's actual rate) — replace before trusting the

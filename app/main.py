@@ -7,10 +7,12 @@ smallest slice of PLATFORM.md's model that makes that true, with a simpler
 4-role set (owner/admin/user/viewer) than PLATFORM.md's original six.
 """
 
+import json
 import os
 import tempfile
 from pathlib import Path
 from typing import Annotated
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from dotenv import load_dotenv
@@ -28,6 +30,7 @@ from app.db import (  # noqa: E402
     build_fts5_query,
     get_conn,
     init_db,
+    parse_description,
     reindex_document_search,
 )
 from app.graph.ingest import ingest  # noqa: E402
@@ -55,13 +58,27 @@ app = FastAPI(title="JagaOS API")
 # just the real deployed frontend origin once Lightsail replaces both
 # (ARCHITECTURE.md §8 serves them behind the same Caddy host, so this whole
 # CORS block goes away there — same-origin needs none of it).
+#
+# 2026-09-24 (item 3, portability audit): this list was a hardcoded literal
+# — a different deploy target (a different frontend domain, a staging
+# environment) had no way to add its own origin without editing this file.
+# CORS_ALLOWED_ORIGINS overrides it entirely when set (comma-separated);
+# these three stay as the default so local dev and the current Vercel UAT
+# keep working unchanged with nothing configured.
+_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://jagaos.vercel.app",
+]
+_cors_origins_env = os.environ.get("CORS_ALLOWED_ORIGINS")
+CORS_ALLOWED_ORIGINS = (
+    [origin.strip() for origin in _cors_origins_env.split(",") if origin.strip()]
+    if _cors_origins_env
+    else _DEFAULT_CORS_ORIGINS
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://jagaos.vercel.app",
-    ],
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -119,7 +136,7 @@ def dev_login(body: DevLoginRequest) -> AuthResponse:
             company_id, role = membership["company_id"], membership["role"]
 
         company = conn.execute(
-            "SELECT id, name, fye_month, fye_day FROM company WHERE id = ?", (company_id,)
+            "SELECT id, name, fye_month, fye_day, timezone FROM company WHERE id = ?", (company_id,)
         ).fetchone()
         final_user = conn.execute(
             "SELECT id, email, name FROM app_user WHERE id = ?", (user_id,)
@@ -129,7 +146,8 @@ def dev_login(body: DevLoginRequest) -> AuthResponse:
     return AuthResponse(
         token=token,
         user=UserOut(id=final_user["id"], email=final_user["email"], name=final_user["name"]),
-        company=CompanyOut(id=company["id"], name=company["name"], fye_month=company["fye_month"], fye_day=company["fye_day"]),
+        company=CompanyOut(id=company["id"], name=company["name"], fye_month=company["fye_month"],
+                            fye_day=company["fye_day"], timezone=company["timezone"]),
         role=role,
     )
 
@@ -138,11 +156,12 @@ def dev_login(body: DevLoginRequest) -> AuthResponse:
 def auth_me(membership: Annotated[CurrentMembership, Depends(get_current_membership)]) -> dict:
     with get_conn(DB_PATH) as conn:
         company = conn.execute(
-            "SELECT id, name, fye_month, fye_day FROM company WHERE id = ?", (membership.company_id,)
+            "SELECT id, name, fye_month, fye_day, timezone FROM company WHERE id = ?", (membership.company_id,)
         ).fetchone()
     return {
         "user": {"id": membership.user_id, "email": membership.email, "name": membership.name},
-        "company": {"id": company["id"], "name": company["name"], "fye_month": company["fye_month"], "fye_day": company["fye_day"]},
+        "company": {"id": company["id"], "name": company["name"], "fye_month": company["fye_month"],
+                     "fye_day": company["fye_day"], "timezone": company["timezone"]},
         "role": membership.role,
     }
 
@@ -266,6 +285,16 @@ def edit_company(
         updates["fye_month"] = body.fye_month
     if body.fye_day is not None:
         updates["fye_day"] = body.fye_day
+    if body.timezone is not None:
+        # 2026-09-24: validated against zoneinfo's own IANA database here,
+        # not just accepted as an arbitrary string — a bad value would
+        # otherwise only surface later, as a ZoneInfoNotFoundError deep
+        # inside derive_obligations.py's FYE math.
+        try:
+            ZoneInfo(body.timezone)
+        except ZoneInfoNotFoundError:
+            raise HTTPException(400, f"Unknown timezone: {body.timezone}") from None
+        updates["timezone"] = body.timezone
 
     if updates:
         set_clause = ", ".join(f"{col} = ?" for col in updates)
@@ -312,10 +341,15 @@ def _caption_document_background(document_id: int, stored_path: str) -> None:
         print(f"jaga-vision captioning failed for document {document_id}: {e}")
         return
 
+    # 2026-09-24 (items 5/6): document.description is JSON-encoded now —
+    # jaga-vision's BLIP model is English-only (no language selection to
+    # honor here the way classify.py's real LLM call does), so this is
+    # always just {"en": caption}, same "en" as the guaranteed-fallback
+    # key every other write path uses.
     with get_conn(DB_PATH) as conn:
         conn.execute(
             "UPDATE document SET description = ? WHERE id = ? AND description IS NULL",
-            (caption, document_id),
+            (json.dumps({"en": caption}), document_id),
         )
     reindex_document_search(document_id, DB_PATH)
 
@@ -325,6 +359,11 @@ async def upload_document(
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
     background_tasks: BackgroundTasks,
     file: UploadFile, source_channel: str = "web", is_picture: bool = False,
+    # 2026-09-24 (item 5): the uploader's currently-selected UI language
+    # (web/src/i18n.ts) — same shape as is_picture above, a plain query
+    # param read by app/graph/classify.py to write its generated
+    # description directly in this language instead of always English.
+    language: str = "en",
 ) -> dict:
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
         tmp.write(await file.read())
@@ -357,6 +396,7 @@ async def upload_document(
         # already runs before this regardless (app/graph/ingest.py). Read by
         # app/graph/classify.py to skip its LLM call entirely.
         ingest_state["is_picture"] = is_picture
+        ingest_state["language"] = language
 
         thread_id = ingest_state["run_id"]
         result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
@@ -690,7 +730,31 @@ def edit_document(
 
     updates: dict[str, object] = {}
     if body.description is not None:
-        updates["description"] = body.description
+        # 2026-09-24 (items 5/6): document.description is JSON-encoded
+        # {"en": "...", "<language>": "..."} — a human correcting it edits
+        # in whatever language they're currently viewing the app in
+        # (body.language, defaults to English), so this merges into just
+        # that one key rather than overwriting every language's text with
+        # a single-language correction. json.loads(existing) first (via
+        # parse_description, which also handles a pre-2026-09-24 legacy
+        # plain-text row) so other languages' descriptions survive.
+        with get_conn(DB_PATH) as conn:
+            existing_description = conn.execute(
+                "SELECT description FROM document WHERE id = ?", (document_id,)
+            ).fetchone()["description"]
+        by_language = parse_description(existing_description)
+        by_language[body.language or "en"] = body.description
+        # A document with no description yet at all (e.g. a picture-lane
+        # upload's first caption, DECISIONS #52) written in a non-English
+        # language would otherwise end up with no "en" key whatsoever,
+        # breaking description_for()'s guaranteed-fallback contract —
+        # there's no real translation available here (that would need
+        # another gateway call, out of scope for a plain field edit), so
+        # this bootstraps "en" to the same text rather than leaving it
+        # missing; a real English version can still be added later same
+        # as any other language, by editing while viewing in English.
+        by_language.setdefault("en", body.description)
+        updates["description"] = json.dumps(by_language)
     if body.bucket is not None:
         updates["bucket"] = body.bucket
     if body.vendor_name is not None:

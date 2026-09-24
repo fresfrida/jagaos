@@ -56,7 +56,8 @@
       "cancel": "Cancel",
       "clear": "Clear",
       "close": "Close",
-      "delete": "Delete"
+      "delete": "Delete",
+      "dismiss": "Dismiss"
     }
   },
   "ops": {
@@ -96,7 +97,13 @@
       "uploading": "Uploading…",
       "viewerCantUpload": "Viewers can't upload documents — ask an admin or owner.",
       "uploadReplacement": "Upload a replacement",
-      "rejectedPromptSuffix": "rejected and archived. Upload a replacement?"
+      "rejectedPromptSuffix": "rejected and archived. Upload a replacement?",
+      "toast": {
+        "clean": "Upload received. No issues found — confirm below.",
+        "needsReview": "Upload received. Flagged for review — see below.",
+        "quarantined": "Upload blocked for safety review — see below.",
+        "duplicate": "This file was already uploaded."
+      }
     },
     "review": {
       "needsReview": "Needs review ({{count}})",
@@ -141,7 +148,9 @@
         "invoiceNo": "Invoice no.",
         "issuedOn": "Date issued",
         "subtotal": "Subtotal",
-        "gst": "GST",
+        "tax": "Tax",
+        "taxLabel": "Tax type",
+        "currency": "Currency",
         "total": "Total",
         "docType": "Doc type",
         "referenceNo": "Reference no.",

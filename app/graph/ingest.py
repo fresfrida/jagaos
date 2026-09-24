@@ -3,6 +3,7 @@ extraction, EXIF."""
 
 import hashlib
 import mimetypes
+import os
 import shutil
 from pathlib import Path
 
@@ -10,7 +11,15 @@ from app.db import DB_PATH, get_conn, reindex_document_search
 from app.extract import exif, ocr, pdf
 from app.graph.state import PipelineState
 
-DOCS_PATH = Path("./data/docs")
+# 2026-09-24 (item 7, lifecycle audit): .env.example has declared
+# JAGA_DOCS_PATH="./data/docs" since this project's very first commit, but
+# nothing ever actually read it — confirmed by grepping the whole backend
+# for the name. Changing it in a real .env silently did nothing; every
+# document was always written to the hardcoded "./data/docs" regardless,
+# the exact silent-hardcoded-path gap the project's own standing
+# architecture rule exists to prevent. Same os.environ.get(..., default)
+# pattern app/db.py's DB_PATH/app/llm.py's BASE_URL/API_KEY already use.
+DOCS_PATH = Path(os.environ.get("JAGA_DOCS_PATH", "./data/docs"))
 
 
 def _sha256(path: Path) -> str:

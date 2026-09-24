@@ -11,7 +11,7 @@ import json
 from app.db import DB_PATH, get_conn
 from app.graph.state import PipelineState
 from app.guards.injection import UNTRUSTED_TEMPLATE
-from app.llm import call
+from app.llm import MODEL_NAME, call
 from app.models import ProposedEvent, to_tool
 
 TOOL = to_tool(
@@ -36,7 +36,7 @@ def derive_events(state: PipelineState) -> PipelineState:
         return {"events": []}
 
     user = UNTRUSTED_TEMPLATE.format(document_text=state.get("text", "")[:12000])
-    llm_result = call("sonnet4.5", SYSTEM, user, tools=[TOOL], tool_choice="auto")
+    llm_result = call(MODEL_NAME, SYSTEM, user, tools=[TOOL], tool_choice="auto")
 
     with get_conn(DB_PATH) as conn:
         conn.execute(

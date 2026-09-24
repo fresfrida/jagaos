@@ -79,3 +79,37 @@ export function daysInMonth(iso: string): number {
   const d = parseIsoDate(iso)
   return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
 }
+
+// 2026-09-24 (company-local dates, item 2): stored timestamps
+// (document.received_at, etc.) are naive UTC strings from SQLite's
+// datetime('now') — "2026-09-23 17:00:00", no timezone marker. A document
+// uploaded between UTC midnight and ~8am SGT genuinely falls on the
+// *previous* UTC calendar day, so bucketing/"today" logic that just takes
+// the raw date prefix (or compares against the viewer's own device clock)
+// can put it on the wrong day of the Calendar's month grid. This is the
+// missing conversion step: parse as UTC explicitly, then read the
+// calendar day back out in the company's own IANA timezone (company.timezone,
+// e.g. "Asia/Singapore") — not the viewer's device timezone, so an admin
+// traveling still sees the company's own "today".
+function parseUtcTimestamp(raw: string): Date {
+  const iso = raw.includes('T') ? raw : raw.replace(' ', 'T')
+  return new Date(iso.endsWith('Z') ? iso : `${iso}Z`)
+}
+
+/** The YYYY-MM-DD calendar day a stored UTC timestamp falls on in
+ * `timezone` — deliberately NOT the same as `raw.slice(0, 10)` (the UTC
+ * calendar day), which is the exact bug this fixes. `en-CA` is just the
+ * shortest built-in locale that formats as YYYY-MM-DD. */
+export function dayInTimezone(raw: string, timezone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(parseUtcTimestamp(raw))
+}
+
+/** "Today" in the company's own timezone, independent of the viewing
+ * device's local clock — used for Calendar's "today" highlight
+ * (MonthGrid.tsx) so an admin traveling still sees the company's today,
+ * not their own. */
+export function todayInTimezone(timezone: string): string {
+  return dayInTimezone(new Date().toISOString(), timezone)
+}

@@ -103,6 +103,10 @@ export interface DocumentRow {
   doc_type: string | null
   status: string
   received_at: string
+  // JSON-encoded {"en": "...", "<language>": "..."} since items 5/6
+  // (2026-09-24) — null means no description at all yet (DECISIONS #52's
+  // pending-caption state), never an empty JSON string. Parse with
+  // opsShared.tsx's descriptionFor(), never rendered directly.
   description: string | null
   bucket: string | null
   vendor_name: string | null
@@ -135,6 +139,7 @@ export interface ReviewItem {
   document_id: number
   document_filename: string
   document_media_type: string
+  // Same JSON-encoded shape as DocumentRow.description above.
   document_description: string | null
   document_bucket: string | null
   // Read-only here (not part of DocumentEditRequest) - decides whether
@@ -187,10 +192,13 @@ export const opsApi = {
   // document?" toggle — sent as a query param alongside source_channel
   // (multipart body carries the file only), read by app/main.py to skip
   // classify.py's LLM call entirely for this document.
-  uploadDocument: (file: File, isPicture: boolean) => {
+  // language (2026-09-24, item 5): the uploader's currently-selected UI
+  // language (i18n.language) — read by classify.py to generate
+  // description directly in that language instead of always English.
+  uploadDocument: (file: File, isPicture: boolean, language: string) => {
     const form = new FormData()
     form.append('file', file)
-    const params = new URLSearchParams({ source_channel: 'web', is_picture: String(isPicture) })
+    const params = new URLSearchParams({ source_channel: 'web', is_picture: String(isPicture), language })
     return request<UploadResult>(`/api/documents?${params}`, { method: 'POST', body: form })
   },
 
@@ -238,6 +246,12 @@ export const opsApi = {
     documentId: number,
     body: {
       description?: string
+      // language (2026-09-24, items 5/6): which language `description`
+      // above is written in — app/main.py::edit_document merges it into
+      // just that one key of the stored {"en": ..., "<language>": ...}
+      // blob, not overwrite every language's text with a single-language
+      // correction. Only meaningful alongside `description`.
+      language?: string
       bucket?: Bucket
       vendor_name?: string
       doc_type?: string

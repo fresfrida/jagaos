@@ -74,7 +74,7 @@ def test_classify_then_extract_then_verify_on_real_invoice(seeded_company):
 
     state.update(extract(state))
     fields = state["extract_result"]
-    for field in ("subtotal", "gst", "total"):
+    for field in ("subtotal", "tax", "total"):  # 2026-09-24: gst renamed to tax (item 10)
         assert field in fields, f"{field} missing from extraction — {fields}"
         assert fields[field]["value"] is not None
 

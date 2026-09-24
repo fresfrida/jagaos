@@ -13,7 +13,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../../components/ui/Button'
 import { cn } from '../../lib/cn'
-import { addMonths, daysInMonth, localeFor, parseIsoDate, startOfMonth, toIsoDate } from '../../lib/dates'
+import { addMonths, daysInMonth, localeFor, parseIsoDate, startOfMonth, todayInTimezone, toIsoDate } from '../../lib/dates'
 import type { DocumentRow } from '../ops/opsApi'
 
 function weekdayLabels(locale: string): string[] {
@@ -31,16 +31,21 @@ interface MonthGridProps {
   selectedDay: string | null
   onSelectDay: (day: string) => void
   onMonthChange: (month: string) => void
+  // 2026-09-24 (company-local dates, item 2): the company's own IANA
+  // timezone (useAuth().company.timezone) — "today" must be the
+  // company's today, not the viewing device's, so an admin traveling
+  // still sees the same highlighted day everyone else on the team does.
+  timezone: string
 }
 
-export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onMonthChange }: MonthGridProps) {
+export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onMonthChange, timezone }: MonthGridProps) {
   const { i18n, t } = useTranslation()
   const locale = localeFor(i18n.language)
   const monthLabel = parseIsoDate(month).toLocaleDateString(locale, { month: 'long', year: 'numeric' })
   const firstOfMonth = startOfMonth(month)
   const firstWeekday = (parseIsoDate(firstOfMonth).getDay() + 6) % 7 // Monday = 0
   const totalDays = daysInMonth(month)
-  const todayIso = toIsoDate(new Date())
+  const todayIso = todayInTimezone(timezone)
 
   const cells: (string | null)[] = [
     ...Array.from({ length: firstWeekday }, () => null),

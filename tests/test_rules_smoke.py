@@ -4,8 +4,9 @@ Run: pytest tests/test_rules_smoke.py -v
 
 import json
 import tempfile
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from app.db import get_conn, init_db
 from app.guards.injection import scan
@@ -40,6 +41,48 @@ def test_annual_return_due_seven_months_after_fye():
     ar = next(r for r in rows if r["kind"] == "annual_return")
     assert ar["due_on"] == "2026-07-31"
     assert ar["risk"] == "high"
+
+
+def test_derive_obligations_uses_company_timezone_not_server_clock_near_midnight(monkeypatch):
+    # 2026-09-24 (item 2): the exact regression the bug report describes —
+    # a real moment that is one calendar day in UTC and already the next
+    # day in the company's own timezone. 2026-01-01 23:00 UTC is still
+    # Jan 1 in UTC but already 2026-01-02 07:00 in Asia/Singapore (UTC+8).
+    # Company FYE is set to Jan 2 specifically so which calendar day
+    # "today" resolves to flips which FYE cycle (this year's vs last
+    # year's) gets used — a real, externally-observable difference in
+    # due_on, not just an internal detail that happens not to matter.
+    import app.graph.derive_obligations as derive_obligations_node
+
+    fixed_utc_instant = datetime(2026, 1, 1, 23, 0, tzinfo=ZoneInfo("UTC"))
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_utc_instant.astimezone(tz) if tz else fixed_utc_instant
+
+    monkeypatch.setattr(derive_obligations_node, "datetime", _FixedDatetime)
+
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO company (id, name, fye_month, fye_day, timezone) "
+            "VALUES (1, 'SG Co', 1, 2, 'Asia/Singapore')"
+        )
+
+    result = derive_obligations_node.derive_obligations({"run_id": "tzrun1", "company_id": 1})
+    assert result["obligations_created"] > 0
+
+    with get_conn() as conn:
+        annual_return = conn.execute(
+            "SELECT due_on FROM obligation WHERE company_id = 1 AND kind = 'annual_return'"
+        ).fetchone()
+    # Correct (SGT-aware): today = 2026-01-02, fye_this_year (Jan 2) <=
+    # today -> uses THIS year's FYE -> due_on = 2026-01-02 + 7 months. The
+    # old UTC-naive bug (date.today()) would have resolved "today" as
+    # Jan 1, making fye_this_year (Jan 2) > today, so it would have used
+    # LAST year's FYE (2025-01-02) instead, landing on 2025-08-02 — a
+    # full year earlier than correct.
+    assert annual_return["due_on"] == "2026-08-02"
 
 
 def test_injection_scan_catches_the_gaps_demo_string():
@@ -228,7 +271,7 @@ def test_verify_clean_extraction_still_needs_review_not_filed():
             # now checks for it, same as vendor/total.
             "issued_on": {"value": "2026-09-01", "confidence": 0.95},
             "subtotal": {"value": 100.0, "confidence": 0.95},
-            "gst": {"value": 9.0, "confidence": 0.95},
+            "tax": {"value": 9.0, "confidence": 0.95},
             "total": {"value": 109.0, "confidence": 0.95},
         },
     }
@@ -272,7 +315,7 @@ def test_verify_flagged_extraction_produces_a_structured_gst_mismatch_reason():
         "extract_result": {
             "vendor": {"value": "Beta Pte Ltd", "confidence": 0.95},
             "subtotal": {"value": 300.0, "confidence": 0.95},
-            "gst": {"value": 84.0, "confidence": 0.95},  # not ~9% of 300 -> flagged
+            "tax": {"value": 84.0, "confidence": 0.95},  # not ~9% of 300 -> flagged
             "total": {"value": 384.0, "confidence": 0.95},
         },
     }
@@ -299,6 +342,48 @@ def test_verify_flagged_extraction_produces_a_structured_gst_mismatch_reason():
         assert json.loads(review_item["question"]) == result["reasons"]
 
 
+def test_verify_does_not_flag_an_indonesian_ppn_invoice_against_the_sg_gst_rate():
+    # 2026-09-24 (item 10): the exact scenario the bug report names — an
+    # Indonesian invoice with real PPN at 11% must not be compared against
+    # Singapore's 9% GST rate and flagged as a "mismatch" it doesn't
+    # actually have. The seeded company is SG-locality (the default —
+    # every company in this product is one today), which is exactly why
+    # gating on company locality ALONE wouldn't fix this: this SG company
+    # can still receive a genuinely foreign invoice. The invoice's own
+    # extracted currency (IDR, item 9's new field) is what correctly skips
+    # the 9%-rate check here, not the company's own locality.
+    from app.graph.verify import verify
+
+    document_id = _seed_company_and_document("indonesianppnsha")
+    state = {
+        "run_id": "indonesianppn1", "company_id": 1, "document_id": document_id,
+        # No thousands separators — matches _amount_strings' plain-decimal
+        # formatting, so this test isolates the gst_mismatch gating logic
+        # rather than also exercising _check_amounts_in_text's own,
+        # separate comma-formatting gap.
+        "text": "Invoice\nVendor: PT Sumber Makmur\nSubtotal: IDR 99000000\n"
+                "PPN 11%: IDR 10890000\nTotal: IDR 109890000",
+        "text_source": "pdfplumber",
+        "classify_result": {"lane": "invoice", "doc_type": "tax_invoice",
+                             "confidence": 0.95, "injection_suspected": False},
+        "extract_result": {
+            "vendor": {"value": "PT Sumber Makmur", "confidence": 0.95},
+            "issued_on": {"value": "2026-09-01", "confidence": 0.95},
+            "subtotal": {"value": 99000000.0, "confidence": 0.95},
+            # 11% of subtotal — correct PPN, would be ~18% off the SG 9%
+            # rate if it were wrongly checked against it.
+            "tax": {"value": 10890000.0, "confidence": 0.95},
+            "tax_label": {"value": "PPN 11%", "confidence": 0.95},
+            "currency": {"value": "IDR", "confidence": 0.95},
+            "total": {"value": 109890000.0, "confidence": 0.95},
+        },
+    }
+    result = verify(state)["verify_result"]
+
+    assert result["ok"] is True, result["reasons"]
+    assert not any(r["code"] == "gst_mismatch" for r in result["reasons"]), result["reasons"]
+
+
 def test_verify_flags_amounts_not_found_anywhere_in_source_text():
     # Confirmed live 2026-09-22 on the deployed Lightsail backend: a real
     # invoice (document id 14, "Ittibaa Glazing Enterprise Pte Ltd")
@@ -321,7 +406,7 @@ def test_verify_flags_amounts_not_found_anywhere_in_source_text():
         "extract_result": {
             "vendor": {"value": "Ittibaa Glazing Enterprise Pte Ltd", "confidence": 0.93},
             "subtotal": {"value": 440.0, "confidence": 0.93},
-            "gst": {"value": 39.6, "confidence": 0.92},
+            "tax": {"value": 39.6, "confidence": 0.92},
             "total": {"value": 479.6, "confidence": 0.93},
         },
     }
@@ -360,7 +445,7 @@ def test_verify_does_not_flag_amounts_that_do_appear_in_source_text():
             # "clean" fixture above — required by _check_required_invoice_fields.
             "issued_on": {"value": "2026-08-15", "confidence": 0.95},
             "subtotal": {"value": 363.3, "confidence": 0.95},
-            "gst": {"value": 32.7, "confidence": 0.95},
+            "tax": {"value": 32.7, "confidence": 0.95},
             "total": {"value": 396.0, "confidence": 0.95},
         },
     }
@@ -604,7 +689,14 @@ def test_verify_flags_a_description_that_admits_the_document_could_not_be_read()
         "text_source": "ocr",
         "classify_result": {"lane": "memory", "doc_type": "photo", "confidence": 0.7,
                              "injection_suspected": False,
+                             # 2026-09-24 (items 5/6): verify.py now reads
+                             # description_en specifically (always English,
+                             # regardless of which language description
+                             # itself was generated in) — description_en is
+                             # what this check's English problem-word list
+                             # actually needs to see.
                              "description": "Document with heavily corrupted or unreadable text",
+                             "description_en": "Document with heavily corrupted or unreadable text",
                              "bucket": "Memory Lane", "vendor_name": None},
         "extract_result": {"skipped": True, "reason": "no extractor for lane=memory"},
     }
@@ -634,7 +726,7 @@ def test_verify_flags_invoice_missing_a_required_field_even_with_clean_arithmeti
             # vendor deliberately omitted.
             "issued_on": {"value": "2026-09-01", "confidence": 0.9},
             "subtotal": {"value": 100.0, "confidence": 0.9},
-            "gst": {"value": 9.0, "confidence": 0.9},
+            "tax": {"value": 9.0, "confidence": 0.9},
             "total": {"value": 109.0, "confidence": 0.9},
         },
     }
@@ -668,7 +760,7 @@ def test_verify_flags_a_missing_source_file_and_it_overrides_everything_else():
             "vendor": {"value": "Acme Pte Ltd", "confidence": 0.95},
             "issued_on": {"value": "2026-09-01", "confidence": 0.95},
             "subtotal": {"value": 100.0, "confidence": 0.95},
-            "gst": {"value": 9.0, "confidence": 0.95},
+            "tax": {"value": 9.0, "confidence": 0.95},
             "total": {"value": 109.0, "confidence": 0.95},
         },
     }
@@ -706,7 +798,7 @@ def test_verify_flags_an_all_zero_invoice_as_implausible():
             "vendor": {"value": "Acme Pte Ltd", "confidence": 0.8},
             "issued_on": {"value": "2026-09-01", "confidence": 0.8},
             "subtotal": {"value": 0.0, "confidence": 0.8},
-            "gst": {"value": 0.0, "confidence": 0.8},
+            "tax": {"value": 0.0, "confidence": 0.8},
             "total": {"value": 0.0, "confidence": 0.8},
         },
     }

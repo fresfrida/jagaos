@@ -1634,8 +1634,91 @@ redeployed** — a standing project rule holds regardless of this round's
 own explicit authorization to push freely: redeploying always needs the
 user's own explicit ask, not a relayed one (see "GitHub" bullet above).
 
+**Round 9 (10-item batch) implemented — items 1, 2, 3, 5, 6, 7, 9, 10 built and
+verified; items 4, 8 assessed only (DECISIONS #70/#71). Not committed, pushed,
+or redeployed — explicit hold pending a separate go-ahead (DECISIONS #72,
+2026-09-24).** Ordered as instructed: correctness bugs first, then features,
+then assessment docs. **Item 2 (company-local dates):** root cause was
+`derive_obligations.py`'s `date.today()` reading the server clock, not the
+company's own timezone (storage itself was already correct UTC — not the
+bug). Fixed with a new `company.timezone` column (IANA name, default
+`Asia/Singapore`, wired into `PATCH /api/companies/{id}` with `zoneinfo`
+validation) and `zoneinfo`-based "today" everywhere it's derived, backend
+(`derive_obligations.py`) and frontend (`lib/dates.ts`'s
+`dayInTimezone`/`todayInTimezone`, `Intl.DateTimeFormat('en-CA', {timeZone})`
+— used by `MonthGrid`/`DatesView` instead of the browser's own local time).
+New test reproduces the bug on the old code (near-midnight mocked clock,
+wrong UTC-naive date) and passes after the fix. **Items 9/10 (currency +
+locality-aware tax) — a real schema gap, not just a verification task:**
+`InvoiceFields` gained `currency: Provenance[str | None]` (didn't exist at
+all before) and `tax`/`tax_label` (renamed/generalized from a SG-only `gst`
+field). `verify.py`'s 9% arithmetic check is now gated on **both** the
+company's own locality (piggybacked on item 2's `timezone` column) **and**
+the invoice's own extracted currency — locality alone would not have fixed
+the bug's own worked example (an SG company receiving a genuine foreign
+invoice). Verified live: a real SGD invoice and a real synthetic IDR/PPN-11%
+invoice through the actual gateway, both captured correctly, the IDR one no
+longer false-flagged against the SG rate. Sized honestly, per the batch's
+own request: this is a real migration (extraction schema, `verify.py`,
+`evals/run.py`, every frontend site keyed on the old `gst` field name), not
+a quick rename. **Items 5/6 (selected language reaches the LLM; bilingual
+description storage + search):** frontend sends `i18n.language` on upload
+(same shape as the existing `is_picture` param); `classify.py`'s prompt
+generates `description` in that language and `description_en` in English
+always, with an explicit instruction that extracted field values are never
+translated, only descriptive prose. `document.description` is now
+JSON-encoded (`{"en": ..., "<lang>": ...}`), backward-compatible with every
+pre-existing plain-text row (`parse_description`/`description_for`,
+`app/db.py`); both languages feed the existing FTS5 index. **Two real live
+bugs found and fixed, neither caught by tests that called a graph node
+directly rather than the real pipeline:** `PipelineState` never declared a
+`language` key — LangGraph derives its accepted state schema from the
+TypedDict's own declared keys and silently drops anything undeclared, so the
+language never reached `classify()` despite the frontend sending it
+correctly; found via a live Playwright upload, fixed by declaring the key,
+and the new regression test goes through the real `PIPELINE.invoke()`
+specifically because calling `classify()` directly wouldn't have caught
+this. `ReviewQueueCard.tsx`'s description-resync guard
+(`current === '' ? fresh : current`, DECISIONS #56) froze the field at
+mount-time language once any description existed — fixed with a
+`descriptionEditedRef` dirty-tracking flag; a related staleness bug in
+`DocumentCard.tsx` (Edit button not re-syncing before entering edit mode)
+fixed alongside it. **Item 1 (upload success toast):** new
+`components/ui/Toast.tsx` (`useToast()` hook, 4s auto-dismiss, non-blocking,
+`role="status"`/`aria-live="polite"`), wired into `UploadPage.tsx`, i18n'd
+from the start. Verified live in EN and MS, auto-dismiss timing confirmed.
+**Item 7 (lifecycle audit):** confirmed round 6/7's temp-file cleanup still
+holds; confirmed zero orphaned `document`/`review_item` rows on the real dev
+DB. Two real gaps found and fixed: `session` rows were never purged, only
+checked at auth time (`app/auth.py::issue_session` now deletes
+expired/revoked rows on every new login); `JAGA_DOCS_PATH` was declared in
+`.env.example` since day one but never actually read (`app/graph/ingest.py`
+hardcoded `./data/docs`) — now reads it. **Item 3 (portability audit,
+`docs/PORTABILITY.md`):** what runs where today, what's config-portable vs.
+what this round moved behind env vars (`LLM_MODEL_NAME`,
+`CORS_ALLOWED_ORIGINS`), the gateway's own tool-call quirks named as a real
+vendor dependency (GAPS.md §11), SQLite recorded as a deliberate choice with
+a named Postgres migration path (JSON column → `jsonb`, FTS5 →
+`tsvector`+GIN, swap point is `app/db.py`'s own functions). **Items 4/8
+(multi-company/group tenancy + its UI, DECISIONS #70/#71) — assessed only,
+nothing built:** the real single-company collapse found in
+`app/auth.py::_membership_from_token`'s `ORDER BY id LIMIT 1`; capacity
+numbers verified against actual code — the unpaginated `GET /api/documents`,
+not FTS5, is the real first bottleneck; a company-switcher recommendation
+(not the peer's cross-company filter-chip instinct) as the smallest real
+version. **Checks:** `pytest tests/` 54/54, `python evals/run.py` 14/14
+adversarial, `npm run typecheck` and `npm run build` both clean.
+Screenshots: `docs/screenshots/round9-toast-{en,ms}.png`,
+`round9-invoice-review-{en,ms}.png`, `round9-resync-fixed-ms.png`,
+`round9-ms-native-description.png`. `./scripts/prepush-check.sh` not run —
+nothing is being pushed this round. Full per-item detail:
+`docs/KANBAN.md` Done (2026-09-24), `docs/DECISIONS.md` #70-#72.
+
 **Known gaps, in the order they'll bite:**
-- **⚠ Lightsail needs a redeploy to pick up DECISIONS #69's backend fix** (2026-09-24) — the extract.py/classify.py 500-on-zero-tool-calls bug and the schema-mismatch trace-insert crash are both fixed in `main` (pushed) but not yet live on the box. Redeploy needs the user's own explicit go-ahead, not a peer's, per this project's standing rule.
+- **⚠ Lightsail needs a redeploy to pick up round 9's changes (items 2, 5/6, 7, 9/10) as well as DECISIONS #69's fix** (2026-09-24) — company-timezone dates, bilingual descriptions, session-purge, currency/locality-aware tax all live only in this checkout; nothing from round 9 is committed, pushed, or redeployed yet (explicit hold, DECISIONS #72). The extract.py/classify.py 500-on-zero-tool-calls bug and the schema-mismatch trace-insert crash from DECISIONS #69 are separately already pushed but still await their own redeploy. Redeploy needs the user's own explicit go-ahead, not a peer's, per this project's standing rule.
+- **`GET /api/documents` is genuinely unpaginated** (confirmed by grep, DECISIONS #70) — returns every non-archived row for the company on every call; `useOpsData.ts` already refetches on every route navigation by design. Verified this, not FTS5 search, is the first real bottleneck as a company's own document history grows. No urgency at today's real row counts.
+- **`_check_amounts_in_text`/`_amount_strings()` (`app/graph/verify.py`) doesn't handle thousands-separator-formatted numbers** — found 2026-09-24 testing a synthetic IDR invoice with comma-formatted amounts, which falsely tripped `amounts_not_in_text`. Not fixed; more likely to matter now that item 9/10 actually enables large non-SGD amounts.
+- **~500+ leftover `tmp*.pdf`/`tmp*.db` files accumulate in the OS temp dir** from `tests/test_rules_smoke.py`'s `_seed_company_and_document` helper's `tempfile.mktemp()` pattern (found during item 7's lifecycle audit). Test-only, harmless, not fixed — would need touching dozens of call sites.
 - **Golden-path eval cases (`evals/cases/golden/`) remain blocked on real data** (2026-09-23, DECISIONS #66) — this session has no access to real labelled invoices/documents, and the project's own privacy policy (`WINNING.md`) deliberately keeps real corporate documents out of the repo. Needs the user to supply specific files or explicitly waive that policy.
 - **Golden-path eval cases (`evals/cases/golden/`) remain blocked on real data** (2026-09-23, DECISIONS #66) — this session has no access to real labelled invoices/documents, and the project's own privacy policy (`WINNING.md`) deliberately keeps real corporate documents out of the repo. Needs the user to supply specific files or explicitly waive that policy.
 - **Whether items 1/2/6's original live symptom ("file missing" + "no issues found" together, vanishing photos) is actually resolved is unconfirmed from this session** (2026-09-23, DECISIONS #66) — most plausibly it already was, by the reporting session's own Lightsail deploy fix; the new `_check_file_exists` guardrail is real defense-in-depth regardless, verified only via a unit test, not against the live box.
@@ -1724,7 +1807,10 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 ## Data flow
 
 - **Implemented (web/):** routing: real URL paths (`/`, `/calendar`, `/tags`, `/how-it-works`, `/stack`, `/get-started`), no `#` routes. `Link` intercepts clicks and calls `navigate` (History API); `useRoute` listens to `popstate` and parses the path; `pages/Page.tsx` maps a route to a page; `useRouteEffects` sets the title, scrolls to top and focuses `<main>`. Direct hits need an SPA fallback to `index.html` (Vite dev/preview: built in; Caddy: catch-all `handle`; Vercel: `web/vercel.json`). Logged-out preview search (deliberately still mock, 2026-09-22 — see DECISIONS #41): `MemorySearch` → `useMemorySearch` → `searchService` (mock, 450 ms latency) → `filterMemories` over `MEMORIES`. Tag list and calendar detail panel read the same mock data through the same helper — this mock model is untouched by the real bucket rework below. **Real search/metadata (2026-09-22, DECISIONS #41-42):** `/ops`'s Documents tab → `opsApi.search`/`editDocument` → `GET/PATCH /api/documents`, `/api/search` → SQLite FTS5 (`document_search`, `app/db.py`, indexed on filename/doc_type/description/extracted_text/bucket/vendor_name) — a separate, authenticated path from the mock preview above, not a replacement of it. `GET /api/tags` no longer exists (DECISIONS #42) — bucket is a fixed frontend constant, not a fetched list.
-- **Documented, not built:** upload/Telegram ingestion (`ARCHITECTURE.md` §3's original plan). FTS5 search itself is now built (previous bullet). **"Validation (Jev)" never happened and isn't needed** — confirmed 2026-09-22 (DECISIONS #46) that `Jev`/`langchain-typesafe` has zero references anywhere in this codebase; the actual validation step is `app/graph/verify.py`'s deterministic GST-arithmetic and confidence-floor checks, which has been built and tested since the original backend skeleton (2026-09-21) — a different, real implementation of the same job, not a gap.
+- **Documented, not built:** upload/Telegram ingestion (`ARCHITECTURE.md` §3's original plan). FTS5 search itself is now built (previous bullet). **"Validation (Jev)" never happened and isn't needed** — confirmed 2026-09-22 (DECISIONS #46) that `Jev`/`langchain-typesafe` has zero references anywhere in this codebase; the actual validation step is `app/graph/verify.py`'s deterministic tax-arithmetic and confidence-floor checks, which has been built and tested since the original backend skeleton (2026-09-21) — a different, real implementation of the same job, not a gap.
+- **Company-local "today", not the server clock (2026-09-24, item 2):** `app/graph/derive_obligations.py` derives due dates off `datetime.now(ZoneInfo(company.timezone)).date()`, and the frontend's Calendar (`MonthGrid`/`DatesView`) buckets days and highlights "today" the same way (`lib/dates.ts`), both reading the company's own `timezone` column, not the browser's or the server box's own local time.
+- **Selected language reaches the LLM; descriptions stored bilingually (2026-09-24, items 5/6):** the uploader's `i18n.language` flows through `PipelineState` into `classify.py`'s prompt, which writes both a language-matching `description` and an always-English `description_en` — extracted field values (vendor names, amounts, dates) are explicitly never translated, only this generated prose is. `document.description` is JSON-encoded per-language (`app/db.py::parse_description`/`description_for`), both languages indexed into the existing FTS5 table.
+- **Locality-aware tax, currency recorded verbatim (2026-09-24, items 9/10):** `InvoiceFields.currency`/`tax`/`tax_label` (the last two replacing a SG-only `gst` field) capture whatever's actually on the document; `verify.py`'s SG 9% arithmetic check only fires when both the company is SG-local and the invoice's own currency looks like SGD.
 
 ## Where the main logic lives (web/src)
 
@@ -1742,6 +1828,7 @@ One AWS Lightsail instance (Ubuntu 24.04, `ap-southeast-1a`). Allowed AWS usage:
 | Signed-out landing content — deliberately minimal, both CTAs go to `/login` (2026-09-23, DECISIONS #64, replaces the deleted `Hero.tsx`) | `sections/WelcomeHero.tsx` |
 | App window chrome around the logged-out Calendar/Tags marketing preview | `features/preview/ProductFrame.tsx` |
 | Reusable UI | `components/ui/*` (Button, Badge, Card, Container, Reveal, EmptyState, MemoryCard, SourceLabel, Logo) |
+| Upload-outcome toast — non-blocking, 4s auto-dismiss, i18n from the start (2026-09-24, item 1) | `components/ui/Toast.tsx` (`useToast()`), wired in `pages/UploadPage.tsx` |
 | Session state, login/logout, role helpers, company-settings save/refresh (2026-09-23, `refreshCompany()`) | `features/auth/AuthContext.tsx`, `features/auth/authApi.ts` |
 | Session-gate-and-redirect guard shared by every real-app page (2026-09-23, DECISIONS #59) | `features/auth/RequireSession.tsx` |
 | Shared authenticated fetch wrapper (the one place error bodies get parsed) | `lib/apiClient.ts` |
@@ -1814,4 +1901,4 @@ see the callout below on why that matters for `/ops` specifically.
 2. Start both servers: `uvicorn app.main:app --reload` from repo root (backend), `cd web && npm run dev` (frontend, local iteration — the deployed `https://jagaos.vercel.app` is what actually gets checked on the phone, per the Commands section above).
 3. `python scripts/seed_dev_db.py` (idempotent — safe to re-run) to get a company with data and one account per role — prints `owner@`/`admin@`/`user@`/`viewer@try-demo.test` and each one's dev-login token — rather than starting from an empty `/login` signup.
 4. Log in at `/login`, land on `/upload`, upload a document, watch it get classified/extracted, resolve anything flagged, then check `/calendar` (dates/obligations/gap analysis), `/company-files`, `/search`, and — owner/admin only — `/company-settings` (2026-09-23, DECISIONS #59/#64 — six real pages, not one tabbed `/ops`; the old URL still works, redirecting to `/upload`). Log in as each seeded role to see the nav/permission differences firsthand. That loop working, end to end, in the browser, is the current bar — not another backend node.
-5. Next real milestones, in the order they'd bite: member-management UI (backend's done, no frontend), a product frame with its own styling instead of `/ops`'s debug-console look, deploying this round's backend change to Lightsail (`docs/KANBAN.md` Backlog has the full list).
+5. Next real milestones, in the order they'd bite: **review and either push or discard round 9's uncommitted batch** (items 1, 2, 3, 5, 6, 7, 9, 10 built and verified; items 4, 8 assessed only — DECISIONS #70-#72, `docs/KANBAN.md` Done 2026-09-24 — explicitly held back pending a go-ahead), then member-management UI (backend's done, no frontend), a product frame with its own styling instead of `/ops`'s debug-console look, deploying this round's and DECISIONS #69's backend changes to Lightsail (`docs/KANBAN.md` Backlog has the full list).

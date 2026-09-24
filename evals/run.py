@@ -46,10 +46,13 @@ def run_gst_cases() -> list[dict]:
     for case in cases:
         fields = {
             "subtotal": {"value": Decimal(case["subtotal"])},
-            "gst": {"value": Decimal(case["gst"])},
+            "tax": {"value": Decimal(case["gst"])},  # 2026-09-24: model field renamed gst -> tax (item 10)
             "total": {"value": Decimal(case["total"])},
         }
-        reasons = _check_invoice_arithmetic(fields)
+        # This eval is specifically about the 9% SG GST rate (its cases'
+        # own "gst" naming, unchanged in the yaml — just a rename of the
+        # model field it exercises), so it simulates a Singapore company.
+        reasons = _check_invoice_arithmetic(fields, is_singapore_company=True)
         got_flag = bool(reasons)
         passed = got_flag == case["expect_flag"]
         results.append({"id": case["id"], "passed": passed, "detail": reasons})

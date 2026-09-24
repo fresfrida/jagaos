@@ -27,17 +27,43 @@ from pydantic import ValidationError
 from app.db import DB_PATH, get_conn, reindex_document_search
 from app.graph.state import PipelineState
 from app.guards.injection import UNTRUSTED_TEMPLATE, scan
-from app.llm import call
+from app.llm import MODEL_NAME, call
 from app.models import ClassifyResult, to_tool
 
 TOOL = to_tool(
     ClassifyResult,
     "classify_document",
     "Classify a document into a lane, doc_type, and bucket, with a short "
-    "human-readable description and the counterparty name if identifiable.",
+    "human-readable description (in the requesting language, and in "
+    "English) and the counterparty name if identifiable.",
 )
 
-SYSTEM = """You classify Singapore SME documents into one of four lanes:
+# 2026-09-24 (item 5): the uploader's selected UI language
+# (web/src/i18n.ts's SUPPORTED_LANGUAGES, sent as a new upload param —
+# app/main.py) reaches this prompt so classify.py's generated prose
+# (description) comes out directly in that language, instead of always
+# generating English and needing a separate translation step afterward.
+# Full names, not just codes — "zh" alone is ambiguous about which
+# Chinese; explicit names leave no room for the model to guess wrong.
+LANGUAGE_NAMES = {
+    "en": "English",
+    "zh": "Simplified Chinese",
+    "ms": "Malay",
+    "ta": "Tamil",
+}
+
+# 2026-09-24 (item 6): the empty-text/no-OCR-text deterministic fallback
+# below never calls the LLM at all, but its placeholder description
+# should still honor the same "generated in the uploader's language"
+# contract items 5/6 establish for the real LLM path.
+UNTITLED_PHOTO_BY_LANGUAGE = {
+    "en": "Untitled photo",
+    "zh": "无标题照片",
+    "ms": "Foto tanpa tajuk",
+    "ta": "தலைப்பிடப்படாத புகைப்படம்",
+}
+
+SYSTEM_TEMPLATE = """You classify Singapore SME documents into one of four lanes:
 statutory (ACRA/IRAS letters, notices, filings), invoice (bills, receipts),
 important (contracts, leases, insurance), or memory (photos, notes with no
 formal filing purpose).
@@ -69,10 +95,15 @@ Also write:
   with incomplete or corrupted text" is wrong even if the text really is
   incomplete. If the text is too broken to tell what the document is,
   just say so plainly ("Photo of a document, text unclear") without
-  editorializing about data quality.
+  editorializing about data quality. Write this in {language_name}.
+- description_en: the exact same description, in English, regardless of
+  what language you wrote `description` in above. If {language_name} is
+  already English, write the identical sentence in both fields.
 - vendor_name: the counterparty this document is from/about (vendor,
   landlord, issuer) if identifiable from the text, e.g. "Acme Engineering
   Technology Pte Ltd". Leave it null if you can't tell — don't guess.
+  This is a proper name copied exactly as printed — never translate or
+  transliterate it, regardless of what language `description` is in.
 
 Call classify_document with your answer."""
 
@@ -80,6 +111,11 @@ Call classify_document with your answer."""
 def classify(state: PipelineState) -> PipelineState:
     text = state.get("text", "")
     regex_hits = scan(text)
+    # 2026-09-24 (item 5): defaults to English, same convention every
+    # other language-aware default in this codebase uses (app/db.py's
+    # description helpers, DocumentEditRequest.language).
+    language = state.get("language") or "en"
+    language_name = LANGUAGE_NAMES.get(language, "English")
 
     if state.get("is_picture"):
         # 2026-09-23: the human already answered, at upload time, the only
@@ -96,22 +132,25 @@ def classify(state: PipelineState) -> PipelineState:
         # doesn't insert one either) — this is how a test confirms no
         # gateway call happened for this path: zero classify trace rows.
         result = {"lane": "memory", "doc_type": "photo", "confidence": 1.0,
-                   "injection_suspected": False, "description": None,
+                   "injection_suspected": False, "description": None, "description_en": None,
                    "bucket": "Memory Lane", "vendor_name": None}
     elif not text.strip():
         # No OCR/extractable text (app/graph/ingest.py) — still needs a
         # sensible description, not an empty string a search box would
         # never surface.
         result = {"lane": "memory", "doc_type": "photo", "confidence": 0.3,
-                   "injection_suspected": False, "description": "Untitled photo",
+                   "injection_suspected": False,
+                   "description": UNTITLED_PHOTO_BY_LANGUAGE.get(language, "Untitled photo"),
+                   "description_en": "Untitled photo",
                    "bucket": "Memory Lane", "vendor_name": None}
     else:
         user = UNTRUSTED_TEMPLATE.format(document_text=text[:12000])
+        system = SYSTEM_TEMPLATE.format(language_name=language_name)
         # "haiku" is rejected by the gateway for this team's key — confirmed
         # live 2026-09-21 (GAPS.md's new §11): "Only the approved model is
         # allowed". sonnet4.5 is the only callable model; no cheap-routing
         # cost split is available.
-        llm_result = call("sonnet4.5", SYSTEM, user, tools=[TOOL],
+        llm_result = call(MODEL_NAME, system, user, tools=[TOOL],
                            tool_choice={"type": "function", "function": {"name": "classify_document"}})
         # 2026-09-24: same guard as app/graph/extract.py's identical call
         # site (see its comment) — confirmed live the model can return zero
@@ -131,12 +170,17 @@ def classify(state: PipelineState) -> PipelineState:
             # §12's "ask when unsure" applies to schema mismatches too);
             # Miscellaneous is the explicit catch-all for exactly this.
             lane = args.get("lane")
+            fallback_description = str(args.get("description") or "Document could not be fully classified")
             result = {
                 "lane": lane if lane in ("statutory", "invoice", "important", "memory") else "memory",
                 "doc_type": str(args.get("doc_type") or "other"),
                 "confidence": 0.3,
                 "injection_suspected": bool(args.get("injection_suspected")),
-                "description": str(args.get("description") or "Document could not be fully classified"),
+                "description": fallback_description,
+                # 2026-09-24: args itself may not have this (that's plausibly
+                # *why* validation failed) — falls back to the same text
+                # description already has rather than leaving English blank.
+                "description_en": str(args.get("description_en") or fallback_description),
                 "bucket": "Miscellaneous",
                 "vendor_name": None,
             }
@@ -155,15 +199,25 @@ def classify(state: PipelineState) -> PipelineState:
     if regex_hits or result.get("injection_suspected"):
         result["injection_suspected"] = True
 
+    # 2026-09-24 (items 5/6): document.description is now JSON-encoded
+    # {"en": "...", "<language>": "..."} (app/db.py's parse_description/
+    # description_for) — description stays None only for the is_picture
+    # bypass above (an explicit "pending caption" state, unchanged); every
+    # other branch produces both description/description_en, deduped into
+    # a single "en" key when the selected language already is English
+    # rather than storing the same sentence under two keys.
+    description_json = None
+    if result.get("description") is not None:
+        by_language = {"en": result.get("description_en") or result["description"]}
+        if language != "en":
+            by_language[language] = result["description"]
+        description_json = json.dumps(by_language)
+
     with get_conn(DB_PATH) as conn:
         conn.execute(
             "UPDATE document SET lane = ?, doc_type = ?, status = 'proposed', "
             "description = ?, bucket = ?, vendor_name = ? WHERE id = ?",
-            # description is None only for the is_picture bypass above (an
-            # explicit "pending caption" state) — every other branch always
-            # produces a real string, so this no longer needs `or ""` to
-            # avoid storing NULL for those.
-            (result["lane"], result["doc_type"], result.get("description"),
+            (result["lane"], result["doc_type"], description_json,
              result["bucket"], result.get("vendor_name"), state["document_id"]),
         )
 

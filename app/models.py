@@ -51,7 +51,19 @@ class ClassifyResult(BaseModel):
     # invoice/statutory — app/graph/extract.py's TOOLS_BY_LANE), so
     # description/bucket/vendor_name come from here, or an important/
     # memory document (a lease, a photo) would never get one.
+    #
+    # 2026-09-24 (items 5/6): `description` is now written in the
+    # uploader's own selected UI language (state["language"],
+    # app/graph/classify.py's SYSTEM prompt) instead of always English.
+    # `description_en` is the same description in English regardless —
+    # the guaranteed fallback language item 6's bilingual storage needs
+    # (a document generated before a given language existed, or one
+    # nobody's viewed in that language yet, always has this to fall back
+    # to). When the selected language already is English these are
+    # naturally identical — the model just writes the same sentence into
+    # both, not a second real translation effort.
     description: str
+    description_en: str
     # 2026-09-22 (DECISIONS #42): supersedes suggested_tags/the tag table
     # — a fixed taxonomy needs no join tables. For lane=invoice this is
     # only a provisional guess (classify runs before extraction, so it
@@ -80,7 +92,21 @@ class InvoiceFields(BaseModel):
     # LLM-extraction confidence levels; verify.py re-parses via Decimal(str(..))
     # for the arithmetic check, so exact-cents comparisons still happen in code.
     subtotal: Provenance[float]
-    gst: Provenance[float]
+    # 2026-09-24 (item 10): renamed from `gst` — this document isn't
+    # necessarily Singaporean, so the tax line on it isn't necessarily
+    # GST (an Indonesian invoice's is PPN, at 11%, not 9%). `tax` holds
+    # whatever the tax amount actually is; `tax_label` records what the
+    # document itself calls it, verbatim ("GST", "PPN 11%", "VAT") — never
+    # assumed or defaulted. app/graph/verify.py's 9%-rate arithmetic check
+    # is now conditional on the company's own locality (see its own
+    # comment) rather than applied to every invoice unconditionally.
+    tax: Provenance[float]
+    tax_label: Provenance[str | None] | None = None
+    # 2026-09-24 (item 9): no currency field existed at all before this —
+    # confirmed by reading this model in full. Never assumed/defaulted to
+    # SGD; the SYSTEM prompt (extract.py) instructs recording whatever
+    # currency code/symbol is actually on the document.
+    currency: Provenance[str | None] | None = None
     total: Provenance[float]
     injection_suspected: bool = False
 
@@ -163,6 +189,15 @@ class DocumentEditRequest(BaseModel):
     doc_type: str | None = None
     filename: str | None = None
     is_picture: bool | None = None
+    # 2026-09-24 (items 5/6): which language `description` (above) is
+    # written in — a human editing/correcting the description edits it in
+    # whatever language they're currently viewing the app in, so this
+    # merges into just that one key of the stored {"en": ..., "ms": ...}
+    # blob (app/db.py's description helpers), not overwrite every
+    # language's text with a single-language correction. Defaults to
+    # English when omitted, matching every other language default in this
+    # codebase (app/graph/classify.py, app/db.py).
+    language: str | None = None
 
 
 class ReviewResolution(BaseModel):
@@ -205,6 +240,11 @@ class CompanyOut(BaseModel):
     # page needs the current values to edit, not just blindly overwrite.
     fye_month: int
     fye_day: int
+    # 2026-09-24 (company-local dates): IANA name, e.g. "Asia/Singapore" —
+    # the frontend needs this to compute the company's "today" (Calendar's
+    # day-bucketing/highlight) independent of the viewing device's own
+    # local time (an admin traveling should still see the company's today).
+    timezone: str
 
 
 class AuthResponse(BaseModel):
@@ -246,3 +286,7 @@ class CompanyEditRequest(BaseModel):
     name: str | None = None
     fye_month: int | None = Field(default=None, ge=1, le=12)
     fye_day: int | None = Field(default=None, ge=1, le=31)
+    # 2026-09-24 (company-local dates): IANA name — validated against
+    # zoneinfo's own database on save (app/main.py::edit_company), not just
+    # accepted as an arbitrary string.
+    timezone: str | None = None

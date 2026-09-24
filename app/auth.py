@@ -34,6 +34,28 @@ def issue_session(user_id: int, db_path: str = DB_PATH) -> str:
     token = secrets.token_urlsafe(32)
     expires_at = (datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)).isoformat()
     with get_conn(db_path) as conn:
+        # 2026-09-24 (item 7, lifecycle audit): confirmed live — nothing
+        # anywhere deleted an old session row; _membership_from_token only
+        # ever checked expires_at/revoked_at at auth time, never purged
+        # one. session grows by exactly one row per login, forever (149
+        # rows already accumulated in this project's own dev DB from
+        # normal testing). No scheduler exists yet to run this
+        # periodically (deprioritized, DECISIONS #28) — piggybacked on the
+        # one write that already happens on every login instead of adding
+        # one. Deliberately unscoped (every user's stale rows, not just
+        # this one) — the whole point is keeping the table itself small.
+        # String comparison, not a parsed datetime, unlike
+        # _membership_from_token's real auth check below — expires_at is
+        # stored as Python's isoformat() ("...T...+00:00"), datetime('now')
+        # as SQLite's own format ("... " no suffix); confirmed live these
+        # still compare correctly since both start with the same zero-
+        # padded YYYY-MM-DD prefix, which is what lexicographic ordering
+        # actually depends on. Worst case on any edge (a session purged an
+        # hour early/late) is harmless either way — this is cleanup, not
+        # the authentication check itself.
+        conn.execute(
+            "DELETE FROM session WHERE revoked_at IS NOT NULL OR expires_at < datetime('now')"
+        )
         conn.execute(
             "INSERT INTO session (user_id, token_hash, expires_at) VALUES (?, ?, ?)",
             (user_id, hash_token(token), expires_at),

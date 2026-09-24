@@ -22,6 +22,11 @@ export interface Company {
   // them either. Both now exist for the company-settings page.
   fye_month: number
   fye_day: number
+  // 2026-09-24 (company-local dates): IANA name, e.g. "Asia/Singapore" —
+  // Calendar's day-bucketing/"today" highlight needs this instead of the
+  // viewing device's own local time (lib/dates.ts's dayInTimezone/
+  // todayInTimezone).
+  timezone: string
 }
 
 export interface Session {
@@ -101,7 +106,7 @@ export const authApi = {
   // frontend gates the page/fields the same way but the backend check is
   // the real one. Scoped to name/fye_month/fye_day, same floor as the
   // request body itself (CompanyEditRequest's own docstring).
-  updateCompany: (companyId: number, body: { name?: string; fye_month?: number; fye_day?: number }) =>
+  updateCompany: (companyId: number, body: { name?: string; fye_month?: number; fye_day?: number; timezone?: string }) =>
     apiRequest<{ status: string }>(`/api/companies/${companyId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },

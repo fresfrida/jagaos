@@ -14,8 +14,14 @@ from app.guards.injection import quarantine, scan
 from app.models import VerifyResult
 
 CONFIDENCE_FLOOR = 0.6
-GST_RATE = Decimal("0.09")
-GST_TOLERANCE = Decimal("0.02")  # 2% tolerance for rounding
+# 2026-09-24 (item 10): renamed from GST_RATE/GST_TOLERANCE — this rate
+# check is specifically Singapore's 9% GST, now gated on the company's
+# own locality (_is_singapore_company below) rather than applied to every
+# invoice unconditionally, regardless of the company's or the invoice's
+# own country. An Indonesian invoice's real PPN (11%) would otherwise be
+# compared against 9% and flagged as a "mismatch" it doesn't actually have.
+SG_GST_RATE = Decimal("0.09")
+SG_GST_TOLERANCE = Decimal("0.02")  # 2% tolerance for rounding
 IMPLAUSIBLE_ZERO_TOLERANCE = Decimal("0.005")  # treat as "exactly 0" for float noise
 
 # 2026-09-23 (live regression report, items 1/2/6): the stable reasons[]
@@ -47,32 +53,81 @@ def _check_file_exists(document_id: int, db_path: str = DB_PATH) -> list[dict]:
     return []
 
 
-def _check_invoice_arithmetic(fields: dict) -> list[dict]:
+def _is_singapore_company(company_id: int, db_path: str = DB_PATH) -> bool:
+    """The locality signal for item 10's conditional GST-rate check
+    (2026-09-24). Piggybacks on company.timezone (item 2, DECISIONS #69's
+    company-local-dates work) rather than adding a second, redundant
+    locality field — every company in this product today genuinely is a
+    Singapore SME (this app's whole premise, ARCHITECTURE.md/MOAT.md), and
+    timezone is now a real per-company column instead of an assumption, so
+    "is this company in Asia/Singapore" is a reasonable, already-available
+    proxy for "is this a Singapore company" rather than a new one. Not a
+    perfect signal (a company could technically operate elsewhere while
+    keeping an SG timezone), stated explicitly as a call, not hidden."""
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT timezone FROM company WHERE id = ?", (company_id,)
+        ).fetchone()
+    return bool(row) and row["timezone"] == "Asia/Singapore"
+
+
+def _looks_like_sgd(fields: dict) -> bool:
+    """The invoice's own extracted `currency` (item 9) — None/missing
+    counts as "assume SGD" (most invoices this deterministic check runs
+    against today are undated-currency SG ones; a missing currency isn't
+    itself evidence of a foreign one), but an explicit non-SGD value is
+    real evidence the 9% SG GST rate was never going to apply to this
+    specific document, regardless of which company uploaded it."""
+    currency = fields.get("currency")
+    value = currency.get("value") if isinstance(currency, dict) else None
+    if not value:
+        return True
+    normalized = str(value).strip().upper()
+    return normalized in ("SGD", "S$", "SG$", "$")
+
+
+def _check_invoice_arithmetic(fields: dict, is_singapore_company: bool) -> list[dict]:
     reasons: list[dict] = []
     try:
         subtotal = Decimal(str(fields["subtotal"]["value"]))
-        gst = Decimal(str(fields["gst"]["value"]))
+        tax = Decimal(str(fields["tax"]["value"]))
         total = Decimal(str(fields["total"]["value"]))
     except (KeyError, TypeError):
         return [{"code": "missing_arithmetic_fields", "params": {}}]
 
     # 2026-09-23 (live regression report, item 4): all-zero amounts pass
     # _check_required_invoice_fields (added last round) as "present" —
-    # 0 is not None — but a genuine SGD invoice with subtotal=GST=total=0
-    # is implausible; this is almost certainly a read failure, not a real
-    # zero-total invoice. Checked here, alongside the existing arithmetic
-    # check, since it needs the same three parsed Decimal values.
-    if subtotal <= IMPLAUSIBLE_ZERO_TOLERANCE and gst <= IMPLAUSIBLE_ZERO_TOLERANCE and total <= IMPLAUSIBLE_ZERO_TOLERANCE:
+    # 0 is not None — but a genuine invoice with subtotal=tax=total=0
+    # is implausible regardless of currency/locality; this is almost
+    # certainly a read failure, not a real zero-total invoice. Checked
+    # here, alongside the existing arithmetic check, since it needs the
+    # same three parsed Decimal values.
+    if subtotal <= IMPLAUSIBLE_ZERO_TOLERANCE and tax <= IMPLAUSIBLE_ZERO_TOLERANCE and total <= IMPLAUSIBLE_ZERO_TOLERANCE:
         reasons.append({"code": "zero_amounts", "params": {}})
 
-    expected_gst = (subtotal * GST_RATE).quantize(Decimal("0.01"))
-    if abs(gst - expected_gst) > (expected_gst * GST_TOLERANCE + Decimal("0.05")):
-        reasons.append({"code": "gst_mismatch", "params": {
-            "gst": str(gst), "subtotal": str(subtotal), "expectedGst": str(expected_gst),
-        }})
-    if abs((subtotal + gst) - total) > Decimal("0.02"):
+    # 2026-09-24 (item 10): the 9%-rate check is specifically Singapore's
+    # GST rate. Gating on company locality ALONE doesn't actually fix the
+    # scenario item 10's own bug report describes — a Singapore company
+    # (which, per this product's whole premise, is every company that
+    # exists today) can still receive a genuinely foreign invoice (an
+    # Indonesian vendor's PPN at 11%), and company-locality-only gating
+    # would keep comparing that against 9% regardless. Real fix needs both
+    # signals: the company's own locality (is_singapore_company — the
+    # dimension named in the ask) AND the specific invoice's own extracted
+    # currency (item 9's new field — not SGD is real evidence this
+    # particular document was never a 9%-GST one, independent of who
+    # uploaded it). subtotal + tax == total, below, stays unconditional:
+    # that's plain arithmetic true for any country's tax scheme, not a
+    # Singapore-specific rate assumption.
+    if is_singapore_company and _looks_like_sgd(fields):
+        expected_tax = (subtotal * SG_GST_RATE).quantize(Decimal("0.01"))
+        if abs(tax - expected_tax) > (expected_tax * SG_GST_TOLERANCE + Decimal("0.05")):
+            reasons.append({"code": "gst_mismatch", "params": {
+                "gst": str(tax), "subtotal": str(subtotal), "expectedGst": str(expected_tax),
+            }})
+    if abs((subtotal + tax) - total) > Decimal("0.02"):
         reasons.append({"code": "total_mismatch", "params": {
-            "subtotalPlusGst": str(subtotal + gst), "total": str(total),
+            "subtotalPlusGst": str(subtotal + tax), "total": str(total),
         }})
     return reasons
 
@@ -114,7 +169,7 @@ def _check_amounts_in_text(fields: dict, text: str) -> list[dict]:
     format differences) to text-match reliably the same way plain numbers
     can."""
     values = []
-    for field_name in ("subtotal", "gst", "total"):
+    for field_name in ("subtotal", "tax", "total"):  # 2026-09-24: gst renamed to tax (item 10)
         field = fields.get(field_name)
         if isinstance(field, dict) and field.get("value") is not None:
             values.append(field["value"])
@@ -281,7 +336,7 @@ def verify(state: PipelineState) -> PipelineState:
         reasons.append({"code": "extraction_error", "params": {"detail": str(extract.get("reason", ""))}})
 
     if classify.get("lane") == "invoice" and extract and not extract.get("skipped") and not extract.get("error"):
-        reasons.extend(_check_invoice_arithmetic(extract))
+        reasons.extend(_check_invoice_arithmetic(extract, _is_singapore_company(state["company_id"])))
         reasons.extend(_check_amounts_in_text(extract, text))
         reasons.extend(_check_required_invoice_fields(extract))
 
@@ -295,7 +350,14 @@ def verify(state: PipelineState) -> PipelineState:
     # The function's own code/params changed too (could_not_read_document,
     # no params) — no percentage, not the old confidence-bearing text.
     reasons.extend(_check_classify_confidence(classify))
-    reasons.extend(_check_description_signals_problem(classify.get("description")))
+    # 2026-09-24 (items 5/6): reads description_en specifically, not
+    # description — description is now generated in the uploader's
+    # selected UI language (app/graph/classify.py), so this check's
+    # English problem-word list ("unreadable", "corrupted", ...) would
+    # silently stop matching anything for a non-English upload otherwise.
+    # description_en is always English regardless of the selected
+    # language, so this keeps working the same way for every language.
+    reasons.extend(_check_description_signals_problem(classify.get("description_en")))
 
     # 2026-09-23 (live regression report, items 1/2/6): checked last and
     # deliberately OVERRIDES `reasons` rather than extending it — a

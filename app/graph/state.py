@@ -14,6 +14,16 @@ class PipelineState(TypedDict, total=False):
     # (app/main.py) — when true, classify.py skips its LLM call entirely
     # and sets lane/doc_type/bucket deterministically (see its docstring).
     is_picture: bool
+    # 2026-09-24 (item 5): the uploader's selected UI language
+    # (app/main.py, web/src/i18n.ts) — read by classify.py to generate its
+    # description directly in this language. A real bug found live while
+    # verifying this exact feature: this key must be declared here, not
+    # just set on the dict in app/main.py — LangGraph's StateGraph derives
+    # its accepted state schema from this TypedDict's own annotations, and
+    # silently dropped an undeclared key before the first node ever saw
+    # it (confirmed by comparing against is_picture above, which already
+    # worked precisely because it's declared here).
+    language: str
 
     # suffixed _result to avoid colliding with the node names "classify" /
     # "extract" / "verify" — LangGraph forbids a node name equal to a state key
