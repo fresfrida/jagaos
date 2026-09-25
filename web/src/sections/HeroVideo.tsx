@@ -24,6 +24,9 @@ import type { DemoVideo } from '../hooks/useDemoVideo'
 export const HERO_POSTER = demoPoster
 /** The recording's size in pixels: the frame reserves this aspect ratio, so nothing jumps when the video arrives. */
 export const HERO_VIDEO_SIZE = { width: 600, height: 1300 } as const
+/** How fast the recording plays (DECISIONS #118). It is muted, so there is no audio to keep in step, and the loop still ends on the frame
+ * it began on: the rate changes how fast the content goes by, not the content. */
+export const HERO_PLAYBACK_RATE = 1.5
 
 export function HeroVideo({ demo }: { demo: DemoVideo }) {
   const { t } = useTranslation()
@@ -34,6 +37,9 @@ export function HeroVideo({ demo }: { demo: DemoVideo }) {
     if (!element) return
     // React sets `muted` as a property, after the element exists; some browsers only autoplay a video that is muted by then.
     element.muted = true
+    // `defaultPlaybackRate` too: a browser that reloads the media resets `playbackRate` to it, and the pause button's play() must not slow the video down.
+    element.defaultPlaybackRate = HERO_PLAYBACK_RATE
+    element.playbackRate = HERO_PLAYBACK_RATE
     const started = element.play()
     // A browser that refuses (low-power mode, data saver) leaves the poster showing and the button reading "Play". jsdom returns nothing.
     if (started !== undefined) started.catch(onBlocked)

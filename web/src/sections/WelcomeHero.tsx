@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Container } from '../components/ui/Container'
+import { cn } from '../lib/cn'
 import { useDemoVideo } from '../hooks/useDemoVideo'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
 import { openDemoPicker } from '../lib/demoPickerTrigger'
@@ -36,6 +37,7 @@ function PhoneFrame() {
   const { t } = useTranslation()
   const reducedMotion = usePrefersReducedMotion()
   const demo = useDemoVideo()
+  const showToggle = !reducedMotion && !demo.unavailable
   return (
     <figure className="mx-auto w-[236px] sm:w-[264px] lg:mx-0 lg:justify-self-center" data-testid="hero-phone">
       <div className="relative rounded-[2rem] bg-ink p-[7px] shadow-[0_24px_60px_-20px_rgba(20,20,20,0.45)]">
@@ -56,7 +58,11 @@ function PhoneFrame() {
         </div>
       </div>
       {/* Under reduced motion there is a still and nothing to pause; and no button if no source can be played (DECISIONS #115). */}
-      {!reducedMotion && !demo.unavailable && <HeroVideoToggle demo={demo} />}
+      {showToggle && <HeroVideoToggle demo={demo} />}
+      {/* What the picture is, in one line (DECISIONS #118), under the video and its button. A real <figcaption> of this <figure>: Chromium's
+         accessibility tree exposes it as the figure's Figcaption, read after the video and its button. It does NOT give the figure a name
+         (checked); the video keeps its own label (home.hero.videoAlt). */}
+      <figcaption className={cn('text-center text-sm leading-5 text-muted', showToggle ? 'mt-1' : 'mt-3')}>{t('home.hero.caption')}</figcaption>
     </figure>
   )
 }

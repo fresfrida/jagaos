@@ -7,18 +7,18 @@
  * no green on this page; hierarchy is tone, not a new colour). UPLOAD is the dominant one: a large card
  * in the same near-black as the header's Upload button, linking to /upload, with the number of items
  * waiting for review as a white pill on the card itself (that is where the review list is). ONLY ME is a
- * quieter row under it on a phone, a light tint of black with dark text, linking to /only-me. Neither is embedded:
+ * quieter card next to or under it, a light tint of black with dark text, linking to /only-me. Neither is embedded:
  * no upload rows here, no private files here.
  *
- * On a PHONE (DECISIONS #108) Only me is no longer a thin row: the column is a grid whose two rows are `3fr 2fr`, and in a grid
- * whose height is not fixed the `fr` rows are sized from the content, so Upload's own height becomes 3 parts and Only me is
- * given exactly 2, two thirds of it, whatever Upload's height is (with or without the review-count pill, in any language). The
- * tinted `bg-ink/5` look is kept; the icon and the text are a little larger so the taller card is not an empty box.
+ * The two cards are the SAME SHAPE at every width (DECISIONS #118, which reverses #108): the icon on its own line, then the
+ * title, then the description, with the chevron at the top right, the same padding and the same type scale as Upload. The grid's
+ * rows are `auto-rows-fr`, and in a grid whose height is not fixed the `fr` rows are sized from the content, so both cards are
+ * as tall as the taller one (Upload with its review-count pill, or without it), in any language. #108 had made Only me a
+ * shorter horizontal row on a phone, exactly two thirds of Upload's height (`3fr 2fr`); that is gone.
  *
- * From `lg` (DECISIONS #106) the two sit SIDE BY SIDE, equal height, in a column about 960px wide, and Only me becomes a
- * proper outlined card (a real border on white, the same padding and type scale as the Upload card) instead of the tinted
- * row. Below `lg` nothing changed: one column, the same row. One element per entry, restyled with `lg:` classes, so the
- * two layouts cannot drift apart in content.
+ * From `lg` (DECISIONS #106) the two sit SIDE BY SIDE in a column about 960px wide, and Only me is an outlined card (a real border
+ * on white) instead of the tinted one. One element per entry, restyled with `lg:` colours only, so the two layouts cannot drift
+ * apart in content or in shape.
  *
  * Privacy: a private (Only me) file never surfaces outside the Only me section, so the waiting count
  * leaves out the person's own private files (useWaitingReviews).
@@ -50,10 +50,10 @@ export function SignedInHome() {
     // grows into that space and centres the cards in it, vertically as well as across.
     <Container className="py-8 sm:py-12 lg:flex lg:flex-1 lg:items-center">
       <h1 className="sr-only">{t('home.signedIn.pageTitle')}</h1>
-      {/* About 720px on a phone and a tablet, centred: a full-width slab reads as a wall, not a button. A grid, so from `lg` the
-         two cards share a row and are the same height (the default stretch); below it, a single column with the same 1rem gap
-         the Only me row used to get from its own top margin. */}
-      <div className="mx-auto grid max-w-[720px] grid-rows-[3fr_2fr] gap-4 lg:w-full lg:max-w-[960px] lg:grid-cols-2 lg:grid-rows-none">
+      {/* About 720px on a phone and a tablet, centred: a full-width slab reads as a wall, not a button. A grid with equal rows
+         (`auto-rows-fr`): below `lg` one column, two equal rows; from `lg` one row of two columns. Either way the two cards are the
+         same height (DECISIONS #118). */}
+      <div className="mx-auto grid max-w-[720px] auto-rows-fr gap-4 lg:w-full lg:max-w-[960px] lg:grid-cols-2">
         <Link
           href={routeHref('upload')}
           data-testid="home-upload"
@@ -80,16 +80,17 @@ export function SignedInHome() {
         <Link
           href={routeHref('only-me')}
           data-testid="home-only-me"
-          className="flex items-center justify-between gap-3 rounded-card bg-ink/5 px-5 py-4 transition-colors hover:bg-ink/10 lg:items-start lg:gap-4 lg:border lg:border-line lg:bg-white lg:p-8 lg:hover:border-ink/40 lg:hover:bg-white"
+          className="group block rounded-card bg-ink/5 p-6 transition-colors hover:bg-ink/10 sm:p-8 lg:border lg:border-line lg:bg-white lg:hover:border-ink/40 lg:hover:bg-white"
         >
-          <span className="flex min-w-0 flex-1 items-center gap-3 lg:flex-col lg:items-start lg:gap-4">
-            <Lock size={24} className="shrink-0 text-ink lg:h-8 lg:w-8" aria-hidden="true" />
-            <span className="min-w-0 flex-1 lg:flex-none">
-              <span className="block text-[17px] font-medium text-ink lg:text-3xl lg:font-semibold">{t('header.nav.onlyMe')}</span>
-              <span className="block text-[14px] leading-5 text-muted lg:mt-1.5 lg:text-[16px] lg:leading-6">{t('home.signedIn.onlyMe.hint')}</span>
+          {/* Upload's own arrangement (DECISIONS #118): the icon, then the title, then the description, and the chevron at the top right. */}
+          <span className="flex items-start justify-between gap-4">
+            <span className="min-w-0">
+              <Lock className="h-8 w-8 text-ink" size={24} aria-hidden="true" />
+              <span className="mt-4 block text-2xl font-semibold text-ink sm:text-3xl">{t('header.nav.onlyMe')}</span>
+              <span className="mt-1.5 block text-[16px] leading-6 text-muted">{t('home.signedIn.onlyMe.hint')}</span>
             </span>
+            <ChevronRight size={24} className="mt-1 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </span>
-          <ChevronRight size={16} className="shrink-0 text-muted lg:mt-1 lg:h-6 lg:w-6" aria-hidden="true" />
         </Link>
       </div>
     </Container>

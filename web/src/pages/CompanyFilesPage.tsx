@@ -73,9 +73,10 @@ function CompanyFilesContent() {
 
       <DateRangeFilter basis={dateBasis} range={dateRange} onBasisChange={setDateBasis} onRangeChange={setDateRange} />
 
-      {/* Fixed 6-bucket taxonomy (2026-09-22, DECISIONS #42) — not
-         user-typed, so this is just BUCKETS, no API call. A bucket with nothing in it (inside the date range) has no chip
-         (DECISIONS #109), except the one that is chosen, which stays so it can be un-chosen; "All" is always there. */}
+      {/* Fixed taxonomy of seven buckets (2026-09-22, DECISIONS #42) — not
+         user-typed, so this is just BUCKETS, no API call. EVERY bucket always has its chip, an empty one included, showing (0)
+         (DECISIONS #118, which reverses the hiding of #109): the filter row is navigation, not data, so it does not appear and
+         disappear as the date range or the documents change. "All" comes first. */}
       <div className="mb-4 flex flex-wrap gap-1.5">
         {/* "All" (round 21, A6) clears the bucket filter and is the selected one while none is chosen. */}
         <button
@@ -86,7 +87,7 @@ function CompanyFilesContent() {
         >
           {t('ops.documents.filter.all')} ({inRange.length})
         </button>
-        {BUCKETS.filter((b) => bucketCounts[b] > 0 || activeBucketFilter === b).map((b) => {
+        {BUCKETS.map((b) => {
           const active = activeBucketFilter === b
           return (
             <button

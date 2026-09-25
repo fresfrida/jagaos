@@ -76,7 +76,8 @@
       "imageAlt": "The JagaOS calendar on a phone, showing documents by the day they were uploaded.",
       "videoAlt": "A screen recording of the JagaOS calendar on a phone, switching between English, Chinese, Malay and Tamil.",
       "pauseVideo": "Pause video",
-      "playVideo": "Play video"
+      "playVideo": "Play video",
+      "caption": "Your document calendar, in four languages."
     }
   },
   "header": {
@@ -203,7 +204,7 @@
       "needsReview": "needs review",
       "quarantined": "quarantined",
       "missing": "missing",
-      "satisfied": "satisfied",
+      "satisfied": "on record",
       "open": "open",
       "archived": "archived",
       "purgeRequested": "Purge requested"

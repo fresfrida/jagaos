@@ -76,7 +76,8 @@
       "imageAlt": "手机上的 JagaOS 日历，按上传日期显示文件。",
       "videoAlt": "手机上的 JagaOS 日历屏幕录制，依次切换英文、中文、马来文和泰米尔文。",
       "pauseVideo": "暂停视频",
-      "playVideo": "播放视频"
+      "playVideo": "播放视频",
+      "caption": "您的文件日历，支持四种语言。"
     }
   },
   "companySettings": {
@@ -203,7 +204,7 @@
       "needsReview": "待审核",
       "quarantined": "已隔离",
       "missing": "缺失",
-      "satisfied": "已满足",
+      "satisfied": "已有记录",
       "open": "未处理",
       "archived": "已删除",
       "purgeRequested": "已请求清除"

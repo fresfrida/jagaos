@@ -76,7 +76,8 @@
       "imageAlt": "Kalendar JagaOS pada telefon, menunjukkan dokumen mengikut hari ia dimuat naik.",
       "videoAlt": "Rakaman skrin kalendar JagaOS pada telefon, bertukar antara bahasa Inggeris, Cina, Melayu dan Tamil.",
       "pauseVideo": "Jeda video",
-      "playVideo": "Mainkan video"
+      "playVideo": "Mainkan video",
+      "caption": "Kalendar dokumen anda, dalam empat bahasa."
     }
   },
   "companySettings": {
@@ -203,7 +204,7 @@
       "needsReview": "perlu disemak",
       "quarantined": "dikuarantin",
       "missing": "hilang",
-      "satisfied": "dipenuhi",
+      "satisfied": "dalam rekod",
       "open": "terbuka",
       "archived": "dipadam",
       "purgeRequested": "Hapus kekal diminta"

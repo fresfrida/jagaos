@@ -45,20 +45,22 @@ beforeEach(async () => {
 })
 afterEach(cleanup)
 
-describe('Company Files: buckets with nothing in them are not offered (DECISIONS #109)', () => {
-  it('only the buckets that hold something get a chip, plus All; none is shown as (0)', () => {
+describe('Company Files: every bucket always has a chip, an empty one included (DECISIONS #118, reversing #109)', () => {
+  const ALL_BUCKETS = ['Receivables', 'Expenses', 'Statutory', 'Operations', 'Contracts', 'Memory Lane', 'Miscellaneous']
+  const chips = () => screen.getAllByRole('button', { pressed: false }).map((b) => b.textContent).filter((t) => /\(\d+\)/.test(t ?? ''))
+
+  it('all seven buckets get a chip after All, in the fixed order, an empty one showing (0): the filter row is navigation, not data', () => {
     render(<CompanyFilesPage />) // DOCS are in Expenses and Statutory only
-    expect(screen.getAllByRole('button', { pressed: false }).map((b) => b.textContent).filter((t) => /\(\d+\)/.test(t ?? ''))).toEqual(['Expenses (2)', 'Statutory (2)'])
-    expect(screen.queryByText(/\(0\)/)).toBeNull()
-    for (const name of [/Receivables/, /Operations/, /Contracts/, /Memory Lane/, /Miscellaneous/]) expect(screen.queryByRole('button', { name })).toBeNull()
     expect(button('All (4)')).toBeTruthy()
+    expect(chips()).toEqual(['Receivables (0)', 'Expenses (2)', 'Statutory (2)', 'Operations (0)', 'Contracts (0)', 'Memory Lane (0)', 'Miscellaneous (0)'])
+    for (const name of ALL_BUCKETS) expect(screen.getByRole('button', { name: new RegExp(`^${name} \\(`) })).toBeTruthy()
   })
 
-  it('with no documents at all there is just All (0)', () => {
+  it('with no documents at all there are still All (0) and all seven chips at (0)', () => {
     ops.documents = []
     render(<CompanyFilesPage />)
     expect(button('All (0)')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Expenses|Statutory/ })).toBeNull()
+    expect(chips()).toEqual(ALL_BUCKETS.map((name) => `${name} (0)`))
   })
 })
 
@@ -136,7 +138,7 @@ describe('Company Files: the date range (A7)', () => {
 
     setRange('2026-04-01', '2026-04-30')
     expect(shown()).toEqual(['Doc 4'])
-    expect(screen.queryByRole('button', { name: /Expenses/ })).toBeNull() // nothing in that bucket inside the range: no chip (DECISIONS #109)
+    expect(button(/Expenses \(0\)/)).toBeTruthy() // nothing in that bucket inside the range: the chip stays, at (0) (DECISIONS #118)
 
     setRange('2026-05-01', '2026-05-31') // Statutory is chosen and now has nothing in range
     expect(shown()).toEqual([])
@@ -144,7 +146,7 @@ describe('Company Files: the date range (A7)', () => {
     expect(screen.getByText('No documents match these filters.')).toBeTruthy() // not "No documents uploaded yet."
     fireEvent.click(button(/Statutory \(0\)/))
     expect(button('All (0)').getAttribute('aria-pressed')).toBe('true')
-    expect(screen.queryByRole('button', { name: /Statutory/ })).toBeNull() // un-chosen with nothing in it: gone
+    expect(button(/Statutory \(0\)/).getAttribute('aria-pressed')).toBe('false') // un-chosen with nothing in it: still there, at (0)
   })
 
   it('reads the upload day in the COMPANY timezone', () => {

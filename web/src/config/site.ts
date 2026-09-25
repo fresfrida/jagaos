@@ -32,8 +32,15 @@ export const STACK_ROWS: StackRow[] = [
 export const LEGAL_ENTITY = 'Platform R PCIB Pte Ltd'
 export const COPYRIGHT_YEAR = 2026
 
-/** The footer's bottom row, in order. PLACEHOLDERS: `#` until the real URLs exist (they are needed before the submission,
- * KANBAN). Each id is a key under `footer.links.*`. */
+/** The footer's bottom row, in order. PLACEHOLDERS: `#` until the real destinations exist (they are needed before the submission,
+ * KANBAN). Each id is a key under `footer.links.*`.
+ *
+ * All three open in a NEW TAB (Footer.tsx sets `target="_blank" rel="noopener noreferrer"` on every link, DECISIONS #118), so the
+ * landing page is never navigated away from; and a link that is still `#` goes nowhere at all (its click is swallowed there).
+ * Shipping a destination is ONLY the `href` here, no JSX and no behaviour change:
+ *   - video: the YouTube URL, an external site (for example 'https://youtu.be/...');
+ *   - proposal and techWriteUp: a PDF dropped into `web/public/`, which is served from the site root exactly as the icons are
+ *     (Vercel and the Caddyfile's catch-all both do), then the href is its path (for example '/jagaos-proposal.pdf'). */
 export const FOOTER_LINKS = [
   { id: 'video', href: '#' },
   { id: 'proposal', href: '#' },

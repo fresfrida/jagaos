@@ -9,7 +9,7 @@ vi.mock('../router/navigate', () => ({ navigate: vi.fn() }))
 import { DEMO_OWNER_EMAIL } from '../config/demo'
 import { DemoPickerHost } from '../features/auth/DemoPickerHost'
 import { navigate } from '../router/navigate'
-import { HERO_POSTER } from './HeroVideo'
+import { HERO_PLAYBACK_RATE, HERO_POSTER } from './HeroVideo'
 import { WelcomeHero } from './WelcomeHero'
 
 /** jsdom has no `matchMedia`; this is the person's "reduce motion" setting, on or off. */
@@ -34,7 +34,7 @@ afterEach(() => {
 })
 
 const HERO_KEYS = [
-  'home.hero.headline', 'home.hero.subhead', 'home.hero.imageAlt', 'home.hero.videoAlt',
+  'home.hero.headline', 'home.hero.subhead', 'home.hero.imageAlt', 'home.hero.videoAlt', 'home.hero.caption',
   'home.features.capture.title', 'home.features.capture.text', 'home.features.review.title', 'home.features.review.text',
   'home.features.remember.title', 'home.features.remember.text',
 ]
@@ -62,6 +62,43 @@ describe('WelcomeHero', () => {
     expect(video.getAttribute('aria-label')).toBe('A screen recording of the JagaOS calendar on a phone, switching between English, Chinese, Malay and Tamil.')
     expect(Number(video.getAttribute('width')) / Number(video.getAttribute('height'))).toBeCloseTo(375 / 812, 2) // the size it was recorded at: no layout jump
     expect(play).toHaveBeenCalledTimes(1)
+  })
+
+  it('plays at 1.5x, set as the default rate too so a reload of the media cannot slow it (DECISIONS #118)', () => {
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    const video = screen.getByTestId('hero-phone').querySelector('video')!
+    expect(video.playbackRate).toBe(HERO_PLAYBACK_RATE)
+    expect(video.defaultPlaybackRate).toBe(HERO_PLAYBACK_RATE)
+    expect(HERO_PLAYBACK_RATE).toBe(1.5)
+  })
+
+  it('has a one-line caption under the video and its button, as the figure\'s own <figcaption> (DECISIONS #118)', () => {
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    const frame = screen.getByTestId('hero-phone')
+    const caption = frame.querySelector('figcaption')!
+    expect(caption.textContent).toBe('Your document calendar, in four languages.')
+    expect(caption.parentElement).toBe(frame)
+    expect(caption.previousElementSibling!.querySelector('button')!.textContent).toBe('Pause video') // right after the toggle's row, so under both
+    expect(within(frame).getByRole('button', { name: 'Pause video' })).toBeTruthy()
+    expect(frame.tagName).toBe('FIGURE') // the caption is a real <figcaption> of a real <figure>; the figure's computed name is checked in a real browser (jsdom's naming does not do figcaption)
+  })
+
+  it.each([
+    ['zh', '您的文件日历，支持四种语言。'],
+    ['ms', 'Kalendar dokumen anda, dalam empat bahasa.'],
+    ['ta', 'உங்கள் ஆவண நாட்காட்டி, நான்கு மொழிகளில்.'],
+  ])('the caption is translated (%s)', async (language, text) => {
+    await i18n.changeLanguage(language)
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    expect(screen.getByTestId('hero-phone').querySelector('figcaption')!.textContent).toBe(text)
+  })
+
+  it('under reduced motion the caption is still there, under the still', () => {
+    reduceMotion(true)
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    const frame = screen.getByTestId('hero-phone')
+    expect(frame.querySelector('figcaption')!.textContent).toBe('Your document calendar, in four languages.')
+    expect(frame.querySelector('button')).toBeNull()
   })
 
   it('offers H.264 first, then VP9 for a browser built without it', () => {

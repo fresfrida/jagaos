@@ -40,6 +40,28 @@ describe('ComplianceChecklistSection', () => {
     expect(documents).toHaveBeenCalledTimes(1)
   })
 
+  it('a held row reads "on record", the displayed word for the satisfied status; the status itself is still `satisfied` (DECISIONS #118)', async () => {
+    expectations.mockResolvedValue([exp(1, 'satisfied', 9), exp(2, 'missing')])
+    documents.mockResolvedValue([evidenceDoc])
+    render(<ComplianceChecklistSection enabled />)
+    await screen.findAllByTestId('checklist-row')
+    const [held, missing] = screen.getAllByTestId('checklist-row')
+    expect(held!.textContent).toContain('on record')
+    expect(held!.textContent).not.toContain('satisfied')
+    expect(missing!.textContent).toContain('missing') // the other status word is untouched
+    expect(screen.getByText('Compliance checklist: 1 of 2 held')).toBeTruthy() // still counted by the enum, which did not change
+  })
+
+  it.each([
+    ['en', 'on record'],
+    ['zh', '已有记录'],
+    ['ms', 'dalam rekod'],
+    ['ta', 'பதிவில் உள்ளது'],
+  ])('the satisfied status is worded "%s" in every language (only the display string changed)', async (language, word) => {
+    await i18n.changeLanguage(language)
+    expect(i18n.t('ops.status.satisfied')).toBe(word)
+  })
+
   it('a missing row offers Upload, because everyone who can see Company Settings can upload', async () => {
     expectations.mockResolvedValue([exp(2, 'missing')])
     documents.mockResolvedValue([])

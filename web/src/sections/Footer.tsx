@@ -51,6 +51,9 @@ export function Footer({ visible = true }: { visible?: boolean }) {
                      heavier than the muted body text (DECISIONS #111): they read as hard to see at 14px regular. Same colour. */}
                   <a
                     href={href}
+                    // New tab for all three (DECISIONS #118): the video is another site and the PDFs are documents; the landing page stays put.
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={href === '#' ? (event) => event.preventDefault() : undefined}
                     className="inline-flex min-h-[44px] items-center text-[15px] font-medium text-muted underline-offset-4 transition-colors hover:text-ink hover:underline sm:min-h-0"
                   >
