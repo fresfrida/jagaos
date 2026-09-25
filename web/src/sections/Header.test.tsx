@@ -9,7 +9,7 @@ import i18n from '../i18n'
 const auth = vi.hoisted(() => ({ value: { status: 'signed-out', user: null, role: null } as Record<string, unknown> }))
 vi.mock('../features/auth/AuthContext', () => ({ useAuth: () => auth.value }))
 vi.mock('../hooks/useScrolled', () => ({ useScrolled: () => false }))
-vi.mock('../features/auth/CompanySwitcher', () => ({ CompanySwitcher: () => null }))
+vi.mock('../features/auth/CompanySwitcher', () => ({ CompanySwitcher: ({ className }: { className?: string }) => <div data-testid="switcher" className={className} /> }))
 vi.mock('../lib/demoPickerTrigger', () => ({ openDemoPicker: vi.fn() }))
 
 import { openDemoPicker } from '../lib/demoPickerTrigger'
@@ -85,6 +85,16 @@ describe('Header, signed in: the exact list per role', () => {
     expect(screen.getByRole('navigation').className).toContain('hidden')
     expect(screen.getByRole('navigation').className).toContain('sm:block')
     expect(screen.getByRole('link', { name: 'Upload' }).parentElement!.className).toContain('sm:block')
+  })
+
+  it('the inline company switcher is capped wide enough for a whole company name, and only from xl (DECISIONS #109)', () => {
+    auth.value = signedIn('owner')
+    render(<Header current="calendar" />)
+    const cls = screen.getByTestId('switcher').className
+    expect(cls).toContain('max-w-[240px]') // it was 170px, which cut "Try Demo Pte Ltd" to "Try De..."
+    expect(cls).not.toContain('max-w-[170px]')
+    expect(cls).toContain('hidden')
+    expect(cls).toContain('xl:block') // below xl the same control is in the account menu
   })
 
   it('Calendar and Company Files are inline from sm; Search and Only me only from lg, where the header has the room', () => {

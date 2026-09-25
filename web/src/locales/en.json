@@ -53,7 +53,7 @@
       },
       "remember": {
         "title": "Remember",
-        "text": "Deadlines surface before they cost you."
+        "text": "Nothing gets lost. Everything stays one search away."
       }
     },
     "signedIn": {
@@ -72,10 +72,9 @@
     },
     "hero": {
       "headline": "JagaOS remembers, so you don't need to.",
-      "subhead": "Upload a document. JagaOS reads it, finds the dates and obligations, and keeps everything one search away.",
+      "subhead": "Upload a document. JagaOS reads it, finds the dates and details, and keeps everything one search away.",
       "imageAlt": "The JagaOS calendar on a phone, showing documents by the day they were uploaded."
-    },
-    "closing": "So you can focus on the work that matters."
+    }
   },
   "header": {
     "primaryNav": "Primary",
@@ -339,7 +338,9 @@
         "yes": "Yes",
         "no": "No",
         "notStated": "Not stated"
-      }
+      },
+      "empty": "Nothing waiting for review",
+      "emptyHint": "A document you upload waits here until someone confirms what was read from it."
     },
     "companyFiles": {
       "heading": "Company Files"
@@ -367,12 +368,12 @@
       "editForbidden": "You don't have permission to edit this document.",
       "noDocumentDate": "No document date",
       "view": "View",
-      "trace": "Trace",
+      "trace": "AI trace",
       "edit": "Edit",
       "delete": "Delete",
       "deleteConfirmMessage": "Delete {{filename}}? This can't be undone.",
       "moreActions": "More actions",
-      "traceHeading": "Trace: document #{{documentId}} · total ${{cost}}",
+      "traceHeading": "AI trace: document #{{documentId}} · total ${{cost}}",
       "traceTable": {
         "node": "Node",
         "model": "Model",
@@ -393,7 +394,10 @@
         "dateTo": "To",
         "dateClear": "Clear dates",
         "dateBackwards": "The start date is after the end date.",
-        "noMatch": "No documents match these filters."
+        "noMatch": "No documents match these filters.",
+        "echoBoth": "Showing {{from}} to {{to}}",
+        "echoFrom": "Showing from {{from}}",
+        "echoTo": "Showing up to {{to}}"
       },
       "purgeRequest": {
         "button": "Purge",
@@ -401,7 +405,9 @@
         "confirm": "Purge",
         "done": "Purge requested for \"{{filename}}\". Everyone else no longer sees it. It stays here, marked, until the team removes it permanently.",
         "pending": "Purge requested: the team removes it permanently."
-      }
+      },
+      "rejectedTitle": "Rejected document",
+      "deleteAlsoPurge": "Also remove it permanently"
     },
     "dates": {
       "uploadDate": "Upload date",
@@ -491,6 +497,9 @@
     },
     "visibility": {
       "onlyYou": "Only you"
+    },
+    "calendar": {
+      "description": "Your documents, by date."
     }
   },
   "onlyMe": {

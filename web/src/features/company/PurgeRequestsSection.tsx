@@ -6,7 +6,9 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { formatShortDate, localeFor } from '../../lib/dates'
+import { FileName } from '../../components/ui/FileName'
 import { middleEllipsis } from '../../lib/filename'
+import { formatDocumentLabel } from '../ops/opsShared'
 import { usePurgeRequests } from './usePurgeRequests'
 
 export function PurgeRequestsSection({ enabled }: { enabled: boolean }) {
@@ -34,7 +36,17 @@ export function PurgeRequestsSection({ enabled }: { enabled: boolean }) {
             <ul className="divide-y divide-line">
               {state.requests.map((request) => (
                 <li key={request.id} className="px-4 py-3" data-testid="purge-request-row">
-                  <p className="break-words text-[14px] font-medium text-ink">{middleEllipsis(request.filename, 60)}</p>
+                  {/* The document's own label first (vendor and type, or its description), the file name only as small text under it
+                     (DECISIONS #109), exactly as the Calendar's day list does; with no label to show, the file name is the title. */}
+                  <p className="break-words text-[14px] font-medium text-ink">
+                    {formatDocumentLabel(
+                      { vendor_name: request.vendor_name ?? null, doc_type: request.doc_type ?? null, description: request.description ?? null },
+                      i18n.language,
+                    ) || middleEllipsis(request.filename, 60)}
+                  </p>
+                  {(request.vendor_name || request.doc_type || request.description) && (
+                    <FileName name={request.filename} max={40} className="block truncate text-[12px] text-muted" />
+                  )}
                   <p className="mt-0.5 text-[13px] text-ink">{t('companySettings.purgeRequests.status')}</p>
                   <p className="mt-0.5 text-[13px] text-muted">
                     {t('companySettings.purgeRequests.by', {

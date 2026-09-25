@@ -3,6 +3,8 @@
  * own copy. Extracts FastAPI's {"detail": "..."} error body into a plain
  * message instead of surfacing raw JSON in the UI. */
 
+import { trackRequest } from './pendingRequests'
+
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
 /** Thrown by apiRequest on a non-2xx response. Carries the HTTP status so
@@ -26,7 +28,12 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+/** Every JSON call goes through here, and each one is counted while it is in flight (lib/pendingRequests.ts). */
+export function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  return trackRequest(send<T>(path, init))
+}
+
+async function send<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, init)
   if (!res.ok) {
     const bodyText = await res.text()

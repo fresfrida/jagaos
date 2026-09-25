@@ -51,3 +51,29 @@ describe('the calendar route', () => {
     }
   })
 })
+
+describe('the calendar page\'s title and subtitle (DECISIONS #108, the subtitle\'s final text from the senior UI/UX batch)', () => {
+  const signedIn = () => { auth.value = { status: 'signed-in', role: 'owner' } }
+
+  it('says what the calendar is and who sees it', () => {
+    signedIn()
+    render(<Page route="calendar" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Calendar')
+    expect(screen.getByText('Your documents, by date.')).toBeTruthy()
+    expect(screen.queryByText(/events and deadlines/i)).toBeNull() // the old subtitle
+    expect(screen.queryByText(/everyone in the team/i)).toBeNull() // and the text this replaced within the same day (DECISIONS #108)
+  })
+
+  it.each([
+    ['zh', '日历', '您的文件，按日期排列。'],
+    ['ms', 'Kalendar', 'Dokumen anda, mengikut tarikh.'],
+    ['ta', 'நாட்காட்டி', 'உங்கள் ஆவணங்கள், தேதி வாரியாக.'],
+  ])('is translated in %s, title and subtitle', async (language, title, subtitle) => {
+    signedIn()
+    await i18n.changeLanguage(language)
+    render(<Page route="calendar" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(title)
+    expect(screen.getByText(subtitle)).toBeTruthy()
+  })
+})
+

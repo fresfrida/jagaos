@@ -46,6 +46,7 @@ import { Link } from '../../router/Link'
 import { useAuth } from '../auth/AuthContext'
 import { DateBasisToggle } from '../ops/DateBasisToggle'
 import { documentDay } from '../ops/documentDates'
+import { documentsForCalendar } from '../ops/documentStatus'
 import { companyFilesDocumentHref } from '../ops/documentLinks'
 import { DocumentTypeIcon, StatusPill, bucketLabel, formatDocumentLabel } from '../ops/opsShared'
 import type { DocumentRow } from '../ops/opsApi'
@@ -91,8 +92,11 @@ function DateGroupRow({ doc }: { doc: DocumentRow }) {
   )
 }
 
-export function DatesView({ documents }: { documents: DocumentRow[] }) {
+export function DatesView({ documents: allDocuments }: { documents: DocumentRow[] }) {
   const { t, i18n } = useTranslation()
+  // A rejected document (a legacy state, features/ops/documentStatus.ts) is not one the company holds: it is not grouped by day, counted in
+  // the grid, or listed under a day (DECISIONS #109).
+  const documents = useMemo(() => documentsForCalendar(allDocuments), [allDocuments])
   const { company } = useAuth()
   // 2026-09-24 (company-local dates, item 2): every company row has a
   // real timezone now (backend default 'Asia/Singapore'), so the fallback

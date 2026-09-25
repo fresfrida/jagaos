@@ -10,6 +10,11 @@
  * quieter row under it on a phone, a light tint of black with dark text, linking to /only-me. Neither is embedded:
  * no upload rows here, no private files here.
  *
+ * On a PHONE (DECISIONS #108) Only me is no longer a thin row: the column is a grid whose two rows are `3fr 2fr`, and in a grid
+ * whose height is not fixed the `fr` rows are sized from the content, so Upload's own height becomes 3 parts and Only me is
+ * given exactly 2, two thirds of it, whatever Upload's height is (with or without the review-count pill, in any language). The
+ * tinted `bg-ink/5` look is kept; the icon and the text are a little larger so the taller card is not an empty box.
+ *
  * From `lg` (DECISIONS #106) the two sit SIDE BY SIDE, equal height, in a column about 960px wide, and Only me becomes a
  * proper outlined card (a real border on white, the same padding and type scale as the Upload card) instead of the tinted
  * row. Below `lg` nothing changed: one column, the same row. One element per entry, restyled with `lg:` classes, so the
@@ -41,12 +46,14 @@ export function SignedInHome() {
   const waitingKey = waiting.mine > 0 ? 'home.signedIn.review.mine' : 'home.signedIn.review.pending'
 
   return (
-    <Container className="py-8 sm:py-12">
+    // From `lg` the App shell makes this page fill the viewport (router/routes.ts FIT_VIEWPORT_ROUTES, DECISIONS #109), and this container
+    // grows into that space and centres the cards in it, vertically as well as across.
+    <Container className="py-8 sm:py-12 lg:flex lg:flex-1 lg:items-center">
       <h1 className="sr-only">{t('home.signedIn.pageTitle')}</h1>
       {/* About 720px on a phone and a tablet, centred: a full-width slab reads as a wall, not a button. A grid, so from `lg` the
          two cards share a row and are the same height (the default stretch); below it, a single column with the same 1rem gap
          the Only me row used to get from its own top margin. */}
-      <div className="mx-auto grid max-w-[720px] gap-4 lg:max-w-[960px] lg:grid-cols-2">
+      <div className="mx-auto grid max-w-[720px] grid-rows-[3fr_2fr] gap-4 lg:w-full lg:max-w-[960px] lg:grid-cols-2 lg:grid-rows-none">
         <Link
           href={routeHref('upload')}
           data-testid="home-upload"
@@ -73,12 +80,12 @@ export function SignedInHome() {
         <Link
           href={routeHref('only-me')}
           data-testid="home-only-me"
-          className="flex items-center justify-between gap-3 rounded-card bg-ink/5 px-4 py-3.5 transition-colors hover:bg-ink/10 lg:items-start lg:gap-4 lg:border lg:border-line lg:bg-white lg:p-8 lg:hover:border-ink/40 lg:hover:bg-white"
+          className="flex items-center justify-between gap-3 rounded-card bg-ink/5 px-5 py-4 transition-colors hover:bg-ink/10 lg:items-start lg:gap-4 lg:border lg:border-line lg:bg-white lg:p-8 lg:hover:border-ink/40 lg:hover:bg-white"
         >
           <span className="flex min-w-0 flex-1 items-center gap-3 lg:flex-col lg:items-start lg:gap-4">
-            <Lock size={18} className="shrink-0 text-ink lg:h-8 lg:w-8" aria-hidden="true" />
+            <Lock size={24} className="shrink-0 text-ink lg:h-8 lg:w-8" aria-hidden="true" />
             <span className="min-w-0 flex-1 lg:flex-none">
-              <span className="block text-[15px] font-medium text-ink lg:text-3xl lg:font-semibold">{t('header.nav.onlyMe')}</span>
+              <span className="block text-[17px] font-medium text-ink lg:text-3xl lg:font-semibold">{t('header.nav.onlyMe')}</span>
               <span className="block text-[14px] leading-5 text-muted lg:mt-1.5 lg:text-[16px] lg:leading-6">{t('home.signedIn.onlyMe.hint')}</span>
             </span>
           </span>

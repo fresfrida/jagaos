@@ -30,6 +30,7 @@ describe('DocumentCard for a purge the owner asked for', () => {
   it('an ordinary filed document, by contrast, keeps every action and shows no such marker', () => {
     show('filed')
     expect(screen.queryByTestId('purge-pending-note')).toBeNull()
-    for (const name of [/^view$/i, /^edit$/i, /^delete$/i, /^purge$/i, /more actions/i]) expect(screen.getByRole('button', { name }), String(name)).toBeTruthy()
+    for (const name of [/^view$/i, /^edit$/i, /^delete$/i, /more actions/i]) expect(screen.getByRole('button', { name }), String(name)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^purge$/i })).toBeNull() // permanent removal is a choice inside Delete's confirmation now (DECISIONS #109)
   })
 })

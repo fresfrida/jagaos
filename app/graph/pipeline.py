@@ -6,11 +6,18 @@
                                               |   derive_expectations
                                               v         |
                                        human_review     v
-                                              |   derive_obligations
+                                              |   [derive_obligations]   <- NOT in the graph (see below)
                                               +---------+
                                                     |
                                                     v
                                                  archive
+
+`derive_obligations` (company FYE -> the statutory clock -> dated duties) is switched OFF (DECISIONS #108): nothing is computed
+from a company's financial year end for now, because the intended source of obligations is a future ACRA API integration. It is
+switched off at the WIRING, not deleted: the node (app/graph/derive_obligations.py) and the rules under it
+(app/rules/statutory.py) are unchanged and still tested on their own, and turning it back on is one constant
+(DERIVE_OBLIGATIONS_ENABLED below). With it off, derive_expectations goes straight to archive and no new `obligation` row is
+ever created; rows already in a database are left alone and still served by GET /api/obligations.
 
 `ingest` runs before the graph (app/main.py) because it creates the
 document row the rest of state is keyed on. Everything from `classify`
@@ -55,7 +62,11 @@ def _route_after_human_review(state: PipelineState) -> str:
     return "derive_events"
 
 
-def build_graph():
+# DECISIONS #108. Flip to True to put the obligations node back between derive_expectations and archive.
+DERIVE_OBLIGATIONS_ENABLED = False
+
+
+def build_graph(derive_obligations_enabled: bool = DERIVE_OBLIGATIONS_ENABLED):
     graph = StateGraph(PipelineState)
     graph.add_node("classify", classify)
     graph.add_node("extract", extract)
@@ -63,7 +74,6 @@ def build_graph():
     graph.add_node("human_review", human_review)
     graph.add_node("derive_events", derive_events)
     graph.add_node("derive_expectations", derive_expectations)
-    graph.add_node("derive_obligations", derive_obligations)
     graph.add_node("archive", archive)
 
     graph.set_entry_point("classify")
@@ -74,8 +84,12 @@ def build_graph():
     graph.add_conditional_edges("human_review", _route_after_human_review,
                                  {"derive_events": "derive_events", END: END})
     graph.add_edge("derive_events", "derive_expectations")
-    graph.add_edge("derive_expectations", "derive_obligations")
-    graph.add_edge("derive_obligations", "archive")
+    if derive_obligations_enabled:
+        graph.add_node("derive_obligations", derive_obligations)
+        graph.add_edge("derive_expectations", "derive_obligations")
+        graph.add_edge("derive_obligations", "archive")
+    else:
+        graph.add_edge("derive_expectations", "archive")
     graph.add_edge("archive", END)
 
     return graph.compile(checkpointer=MemorySaver())

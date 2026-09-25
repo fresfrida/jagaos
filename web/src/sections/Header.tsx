@@ -103,7 +103,7 @@ export function Header({ current }: { current: ResolvedRoute }) {
               {/* Inline from `xl` (it was `lg` until four nav items needed the room); narrower, the same control is in the
                  user menu (an inline select does not fit beside the rest). Renders nothing for anyone with fewer than
                  two companies. */}
-              <CompanySwitcher className="hidden max-w-[170px] xl:block" />
+              <CompanySwitcher className="hidden max-w-[240px] xl:block" />
               <UserMenu />
               {/* The single solid button, in the slot Get Started had. Not on
                  a phone (the bottom nav's centre button is Upload) and not for

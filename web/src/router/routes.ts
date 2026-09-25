@@ -25,10 +25,14 @@ export interface RouteConfig {
 
 export const ROUTES: Record<RouteId, RouteConfig> = {
   home: { path: '/', title: 'Home' },
+  // The subtitle is translated (DECISIONS #108): titleKey/descriptionKey, like the other app pages. `title`/`description` stay the
+  // English fallbacks, and `title` is still what the browser tab shows.
   calendar: {
     path: '/calendar',
     title: 'Calendar',
-    description: 'Events and deadlines, with the documents, decisions and people behind them.',
+    description: 'Your documents, by date.',
+    titleKey: 'header.nav.calendar',
+    descriptionKey: 'ops.calendar.description',
   },
   'how-it-works': { path: '/how-it-works', title: 'How it works' },
   stack: {
@@ -53,6 +57,12 @@ export const ROUTES: Record<RouteId, RouteConfig> = {
   // Round 19 (DECISIONS #94): the person's private space, in the account menu (user and above).
   'only-me': { path: '/only-me', title: 'Only me', titleKey: 'onlyMe.heading', descriptionKey: 'onlyMe.description' },
 }
+
+/** Signed-in pages that FILL the viewport at desktop width (from `lg`), so their footer is at the bottom of the screen and their content
+ * is centred between the header and the footer, with no scrolling (DECISIONS #109). Only the signed-in home, a short hub. Every other
+ * page keeps the general rule (DECISIONS #108): `<main>` is as tall as its content and the footer sits directly under it. App.tsx reads
+ * this; no page sets its own height. */
+export const FIT_VIEWPORT_ROUTES: readonly RouteId[] = ['home']
 
 /** The signed-in DESKTOP header's inline nav, in order (DECISIONS #106): the four pages a person opens all day. Round 14
  * (DECISIONS #88) had shrunk it to Calendar and Company Files, with Tags, Search, Only me and Company Settings in the account

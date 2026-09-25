@@ -391,7 +391,9 @@ def test_purging_a_confirmed_statutory_document_removes_what_the_pipeline_derive
     stored = Path(_count_value("SELECT stored_path FROM document WHERE id = ?", doc_id))
     assert stored.exists()
     assert _count("SELECT COUNT(*) FROM event WHERE source_document_id = ?", doc_id) == 1
-    assert _count("SELECT COUNT(*) FROM obligation") >= 1, "the pipeline derived obligations from the event"
+    # DECISIONS #108: the pipeline no longer derives obligations (the obligations node is not in the graph), so none exist here;
+    # purge removing an obligation row is covered by the test above, which inserts one by hand.
+    assert _count("SELECT COUNT(*) FROM obligation") == 0, "the pipeline derives no obligations"
     assert _count("SELECT COUNT(*) FROM expectation") >= 1
 
     code, out = purge([doc_id], apply=True)

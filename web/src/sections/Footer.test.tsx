@@ -95,3 +95,53 @@ describe('Footer, signed in', () => {
     expect(PHONE_BOTTOM_NAV_CLEARANCE).toContain('env(safe-area-inset-bottom)')
   })
 })
+
+describe('Footer layout (DECISIONS #108)', () => {
+  it('PHONE: everything is centred in one column, in order: mark, tagline, copyright, Get Started, then the links', () => {
+    const { container } = render(<Footer />)
+    const top = container.querySelector('footer > div > div')!
+    expect(top.className).toContain('flex-col')
+    expect(top.className).toContain('items-center')
+    expect(top.className).toContain('text-center')
+    const order = [...container.querySelectorAll('footer a, footer p, footer button')].map((n) => n.textContent)
+    expect(order).toEqual([
+      'JagaOS', "JagaOS keeps your team's memory on record.", '© 2026 Platform R PCIB Pte Ltd. All rights reserved.',
+      'Get Started', 'Watch our intro video', 'Proposal (Business, PDF)', 'Tech Write Up (PDF)',
+    ])
+  })
+
+  it('PHONE: the three links are one per row, centred, each a 44px-tall tap target', () => {
+    render(<Footer />)
+    const list = screen.getByRole('navigation', { name: 'Footer links' }).querySelector('ul')!
+    expect(list.className).toContain('flex-col')
+    expect(list.className).toContain('items-center')
+    for (const link of within(list).getAllByRole('link')) expect(link.className).toContain('min-h-[44px]')
+  })
+
+  it('DESKTOP (sm and up) keeps the layout it had: brand block left, Get Started right, links in a row', () => {
+    const { container } = render(<Footer />)
+    const top = container.querySelector('footer > div > div')!
+    for (const cls of ['sm:flex-row', 'sm:items-start', 'sm:justify-between', 'sm:text-left']) expect(top.className, cls).toContain(cls)
+    expect(screen.getByRole('button', { name: 'Get Started' }).className).toContain('sm:self-start')
+    const list = screen.getByRole('navigation', { name: 'Footer links' }).querySelector('ul')!
+    for (const cls of ['sm:flex-row', 'sm:flex-wrap', 'sm:gap-x-6']) expect(list.className, cls).toContain(cls)
+    for (const link of within(list).getAllByRole('link')) expect(link.className).toContain('sm:min-h-0') // no tap-target padding on a desktop row
+  })
+})
+
+describe('Footer visibility (DECISIONS #108)', () => {
+  it('is seen by default', () => {
+    const { container } = render(<Footer />)
+    expect(container.querySelector('footer')!.className).not.toContain('invisible')
+  })
+
+  it('while its page is still loading it is laid out but invisible: no half-page footer to jump down', () => {
+    const { container } = render(<Footer visible={false} />)
+    const footer = container.querySelector('footer')!
+    expect(footer.className).toContain('invisible') // visibility: hidden keeps its space and removes it from the accessibility tree
+    expect(footer.className).toContain('opacity-0')
+    expect(footer.className).toContain('transition-opacity') // and fades in once the page has settled
+    expect(footer.className).toContain('motion-reduce:transition-none')
+  })
+})
+

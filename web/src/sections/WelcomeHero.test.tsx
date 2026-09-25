@@ -22,15 +22,15 @@ const HERO_KEYS = [
   'home.hero.headline', 'home.hero.subhead', 'home.hero.imageAlt',
   'home.features.capture.title', 'home.features.capture.text', 'home.features.review.title', 'home.features.review.text',
   'home.features.remember.title', 'home.features.remember.text',
-  'home.closing',
 ]
 
 describe('WelcomeHero', () => {
   it('says what JagaOS does in one line, one supporting sentence, and offers the demo picker', () => {
     render(<><WelcomeHero /><DemoPickerHost /></>)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe("JagaOS remembers, so you don't need to.")
-    expect(screen.getByText('Upload a document. JagaOS reads it, finds the dates and obligations, and keeps everything one search away.')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: 'Pick a demo role' })).toHaveLength(2) // the hero's, and the one under the closing line
+    expect(screen.getByText('Upload a document. JagaOS reads it, finds the dates and details, and keeps everything one search away.')).toBeTruthy()
+    expect(screen.queryByText(/obligations/i)).toBeNull() // the subhead no longer promises them (DECISIONS #108)
+    expect(screen.getAllByRole('button', { name: 'Pick a demo role' })).toHaveLength(1) // the hero's: the closing section's second button is gone
   })
 
   it('shows a real screenshot of the app in a phone frame, with a description for people who cannot see it', () => {
@@ -41,12 +41,13 @@ describe('WelcomeHero', () => {
     expect(Number(shot.getAttribute('width')) / Number(shot.getAttribute('height'))).toBeCloseTo(375 / 812, 1) // the size it was taken at: no layout jump
   })
 
-  it('has three cards, Capture, Review and Remember, and nothing between them and the closing line', () => {
+  it('has three cards, Capture, Review and Remember, and the page ends after them', () => {
     render(<><WelcomeHero /><DemoPickerHost /></>)
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Capture', 'Review', 'Remember'])
     expect(screen.getByText('A photo becomes a filed document.')).toBeTruthy()
     expect(screen.getByText('It reads. You confirm.')).toBeTruthy()
-    expect(screen.getByText('Deadlines surface before they cost you.')).toBeTruthy()
+    expect(screen.getByText('Nothing gets lost. Everything stays one search away.')).toBeTruthy()
+    expect(screen.queryByText('Deadlines surface before they cost you.')).toBeNull()
   })
 
   it('has no "How it works" section any more (DECISIONS #106): no heading, no Upload. Read. Confirm. beats', () => {
@@ -57,11 +58,13 @@ describe('WelcomeHero', () => {
     expect(i18n.exists('home.how.heading')).toBe(false) // and the strings went with it
   })
 
-  it('ends on a closing line, above the call to action again', () => {
-    render(<><WelcomeHero /><DemoPickerHost /></>)
-    const closing = screen.getByTestId('closing')
-    expect(within(closing).getByText('So you can focus on the work that matters.')).toBeTruthy()
-    expect(within(closing).getByRole('button', { name: 'Pick a demo role' })).toBeTruthy()
+  it('has NO closing section: no closing line, no second call to action; the page ends after the three cards (DECISIONS #108)', () => {
+    const { container } = render(<><WelcomeHero /><DemoPickerHost /></>)
+    expect(screen.queryByTestId('closing')).toBeNull()
+    expect(screen.queryByText('So you can focus on the work that matters.')).toBeNull()
+    expect(i18n.exists('home.closing')).toBe(false) // and its strings went with it
+    const cards = screen.getByRole('list')
+    expect(container.querySelector('section')!.lastElementChild!.lastElementChild).toBe(cards) // the cards are the last thing in the page
   })
 
   it('has no Sign in button in the body, and no Log In anywhere: the demo picker is the one way in', () => {
@@ -83,18 +86,11 @@ describe('WelcomeHero', () => {
     await i18n.changeLanguage('en')
   })
 
-  it('the button under the closing line opens the same picker', () => {
-    render(<><WelcomeHero /><DemoPickerHost /></>)
-    fireEvent.click(within(screen.getByTestId('closing')).getByRole('button', { name: 'Pick a demo role' }))
-    expect(screen.getByRole('dialog', { name: 'Try the demo as' })).toBeTruthy()
-    expect(login).not.toHaveBeenCalled()
-  })
-
   it('the demo button opens the picker and signs nobody in by itself', () => {
     render(<><WelcomeHero /><DemoPickerHost /></>)
     expect(screen.queryByRole('dialog')).toBeNull()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Pick a demo role' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Pick a demo role' }))
 
     expect(screen.getByRole('dialog', { name: 'Try the demo as' })).toBeTruthy()
     expect(login).not.toHaveBeenCalled()
@@ -104,7 +100,7 @@ describe('WelcomeHero', () => {
   it('choosing the owner in the picker is the ordinary login with the demo owner email, then the same landing page as the form', async () => {
     login.mockResolvedValue(undefined)
     render(<><WelcomeHero /><DemoPickerHost /></>)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Pick a demo role' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Pick a demo role' }))
 
     fireEvent.click(screen.getByRole('button', { name: /^Owner/ }))
 

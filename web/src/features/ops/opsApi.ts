@@ -148,6 +148,11 @@ export interface SearchTerm {
 export interface PurgeRequest {
   id: number
   filename: string
+  /** What names the document as a person would (DECISIONS #109): the same columns a document card uses. Optional, because a backend
+   * from before that change does not send them; the section then shows the file name alone, as it always did. */
+  description?: string | null
+  doc_type?: string | null
+  vendor_name?: string | null
   requested_at: string
   requested_by: string | null
 }

@@ -307,7 +307,9 @@ def test_the_owner_sees_their_companys_pending_requests_newest_first(team):
     assert listed.status_code == 200
     body = listed.json()
     assert [r["id"] for r in body] == [second, first]
-    assert set(body[0]) == {"id", "filename", "requested_at", "requested_by"}   # no content, no extracted text
+    # The label fields (DECISIONS #109) are the short summary and metadata the document cards already show. Still no content and no extracted text.
+    assert set(body[0]) == {"id", "filename", "description", "doc_type", "vendor_name", "requested_at", "requested_by"}
+    assert not {"extracted_text", "stored_path", "sha256"} & set(body[0])
     assert body[0]["requested_by"] == "owner@preq.test" and body[0]["filename"] == _row(second)["filename"]
 
 
@@ -318,6 +320,33 @@ def test_only_the_owner_can_read_the_list(team, actor):
 
 def test_the_list_needs_a_session(team):
     assert client.get("/api/purge-requests").status_code == 401
+
+
+def test_each_listed_request_carries_what_names_the_document_as_a_person_would_not_only_its_file_name(team):
+    # DECISIONS #109: the Company Settings section shows a real label first and the file name under it, which needs these columns.
+    doc = _filed_company_doc(team)
+    with get_conn() as conn:
+        conn.execute("UPDATE document SET description = ?, doc_type = ?, vendor_name = ? WHERE id = ?",
+                     ('{"en": "Office lease"}', "lease", "Acme Pte Ltd", doc))
+    _ask(team, "owner", doc)
+
+    (row,) = _requests(team["tokens"]["owner"]).json()
+
+    assert row["id"] == doc
+    assert row["filename"]
+    assert (row["description"], row["doc_type"], row["vendor_name"]) == ('{"en": "Office lease"}', "lease", "Acme Pte Ltd")
+
+
+def test_a_request_for_a_document_with_no_description_still_lists_with_nulls_for_the_label_fields(team):
+    doc = _filed_company_doc(team)
+    with get_conn() as conn:
+        conn.execute("UPDATE document SET description = NULL, doc_type = NULL, vendor_name = NULL WHERE id = ?", (doc,))
+    _ask(team, "owner", doc)
+
+    (row,) = _requests(team["tokens"]["owner"]).json()
+
+    assert row["filename"]
+    assert (row["description"], row["doc_type"], row["vendor_name"]) == (None, None, None)
 
 
 def test_one_company_never_sees_anothers_requests(team, other_company):

@@ -67,6 +67,17 @@ export function filterByDateRange<T extends Pick<DocumentRow, 'received_at' | 'o
   })
 }
 
+/** What to say under the From and To inputs (DECISIONS #110): the range as it will be applied, so the person sees it in one fixed
+ * format whatever their device shows inside the native date inputs. `key` picks the sentence (`ops.documents.filter.<key>`), `from`
+ * and `to` are the ISO days to format. Null when there is nothing to say: no range, or a backwards one (which has its own warning). */
+export type RangeEcho = { key: 'echoBoth' | 'echoFrom' | 'echoTo'; from: string; to: string }
+
+export function rangeEcho(range: DateRange): RangeEcho | null {
+  if (!rangeIsSet(range) || rangeIsBackwards(range)) return null
+  if (range.from && range.to) return { key: 'echoBoth', from: range.from, to: range.to }
+  return range.from ? { key: 'echoFrom', from: range.from, to: '' } : { key: 'echoTo', from: '', to: range.to }
+}
+
 /** The filter as URL params, so a link from the Tags page (or a copied address) restores the same view. */
 export function rangeToParams(basis: DateBasis, range: DateRange): Record<string, string> {
   if (!rangeIsSet(range)) return {}

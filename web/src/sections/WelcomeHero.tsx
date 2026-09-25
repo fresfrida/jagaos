@@ -5,8 +5,9 @@
  * Register: Apple's. Short sentences, no exclamation marks, no superlatives; the product steps back and the owner's life
  * steps forward. The page, top to bottom: a headline and one supporting sentence with the one call to action (a demo, through
  * the ordinary login: features/auth/useDemoLogin.ts, config/demo.ts, no bypass), a real screenshot of the app in a plain phone
- * frame, three cards (Capture, Review, Remember), and a closing line above the same call to action again. Both buttons open
- * the shared demo picker (features/auth/DemoPickerHost.tsx), the same dialog the header's and the footer's Get Started open.
+ * frame, and three cards (Capture, Review, Remember); the page ends there, straight into the footer (the closing line and its
+ * second call to action were removed in DECISIONS #108). The button opens the shared demo picker
+ * (features/auth/DemoPickerHost.tsx), the same dialog the header's and the footer's Get Started open.
  * There is no Log In anywhere on the signed-out chrome any more.
  *
  * Designed for a phone first and stretched for a desktop. A signed-in visitor never renders this: Page.tsx shows the
@@ -82,13 +83,6 @@ export function WelcomeHero() {
             </li>
           ))}
         </ul>
-
-        <section className="mt-16 text-center" data-testid="closing">
-          <p className="mx-auto max-w-md text-[26px] font-semibold leading-tight tracking-tight text-ink sm:text-3xl">{t('home.closing')}</p>
-          <Button size="md" className="mt-6 w-full sm:w-auto" onClick={openDemoPicker} aria-haspopup="dialog">
-            {t('home.demo.button')}
-          </Button>
-        </section>
       </Container>
     </section>
   )

@@ -27,6 +27,7 @@ import {
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type DocumentRow } from './opsApi'
+import { isRejectedDocument } from './documentStatus'
 import { useEditableDescription } from './useEditableDescription'
 
 /** Small preview next to each row in the Documents list (2026-09-22, doc
@@ -119,6 +120,11 @@ export function DocumentViewerModal({
   )
 }
 
+/** A text action on a document card (View, Edit, Delete, Purge). Text, not a button look, but a 44px-tall tap target with side
+ * padding (DECISIONS #108). Delete and Purge turn red on hover, which needs `!` to beat the muted colour's own hover here. */
+const ACTION_CLASS =
+  'inline-flex min-h-[44px] items-center whitespace-nowrap px-2 text-[13px] font-mono uppercase tracking-wide text-muted hover:text-ink'
+
 /** One row in the Company Files / Search pages (2026-09-22: cards, not a
  * table — see DECISIONS #38). Owns its own edit-mode state, matching
  * ReviewQueueCard's fields (description/bucket/doc_type/vendor_name/
@@ -166,10 +172,15 @@ export function DocumentCard({
   const [error, setError] = useState<string | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false)
+  // Delete's one confirmation carries an owner-only "also remove it permanently" choice (DECISIONS #109): ticking it makes
+  // the confirm a purge REQUEST instead of an ordinary delete. There is no separate Purge button or dialog any more.
+  const [alsoPurge, setAlsoPurge] = useState(false)
   // The owner's purge request, still shown to them until the team removes the row (round 21, DECISIONS #102): read-only,
   // marked, and with nothing left to ask for (Edit, Delete, Purge and Trace are off; View still opens the file).
   const purgePending = doc.status === 'purge_requested'
+  // The owner's "also remove it permanently" option in Delete's confirmation: the existing rule (canRequestPurge, never on a personal file), and
+  // never on a document already waiting to be purged.
+  const offerPurge = canRequestPurge && !!onRequestPurge && !purgePending
   const isPictureLane = doc.lane === 'memory'
   const isPendingCaption = isPictureLane && doc.description === null
 
@@ -241,12 +252,21 @@ export function DocumentCard({
             <p className="break-words text-sm font-medium text-ink">
               {localDescription ? (
                 localDescription
+              ) : isRejectedDocument(doc) ? (
+                // A legacy rejected row has no description and, often, no lane or type either (features/ops/documentStatus.ts):
+                // a title that says what it is, with the file name under it, instead of a card with nothing on it (DECISIONS #109).
+                <span className="italic text-muted">{t('ops.documents.rejectedTitle')}</span>
               ) : isPendingCaption ? (
                 <span className="italic text-muted">{t('ops.documents.noCaptionYet')}</span>
-              ) : (
+              ) : doc.lane || doc.doc_type ? (
                 <span className="text-muted">{doc.lane ?? '-'} / {doc.doc_type ? docTypeLabel(t, doc.doc_type) : '-'}</span>
+              ) : (
+                <span className="text-muted">{middleEllipsis(doc.filename, 40)}</span>
               )}
             </p>
+            {isRejectedDocument(doc) && !localDescription && (
+              <p className="mt-0.5 break-words text-[13px] text-muted">{middleEllipsis(doc.filename, 40)}</p>
+            )}
             {localDescription && (
               <p className="mt-0.5 break-words text-[13px] text-muted">{doc.lane ?? '-'} / {doc.doc_type ? docTypeLabel(t, doc.doc_type) : '-'}</p>
             )}
@@ -330,113 +350,127 @@ export function DocumentCard({
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <button onClick={onView} className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-ink">
-          {t('ops.documents.view')}
-        </button>
-        {canEdit && !purgePending && !editing && (
-          <button
-            onClick={() => {
-              // Entering edit mode starts from what is on screen right now,
-              // discarding any earlier edit's "user typed this" pin.
-              resetDescription()
-              setEditing(true)
-            }}
-            className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-ink"
-          >
-            {t('ops.documents.edit')}
+      {/* The row of text actions (DECISIONS #108). They stay text, not buttons, but each is a real 44px-tall tap target with
+         padding either side (a 13px label with no padding was about 16px tall), the group is spaced by that padding, and Purge
+         is set well apart from View, Edit and Delete: it sits in its own group at the far end with the overflow menu, at least
+         a 24px margin away from the other three (their own spacing is about 20px), and on a narrow phone in Malay, where the
+         longest label ("Hapus kekal") does not fit beside the rest, that group drops to its own line, never squeezing a
+         label. Every label is nowrap. */}
+      <div className="mt-1 flex flex-wrap items-center justify-between">
+        <div className="-ml-2 mr-6 flex flex-wrap items-center gap-x-1">
+          <button onClick={onView} className={ACTION_CLASS}>
+            {t('ops.documents.view')}
           </button>
-        )}
-        {/* The "Pre-fill company settings from this" link that used to sit here (round 12,
-           DECISIONS #79) moved into Company Settings itself in round 16 (DECISIONS #90):
-           a business profile is no longer listed with the paperwork at all. */}
-        {/* No doc.status !== 'archived' guard needed (2026-09-23, DECISIONS
-           #53) — the server never sends an archived document to this list
-           at all anymore, so every doc rendered here is guaranteed live.
-           Renamed Archive -> Delete (2026-09-23, live user feedback): the
-           app-facing behavior already is permanent deletion for every
-           role including owner (DECISIONS #53 — only direct database
-           access can undo it), so "Archive" implied a recoverability
-           nobody using the app actually has. The endpoint/status name
-           (`archiveDocument`, `status='archived'`) is deliberately
-           unchanged — see its own comment in opsApi.ts. Gated behind
-           ConfirmDialog below, not a single unconfirmed click. */}
-        {canArchive && !purgePending && (
-          <button onClick={() => setShowDeleteConfirm(true)} className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-red-700">
-            {t('ops.documents.delete')}
-          </button>
-        )}
-        {canRequestPurge && !purgePending && onRequestPurge && (
-          <button onClick={() => setShowPurgeConfirm(true)} className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-red-700">
-            {t('ops.documents.purgeRequest.button')}
-          </button>
-        )}
-        {/* Trace (2026-09-23, live user question "what is trace btw?"):
-           an agent-debugging view, not a primary action a business owner
-           needs day to day — tucked into this small overflow menu instead
-           of sitting equal-weight next to View/Edit/Delete. Still just as
-           reachable, one extra click. */}
-        {!purgePending && (
-          <div className="relative ml-auto">
+          {canEdit && !purgePending && !editing && (
             <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowMenu((s) => !s)
+              onClick={() => {
+                // Entering edit mode starts from what is on screen right now,
+                // discarding any earlier edit's "user typed this" pin.
+                resetDescription()
+                setEditing(true)
               }}
-              aria-label={t('ops.documents.moreActions')}
-              aria-haspopup="menu"
-              aria-expanded={showMenu}
-              className="flex h-6 w-6 items-center justify-center rounded-control text-muted hover:bg-canvas hover:text-ink"
+              className={ACTION_CLASS}
             >
-              <MoreHorizontal size={16} />
+              {t('ops.documents.edit')}
             </button>
-            {showMenu && (
-              <div
-                role="menu"
-                className="absolute right-0 z-10 mt-1 min-w-[7rem] overflow-hidden rounded-control border border-line bg-white py-1 shadow-md"
+          )}
+          {/* The "Pre-fill company settings from this" link that used to sit here (round 12,
+             DECISIONS #79) moved into Company Settings itself in round 16 (DECISIONS #90):
+             a business profile is no longer listed with the paperwork at all. */}
+          {/* No doc.status !== 'archived' guard needed (2026-09-23, DECISIONS
+             #53) — the server never sends an archived document to this list
+             at all anymore, so every doc rendered here is guaranteed live.
+             Renamed Archive -> Delete (2026-09-23, live user feedback): the
+             app-facing behavior already is permanent deletion for every
+             role including owner (DECISIONS #53 — only direct database
+             access can undo it), so "Archive" implied a recoverability
+             nobody using the app actually has. The endpoint/status name
+             (`archiveDocument`, `status='archived'`) is deliberately
+             unchanged — see its own comment in opsApi.ts. Gated behind
+             ConfirmDialog below, not a single unconfirmed click. */}
+          {canArchive && !purgePending && (
+            <button onClick={() => setShowDeleteConfirm(true)} className={`${ACTION_CLASS} hover:!text-red-700`}>
+              {t('ops.documents.delete')}
+            </button>
+          )}
+        </div>
+        <div className="-mr-2 ml-auto flex items-center gap-x-1">
+          {/* Trace (2026-09-23, live user question "what is trace btw?"):
+             an agent-debugging view, not a primary action a business owner
+             needs day to day — tucked into this small overflow menu instead
+             of sitting equal-weight next to View/Edit/Delete. Still just as
+             reachable, one extra click. */}
+          {!purgePending && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowMenu((s) => !s)
+                }}
+                aria-label={t('ops.documents.moreActions')}
+                aria-haspopup="menu"
+                aria-expanded={showMenu}
+                className="flex h-11 w-11 items-center justify-center rounded-control text-muted hover:bg-canvas hover:text-ink"
               >
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    setShowMenu(false)
-                    onTrace()
-                  }}
-                  className="block w-full px-3 py-1.5 text-left text-[13px] font-mono uppercase tracking-wide text-muted hover:bg-canvas hover:text-ink"
+                <MoreHorizontal size={16} />
+              </button>
+              {showMenu && (
+                <div
+                  role="menu"
+                  className="absolute right-0 z-10 mt-1 min-w-[7rem] overflow-hidden rounded-control border border-line bg-white py-1 shadow-md"
                 >
-                  {t('ops.documents.trace')}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setShowMenu(false)
+                      onTrace()
+                    }}
+                    className="block w-full px-3 py-1.5 text-left text-[13px] font-mono uppercase tracking-wide text-muted hover:bg-canvas hover:text-ink"
+                  >
+                    {t('ops.documents.trace')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-
-      {canRequestPurge && onRequestPurge && (
-        <ConfirmDialog
-          open={showPurgeConfirm}
-          message={t('ops.documents.purgeRequest.message', { filename: middleEllipsis(doc.filename, 40) })}
-          confirmLabel={t('ops.documents.purgeRequest.confirm')}
-          cancelLabel={t('common.buttons.cancel')}
-          onConfirm={() => {
-            setShowPurgeConfirm(false)
-            onRequestPurge()
-          }}
-          onCancel={() => setShowPurgeConfirm(false)}
-        />
-      )}
 
       <ConfirmDialog
         open={showDeleteConfirm}
-        message={t('ops.documents.deleteConfirmMessage', { filename: middleEllipsis(doc.filename, 40) })}
-        confirmLabel={t('common.buttons.delete')}
+        message={
+          alsoPurge && offerPurge
+            ? t('ops.documents.purgeRequest.message', { filename: middleEllipsis(doc.filename, 40) })
+            : t('ops.documents.deleteConfirmMessage', { filename: middleEllipsis(doc.filename, 40) })
+        }
+        confirmLabel={alsoPurge && offerPurge ? t('ops.documents.purgeRequest.confirm') : t('common.buttons.delete')}
         cancelLabel={t('common.buttons.cancel')}
         onConfirm={() => {
           setShowDeleteConfirm(false)
-          onArchive()
+          if (alsoPurge && offerPurge) onRequestPurge?.()
+          else onArchive()
+          setAlsoPurge(false)
         }}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
+        onCancel={() => {
+          setShowDeleteConfirm(false)
+          setAlsoPurge(false)
+        }}
+      >
+        {/* Only the owner (the existing canRequestPurge rule, never on a personal file); anyone else sees the ordinary
+           confirmation, unchanged. */}
+        {offerPurge && (
+          <label className="mt-3 flex cursor-pointer items-start gap-2 text-[14px] text-ink">
+            <input
+              type="checkbox"
+              checked={alsoPurge}
+              onChange={(e) => setAlsoPurge(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-ink"
+            />
+            <span>{t('ops.documents.deleteAlsoPurge')}</span>
+          </label>
+        )}
+      </ConfirmDialog>
     </Card>
   )
 }

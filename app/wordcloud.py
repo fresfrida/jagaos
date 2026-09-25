@@ -15,7 +15,7 @@ What "telling" means, in order:
   3. Counted by DOCUMENT, not by occurrence: a word's count is how many documents contain it, so one invoice that says "toner" forty
      times does not outweigh five that say "insurance" once each. Ties break on total occurrences, then alphabetically, so the
      output is stable.
-  4. With enough documents to judge by (MIN_DOCUMENTS_FOR_SHARE), a word must be in at least two of them (one document is not a
+  4. With enough documents to judge by (MIN_DOCUMENTS_FOR_SHARE), a word must be in at least MIN_DOCUMENTS_PER_WORD, two, of them (one document is not a
      theme, and one document is where OCR noise lives) and in no more than MAX_DOCUMENT_SHARE of them (a word on nearly every
      document is boilerplate for THIS company, its own name included). This is the part no fixed list can do. With fewer documents
      every word counts, or the cloud would be empty.
@@ -44,6 +44,9 @@ SHORT_KEPT = frozenset({"act", "cpf", "vat"})
 # Only judge a word "in nearly every document" once there are enough documents for that to mean something.
 MIN_DOCUMENTS_FOR_SHARE = 10
 MAX_DOCUMENT_SHARE = 0.6
+# Once there are enough documents to judge by, a word must be in at least this many of them to qualify (one document is not a theme, and
+# one document is where OCR noise lives). Named here, beside its sibling thresholds, rather than a bare 2 in the filter (DECISIONS #109).
+MIN_DOCUMENTS_PER_WORD = 2
 
 _WORD = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)?", re.UNICODE)
 
@@ -115,6 +118,6 @@ def top_terms(texts: Iterable[str], limit: int = TOP_TERMS) -> list[dict]:
         return []
     judged = documents >= MIN_DOCUMENTS_FOR_SHARE
     ceiling = documents * MAX_DOCUMENT_SHARE
-    kept = [w for w, n in in_documents.items() if not judged or 2 <= n <= ceiling]
+    kept = [w for w, n in in_documents.items() if not judged or MIN_DOCUMENTS_PER_WORD <= n <= ceiling]
     kept.sort(key=lambda w: (-in_documents[w], -occurrences[w], w))
     return [{"term": w, "count": in_documents[w]} for w in kept[:limit]]

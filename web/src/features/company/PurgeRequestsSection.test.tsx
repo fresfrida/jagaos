@@ -62,3 +62,35 @@ describe('PurgeRequestsSection', () => {
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 })
+
+describe('PurgeRequestsSection: a real label first, the file name under it (DECISIONS #109)', () => {
+  it('shows the document\'s own label as the title and the file name as small text beneath', async () => {
+    list.mockResolvedValue([
+      { id: 5, filename: '1790145560513.pdf', description: JSON.stringify({ en: 'Office lease for Level 3' }), doc_type: 'lease', vendor_name: null, requested_at: '2026-09-25 09:30:00', requested_by: 'o@x.y' },
+      { id: 4, filename: 'scan-88.pdf', description: null, doc_type: 'invoice', vendor_name: 'Acme Pte Ltd', requested_at: '2026-09-24 09:30:00', requested_by: 'o@x.y' },
+    ])
+    render(<PurgeRequestsSection enabled />)
+    const rows = await screen.findAllByTestId('purge-request-row')
+
+    expect(within(rows[0]!).getByText('Office lease for Level 3')).toBeTruthy() // the description, in the page's language
+    expect(within(rows[0]!).getByTitle('1790145560513.pdf').className).toContain('text-[12px]') // the file name, small, under it
+    expect(within(rows[1]!).getByText('Acme Pte Ltd · invoice')).toBeTruthy() // vendor and type when there is a vendor, as everywhere else
+    expect(within(rows[1]!).getByTitle('scan-88.pdf')).toBeTruthy()
+  })
+
+  it('with nothing to label it by (an older backend, or a document with no description) the file name is the title, once, as before', async () => {
+    list.mockResolvedValue([{ id: 5, filename: 'old-contract.pdf', requested_at: '2026-09-25 09:30:00', requested_by: 'o@x.y' }])
+    render(<PurgeRequestsSection enabled />)
+    const row = await screen.findByTestId('purge-request-row')
+    expect(within(row).getAllByText('old-contract.pdf')).toHaveLength(1)
+    expect(within(row).queryByTitle('old-contract.pdf')).toBeNull() // no second, smaller copy of it
+  })
+
+  it('reads the description in the chosen language', async () => {
+    await i18n.changeLanguage('ms')
+    list.mockResolvedValue([{ id: 5, filename: 'x.pdf', description: JSON.stringify({ en: 'Office lease', ms: 'Pajakan pejabat' }), doc_type: 'lease', vendor_name: null, requested_at: '2026-09-25 09:30:00', requested_by: 'o@x.y' }])
+    render(<PurgeRequestsSection enabled />)
+    expect(await screen.findByText('Pajakan pejabat')).toBeTruthy()
+  })
+})
+

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HOME_TITLE, pageTitle, parsePath } from './routes'
+import { FIT_VIEWPORT_ROUTES, HOME_TITLE, pageTitle, parsePath } from './routes'
 
 describe('pageTitle', () => {
   it('is always "JagaOS: PageName", never "PageName - JagaOS"', () => {
@@ -40,3 +40,10 @@ describe('removed routes (DECISIONS #106)', () => {
     }
   })
 })
+
+describe('the pages that fill the viewport (DECISIONS #109)', () => {
+  it('is the signed-in home and only that', () => {
+    expect(FIT_VIEWPORT_ROUTES).toEqual(['home'])
+  })
+})
+

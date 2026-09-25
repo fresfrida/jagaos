@@ -53,7 +53,7 @@
       },
       "remember": {
         "title": "Ingat",
-        "text": "Tarikh akhir muncul sebelum ia merugikan anda."
+        "text": "Tiada yang hilang. Semuanya hanya satu carian jauhnya."
       }
     },
     "signedIn": {
@@ -72,10 +72,9 @@
     },
     "hero": {
       "headline": "JagaOS mengingatkan, supaya anda tidak perlu.",
-      "subhead": "Muat naik satu dokumen. JagaOS membacanya, mencari tarikh dan kewajipan, dan memastikan semuanya hanya satu carian jauhnya.",
+      "subhead": "Muat naik satu dokumen. JagaOS membacanya, mencari tarikh dan butiran, dan memastikan semuanya hanya satu carian jauhnya.",
       "imageAlt": "Kalendar JagaOS pada telefon, menunjukkan dokumen mengikut hari ia dimuat naik."
-    },
-    "closing": "Supaya anda boleh fokus pada kerja yang penting."
+    }
   },
   "companySettings": {
     "heading": "Tetapan Syarikat",
@@ -339,7 +338,9 @@
         "yes": "Ya",
         "no": "Tidak",
         "notStated": "Tidak dinyatakan"
-      }
+      },
+      "empty": "Tiada apa-apa menunggu semakan",
+      "emptyHint": "Dokumen yang anda muat naik menunggu di sini sehingga seseorang mengesahkan apa yang dibaca daripadanya."
     },
     "companyFiles": {
       "heading": "Fail Syarikat"
@@ -366,12 +367,12 @@
       "noBucketOption": "Tiada kategori",
       "editForbidden": "Anda tiada kebenaran untuk menyunting dokumen ini.",
       "view": "Lihat",
-      "trace": "Jejak",
+      "trace": "Jejak AI",
       "edit": "Edit",
       "delete": "Padam",
       "deleteConfirmMessage": "Padam {{filename}}? Ini tidak boleh dibatalkan.",
       "moreActions": "Tindakan lain",
-      "traceHeading": "Jejak: dokumen #{{documentId}} · jumlah ${{cost}}",
+      "traceHeading": "Jejak AI: dokumen #{{documentId}} · jumlah ${{cost}}",
       "traceTable": {
         "node": "Nod",
         "model": "Model",
@@ -393,7 +394,10 @@
         "dateTo": "Hingga",
         "dateClear": "Kosongkan tarikh",
         "dateBackwards": "Tarikh mula selepas tarikh akhir.",
-        "noMatch": "Tiada dokumen sepadan dengan penapis ini."
+        "noMatch": "Tiada dokumen sepadan dengan penapis ini.",
+        "echoBoth": "Menunjukkan {{from}} hingga {{to}}",
+        "echoFrom": "Menunjukkan dari {{from}}",
+        "echoTo": "Menunjukkan hingga {{to}}"
       },
       "purgeRequest": {
         "button": "Hapus kekal",
@@ -401,7 +405,9 @@
         "confirm": "Hapus kekal",
         "done": "Hapus kekal diminta untuk \"{{filename}}\". Orang lain tidak lagi melihatnya. Ia kekal di sini, bertanda, sehingga pasukan menghapuskannya secara kekal.",
         "pending": "Hapus kekal diminta: pasukan akan menghapuskannya secara kekal."
-      }
+      },
+      "rejectedTitle": "Dokumen ditolak",
+      "deleteAlsoPurge": "Juga hapus kekal"
     },
     "dates": {
       "uploadDate": "Tarikh muat naik",
@@ -491,6 +497,9 @@
     },
     "visibility": {
       "onlyYou": "Hanya anda"
+    },
+    "calendar": {
+      "description": "Dokumen anda, mengikut tarikh."
     }
   },
   "onlyMe": {

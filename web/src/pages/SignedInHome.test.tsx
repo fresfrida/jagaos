@@ -74,14 +74,23 @@ describe('SignedInHome', () => {
     expect(screen.getByTestId('home-upload').className).not.toContain('lg:')
   })
 
-  it('PHONE: below lg nothing changed, one column and the same tinted Only me row', () => {
+  it('PHONE: one column, Only me is a tinted card given two thirds of the Upload card\'s height by a 3fr 2fr grid (DECISIONS #108)', () => {
     render(<SignedInHome />)
     const grid = screen.getByTestId('home-upload').parentElement!
     expect(grid.className).toContain('max-w-[720px]')
-    expect(grid.className).toContain('gap-4') // the gap the Only me row used to get from its own top margin
+    expect(grid.className).toContain('gap-4')
+    expect(grid.className).toContain('grid-rows-[3fr_2fr]') // Upload is 3 parts and Only me 2: two thirds, in any language, with or without the pill
+    expect(grid.className).toContain('lg:grid-rows-none') // side by side from lg, where the row is shared and the heights are equal
     const only = screen.getByTestId('home-only-me').className
-    for (const cls of ['flex', 'items-center', 'gap-3', 'rounded-card', 'bg-ink/5', 'px-4', 'py-3.5', 'hover:bg-ink/10']) expect(only.split(' ')).toContain(cls)
+    for (const cls of ['flex', 'items-center', 'gap-3', 'rounded-card', 'bg-ink/5', 'px-5', 'py-4', 'hover:bg-ink/10']) expect(only.split(' ')).toContain(cls)
     expect(only.split(' ')).not.toContain('mt-4')
+  })
+
+  it('DESKTOP: the container grows into the space the shell gives the page and centres the cards in it, vertically (DECISIONS #109)', () => {
+    const { container } = render(<SignedInHome />)
+    const root = container.firstElementChild!
+    for (const cls of ['lg:flex', 'lg:flex-1', 'lg:items-center']) expect(root.className, cls).toContain(cls)
+    expect(screen.getByTestId('home-upload').parentElement!.className).toContain('lg:w-full') // a flex item must be told to fill its column
   })
 
   it('is a centred column about 720px wide', () => {

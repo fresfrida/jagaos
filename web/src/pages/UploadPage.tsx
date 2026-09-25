@@ -28,7 +28,7 @@ import { useAuth } from '../features/auth/AuthContext'
 import { RequireSession } from '../features/auth/RequireSession'
 import { roleAtLeast } from '../features/auth/authApi'
 import { OpsStatusBar } from '../features/ops/OpsStatusBar'
-import { ReviewQueueCard } from '../features/ops/ReviewQueueCard'
+import { ReviewQueueSection } from '../features/ops/ReviewQueueSection'
 import { VENDOR_NAMES_DATALIST_ID } from '../features/ops/opsShared'
 import { type UploadResult } from '../features/ops/opsApi'
 import { useOpsData } from '../features/ops/useOpsData'
@@ -44,7 +44,7 @@ import { routeHref } from '../router/routes'
 function UploadReviewContent() {
   const { t, i18n } = useTranslation()
   const { role } = useAuth()
-  const { documents, expectations, reviewItems, apiUp, error, setError, refresh } = useOpsData()
+  const { documents, expectations, reviewItems, apiUp, loaded, error, setError, refresh } = useOpsData()
 
   const [justRejectedFilename, setJustRejectedFilename] = useState<string | null>(null)
   // The checklist item this upload was started for (`?for=<slug>`). Only honoured when
@@ -134,28 +134,15 @@ function UploadReviewContent() {
 
         </Card>
 
-        {reviewItems.length > 0 && (
-          <section>
-            <h2 className="mb-3 text-[12px] font-mono uppercase tracking-wide text-amber-800">
-              {t('ops.review.needsReview', { count: reviewItems.length })}
-            </h2>
-            <div className="space-y-3">
-              {reviewItems.map((item) => (
-                <ReviewQueueCard
-                  key={item.id}
-                  item={item}
-                  // The server's per-item answer wins where it sends one (an
-                  // uploader may resolve their own personal file); an older
-                  // backend sends none, and the role check is what it always was.
-                  canResolve={item.can_resolve ?? canResolve}
-                  onResolved={() => void refresh()}
-                  onRejected={setJustRejectedFilename}
-                  onPoll={() => void refresh()}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+        <ReviewQueueSection
+          items={reviewItems}
+          loaded={loaded}
+          failed={!!error}
+          canResolve={canResolve}
+          onResolved={() => void refresh()}
+          onRejected={setJustRejectedFilename}
+          onPoll={() => void refresh()}
+        />
       </div>
 
       {/* 2026-09-23 (DECISIONS #50) closed the loop after a reject with an inline

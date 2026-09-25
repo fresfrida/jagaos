@@ -53,7 +53,7 @@
       },
       "remember": {
         "title": "记住",
-        "text": "期限在带来损失之前就会浮现。"
+        "text": "什么都不会丢。一切一搜即得。"
       }
     },
     "signedIn": {
@@ -72,10 +72,9 @@
     },
     "hero": {
       "headline": "JagaOS 替你记住，你不必再记。",
-      "subhead": "上传一份文件。JagaOS 会读懂它，找出日期和义务，让一切一搜即得。",
+      "subhead": "上传一份文件。JagaOS 会读懂它，找出日期和细节，让一切一搜即得。",
       "imageAlt": "手机上的 JagaOS 日历，按上传日期显示文件。"
-    },
-    "closing": "让你专注于真正重要的事。"
+    }
   },
   "companySettings": {
     "heading": "公司设置",
@@ -339,7 +338,9 @@
         "yes": "是",
         "no": "否",
         "notStated": "未注明"
-      }
+      },
+      "empty": "没有待审核的内容",
+      "emptyHint": "您上传的文件会在这里等候，直到有人确认从中读取的内容。"
     },
     "companyFiles": {
       "heading": "公司文件"
@@ -366,12 +367,12 @@
       "noBucketOption": "无分类",
       "editForbidden": "您没有编辑此文件的权限。",
       "view": "查看",
-      "trace": "追踪",
+      "trace": "AI 追踪",
       "edit": "编辑",
       "delete": "删除",
       "deleteConfirmMessage": "删除 {{filename}}？此操作无法撤销。",
       "moreActions": "更多操作",
-      "traceHeading": "追踪记录：文件 #{{documentId}} · 总计 ${{cost}}",
+      "traceHeading": "AI 追踪记录：文件 #{{documentId}} · 总计 ${{cost}}",
       "traceTable": {
         "node": "节点",
         "model": "模型",
@@ -393,7 +394,10 @@
         "dateTo": "至",
         "dateClear": "清除日期",
         "dateBackwards": "开始日期晚于结束日期。",
-        "noMatch": "没有符合这些筛选条件的文件。"
+        "noMatch": "没有符合这些筛选条件的文件。",
+        "echoBoth": "显示 {{from}} 至 {{to}}",
+        "echoFrom": "显示自 {{from}} 起",
+        "echoTo": "显示截至 {{to}}"
       },
       "purgeRequest": {
         "button": "彻底清除",
@@ -401,7 +405,9 @@
         "confirm": "彻底清除",
         "done": "已请求清除“{{filename}}”。其他人不再看到它。它会带着标记留在这里，直到团队将其永久删除。",
         "pending": "已请求清除：团队会将其永久删除。"
-      }
+      },
+      "rejectedTitle": "已拒绝的文件",
+      "deleteAlsoPurge": "同时彻底清除"
     },
     "dates": {
       "uploadDate": "上传日期",
@@ -491,6 +497,9 @@
     },
     "visibility": {
       "onlyYou": "仅你可见"
+    },
+    "calendar": {
+      "description": "您的文件，按日期排列。"
     }
   },
   "onlyMe": {

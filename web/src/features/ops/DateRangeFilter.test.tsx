@@ -60,3 +60,52 @@ describe('DateRangeFilter', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })
+
+describe('DateRangeFilter: the dd/mm/yyyy echo (DECISIONS #110)', () => {
+  const echo = () => screen.queryByTestId('date-range-echo')
+
+  it('says nothing when no range is set: there is nothing to echo', () => {
+    show()
+    expect(echo()).toBeNull()
+  })
+
+  it('echoes a full range in dd/mm/yyyy, whatever order the native inputs show', () => {
+    show({ from: '2024-01-01', to: '2024-03-31' })
+    expect(echo()!.textContent).toBe('Showing 01/01/2024 to 31/03/2024')
+    cleanup()
+    show({ from: '2026-09-05', to: '2026-12-25' })
+    expect(echo()!.textContent).toBe('Showing 05/09/2026 to 25/12/2026') // day first: 5 September, not May 9th
+  })
+
+  it('echoes an open end as "from" or "up to"', () => {
+    show({ from: '2024-02-29', to: '' })
+    expect(echo()!.textContent).toBe('Showing from 29/02/2024')
+    cleanup()
+    show({ from: '', to: '2024-03-31' })
+    expect(echo()!.textContent).toBe('Showing up to 31/03/2024')
+  })
+
+  it('leaves a backwards range to its own warning and does not echo it as if it were valid', () => {
+    show({ from: '2026-05-01', to: '2026-01-01' })
+    expect(echo()).toBeNull()
+    expect(screen.getByRole('alert')).toBeTruthy()
+  })
+
+  it('is announced politely to a screen reader when it changes, and sits under the inputs', () => {
+    show({ from: '2024-01-01', to: '2024-03-31' })
+    expect(echo()!.getAttribute('aria-live')).toBe('polite')
+    const inputs = screen.getByLabelText('To')
+    expect(inputs.compareDocumentPosition(echo()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it.each([
+    ['zh', '显示 01/01/2024 至 31/03/2024'],
+    ['ms', 'Menunjukkan 01/01/2024 hingga 31/03/2024'],
+    ['ta', '01/01/2024 முதல் 31/03/2024 வரை காட்டப்படுகிறது'],
+  ])('reads in %s, with the dates still dd/mm/yyyy', async (language, text) => {
+    await i18n.changeLanguage(language)
+    show({ from: '2024-01-01', to: '2024-03-31' })
+    expect(echo()!.textContent).toBe(text)
+  })
+})
+

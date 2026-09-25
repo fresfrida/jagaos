@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  rangeEcho,
   documentDay, filterByDateRange, NO_RANGE, parseBasis, parseDay, rangeFromParams, rangeIsBackwards, rangeIsSet, rangeToParams,
 } from './documentDates'
 
@@ -103,3 +104,21 @@ describe('the range as URL parameters', () => {
     expect(rangeFromParams(new URLSearchParams(''))).toEqual({ basis: 'upload', range: NO_RANGE })
   })
 })
+
+describe('rangeEcho (DECISIONS #110)', () => {
+  it('names which sentence to say, and the ISO days to put in it', () => {
+    expect(rangeEcho({ from: '2024-01-01', to: '2024-03-31' })).toEqual({ key: 'echoBoth', from: '2024-01-01', to: '2024-03-31' })
+    expect(rangeEcho({ from: '2024-01-01', to: '' })).toEqual({ key: 'echoFrom', from: '2024-01-01', to: '' })
+    expect(rangeEcho({ from: '', to: '2024-03-31' })).toEqual({ key: 'echoTo', from: '', to: '2024-03-31' })
+  })
+
+  it('is null when there is nothing to say: no range, or a backwards one', () => {
+    expect(rangeEcho({ from: '', to: '' })).toBeNull()
+    expect(rangeEcho({ from: '2024-05-01', to: '2024-01-01' })).toBeNull()
+  })
+
+  it('a one-day range (the same day at both ends) is a range, not backwards', () => {
+    expect(rangeEcho({ from: '2024-03-05', to: '2024-03-05' })).toEqual({ key: 'echoBoth', from: '2024-03-05', to: '2024-03-05' })
+  })
+})
+

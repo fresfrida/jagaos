@@ -13,6 +13,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   busy,
+  children,
   onConfirm,
   onCancel,
 }: {
@@ -21,6 +22,8 @@ export function ConfirmDialog({
   confirmLabel: string
   cancelLabel: string
   busy?: boolean
+  /** One more choice under the message (a checkbox, DECISIONS #109: Delete's "also remove it permanently"). */
+  children?: ReactNode
   onConfirm: () => void
   onCancel: () => void
 }) {
@@ -44,6 +47,7 @@ export function ConfirmDialog({
     >
       <div className="w-full max-w-sm rounded-card bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <p className="text-sm text-ink">{message}</p>
+        {children}
         <div className="mt-4 flex justify-end gap-2">
           <Button size="sm" variant="secondary" onClick={onCancel} disabled={busy}>
             {cancelLabel}

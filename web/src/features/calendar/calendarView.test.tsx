@@ -152,3 +152,26 @@ describe('DatesView keeps its view (DECISIONS #105)', () => {
     expect(window.location.search).toBe(`?m=${todaySg.slice(0, 7)}&d=${todaySg}`)
   })
 })
+
+describe('DatesView leaves out a rejected document (DECISIONS #109)', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en')
+    window.sessionStorage.clear()
+    window.history.replaceState(null, '', '/calendar?m=2020-03&d=2020-03-05')
+  })
+  afterEach(cleanup)
+
+  it('it is neither listed under its day nor counted in the grid, while an ordinary document on the same day is both', () => {
+    render(<DatesView documents={[doc({ id: 1 }), doc({ id: 2, status: 'rejected', filename: 'legacy-rejected.pdf', description: null })]} />)
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+    expect(screen.queryByText(/legacy-rejected/)).toBeNull()
+    expect(cell(5).textContent).toBe('51') // the day number, then a count badge of 1: the rejected one is not in it
+  })
+
+  it('a day with only a rejected document looks empty, and the "no documents" hint appears when that is all there is', () => {
+    render(<DatesView documents={[doc({ id: 2, status: 'rejected' })]} />)
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    expect(screen.getByTestId('no-documents-hint')).toBeTruthy()
+  })
+})
+

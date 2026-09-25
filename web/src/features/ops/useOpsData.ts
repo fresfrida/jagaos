@@ -20,6 +20,8 @@ export function useOpsData() {
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([])
   const [apiUp, setApiUp] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // True once the first load has finished, either way (DECISIONS #109): an empty list means "nothing" only after that.
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     opsApi
@@ -43,7 +45,9 @@ export function useOpsData() {
 
   useEffect(() => {
     if (status !== 'signed-in') return
-    refresh().catch((e) => setError(e instanceof Error ? e.message : String(e)))
+    refresh()
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoaded(true))
   }, [status, refresh])
 
   const archiveDocument = useCallback(
@@ -64,6 +68,7 @@ export function useOpsData() {
     obligations,
     reviewItems,
     apiUp,
+    loaded,
     error,
     setError,
     refresh,

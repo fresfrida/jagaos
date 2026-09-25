@@ -10,7 +10,8 @@ vi.mock('./features/auth/AuthContext', () => ({ AuthProvider: ({ children }: { c
 vi.mock('./features/auth/MyCompaniesContext', () => ({ MyCompaniesProvider: ({ children }: { children: unknown }) => <>{children}</> }))
 vi.mock('./features/auth/useCompanyScopeKey', () => ({ useCompanyScopeKey: () => 'scope' }))
 vi.mock('./features/upload/UploadSheetHost', () => ({ UploadSheetHost: () => null }))
-vi.mock('./router/useRoute', () => ({ useRoute: () => 'home' }))
+const currentRoute = vi.hoisted(() => ({ value: 'home' }))
+vi.mock('./router/useRoute', () => ({ useRoute: () => currentRoute.value }))
 vi.mock('./router/useRouteEffects', () => ({ useRouteEffects: () => undefined }))
 vi.mock('./pages/Page', () => ({ Page: () => <p>the page</p> }))
 vi.mock('./sections/Header', () => ({ Header: () => <header>header</header> }))
@@ -66,3 +67,57 @@ describe('App, signed in', () => {
     expect(main.nextElementSibling!.tagName).toBe('FOOTER')
   })
 })
+
+describe('App: the footer and the page height (DECISIONS #108)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    auth.value = { status: 'signed-in', company: { id: 1 }, login: vi.fn() }
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('<main> has NO minimum height: a short page is as tall as its content, so its footer sits directly under it', () => {
+    const { container } = render(<App />)
+    const main = container.querySelector('main')!
+    expect(main.className).not.toMatch(/min-h|100svh|100vh/)
+  })
+
+  it('the footer stays invisible while the page loads and appears once it has been quiet', () => {
+    render(<App />)
+    const footer = screen.getByRole('contentinfo', { hidden: true })
+    expect(footer.className).toContain('invisible')
+    act(() => { vi.advanceTimersByTime(400) })
+    expect(footer.className).not.toContain('invisible')
+  })
+})
+
+describe('App: which pages fill the viewport at desktop width (DECISIONS #109)', () => {
+  const shell = (container: HTMLElement) => container.querySelector('main')!.parentElement!
+
+  afterEach(() => { currentRoute.value = 'home' })
+
+  it('the SIGNED-IN home does: a column at least a screen tall, main and its page growing into it, so the footer is at the bottom', () => {
+    auth.value = { status: 'signed-in', company: { id: 1 }, login: vi.fn() }
+    const { container } = render(<App />)
+    expect(shell(container).className).toContain('lg:flex')
+    expect(shell(container).className).toContain('lg:min-h-svh')
+    expect(shell(container).className).toContain('lg:flex-col')
+    expect(container.querySelector('main')!.className).toContain('lg:flex-1')
+    expect(container.querySelector('main')!.firstElementChild!.className).toContain('lg:flex-1')
+    expect(container.querySelector('main')!.nextElementSibling!.tagName).toBe('FOOTER') // the footer is the shell's last child
+  })
+
+  it('no other page does: the general rule holds, main is as tall as its content and the footer sits under it', () => {
+    auth.value = { status: 'signed-in', company: { id: 1 }, login: vi.fn() }
+    currentRoute.value = 'company-files'
+    const { container } = render(<App />)
+    expect(shell(container).className).not.toContain('min-h-svh')
+    expect(container.querySelector('main')!.className).not.toContain('flex-1')
+  })
+
+  it('the signed-out landing does not either', () => {
+    auth.value = { status: 'signed-out', company: null, login: vi.fn() }
+    const { container } = render(<App />)
+    expect(shell(container).className).not.toContain('min-h-svh')
+  })
+})
+

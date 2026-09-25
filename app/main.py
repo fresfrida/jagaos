@@ -901,7 +901,8 @@ def resolve_review(
     return {
         "status": final_status,
         "events": result.get("events"),
-        "obligations_created": result.get("obligations_created"),
+        # 0, not None: the pipeline creates no obligations while derive_obligations is switched off (DECISIONS #108).
+        "obligations_created": result.get("obligations_created", 0),
     }
 
 
@@ -1544,10 +1545,14 @@ def request_document_purge(
 def list_purge_requests(membership: Annotated[CurrentMembership, Depends(require_role("owner"))]) -> list[dict]:
     """The company's pending purge requests, newest first (round 21, A5, DECISIONS #101): what the owner asked to have
     removed and the team has not yet purged. Owner only, this company only (`company_id` comes from the session). A
-    request stays here until scripts/purge_document.py deletes the row, which is when it stops existing."""
+    request stays here until scripts/purge_document.py deletes the row, which is when it stops existing.
+
+    Each row carries what the page needs to name the document as a person would (`description`, `doc_type`, `vendor_name`, the
+    same columns the document cards use) and not only its file name (DECISIONS #109); all three may be null."""
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
-            "SELECT id, filename, purge_requested_at AS requested_at, purge_requested_by AS requested_by "
+            "SELECT id, filename, description, doc_type, vendor_name, "
+            "       purge_requested_at AS requested_at, purge_requested_by AS requested_by "
             "FROM document WHERE company_id = ? AND purge_requested_at IS NOT NULL "
             "ORDER BY purge_requested_at DESC, id DESC",
             (membership.company_id,),

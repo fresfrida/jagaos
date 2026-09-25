@@ -153,3 +153,20 @@ describe('PrefillConfirmSheet', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
+
+describe('BusinessProfileSection buttons (DECISIONS #108)', () => {
+  it('Replace and Remove are BOTH outlined (white fill, a border), and Fill is the one filled button', () => {
+    render(<BusinessProfileSection profile={make({ status: 'ready', document: profileDoc() })} onFill={vi.fn()} fillBusy={false} />)
+    const replace = screen.getByRole('button', { name: 'Replace' })
+    const remove = screen.getByRole('button', { name: 'Remove' })
+    for (const button of [replace, remove]) {
+      expect(button.className).toContain('bg-white')
+      expect(button.className).toContain('border-line')
+    }
+    expect(remove.className).toBe(replace.className) // matching exactly, not just similar
+    expect(remove.className).not.toContain('bg-transparent') // no longer the ghost look
+    const filled = screen.getAllByRole('button').filter((b) => b.className.includes('bg-ink') && b.className.includes('text-white'))
+    expect(filled).toHaveLength(1)
+  })
+})
+

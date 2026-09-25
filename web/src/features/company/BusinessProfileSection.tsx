@@ -109,7 +109,7 @@ export function BusinessProfileSection({
             <Button size="sm" variant="secondary" onClick={pick} disabled={busy}>
               {t('companySettings.businessProfile.replace')}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirmingRemove(true)} disabled={busy}>
+            <Button size="sm" variant="secondary" onClick={() => setConfirmingRemove(true)} disabled={busy}>
               {t('companySettings.businessProfile.remove')}
             </Button>
             {document.status === 'needs_review' && (

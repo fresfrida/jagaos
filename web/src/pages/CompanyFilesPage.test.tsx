@@ -45,6 +45,23 @@ beforeEach(async () => {
 })
 afterEach(cleanup)
 
+describe('Company Files: buckets with nothing in them are not offered (DECISIONS #109)', () => {
+  it('only the buckets that hold something get a chip, plus All; none is shown as (0)', () => {
+    render(<CompanyFilesPage />) // DOCS are in Expenses and Statutory only
+    expect(screen.getAllByRole('button', { pressed: false }).map((b) => b.textContent).filter((t) => /\(\d+\)/.test(t ?? ''))).toEqual(['Expenses (2)', 'Statutory (2)'])
+    expect(screen.queryByText(/\(0\)/)).toBeNull()
+    for (const name of [/Receivables/, /Operations/, /Contracts/, /Memory Lane/, /Miscellaneous/]) expect(screen.queryByRole('button', { name })).toBeNull()
+    expect(button('All (4)')).toBeTruthy()
+  })
+
+  it('with no documents at all there is just All (0)', () => {
+    ops.documents = []
+    render(<CompanyFilesPage />)
+    expect(button('All (0)')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Expenses|Statutory/ })).toBeNull()
+  })
+})
+
 describe('Company Files: the All button (A6)', () => {
   it('sits with the bucket buttons, is selected while no bucket is, and counts every document', () => {
     render(<CompanyFilesPage />)
@@ -119,9 +136,15 @@ describe('Company Files: the date range (A7)', () => {
 
     setRange('2026-04-01', '2026-04-30')
     expect(shown()).toEqual(['Doc 4'])
-    fireEvent.click(button(/Expenses \(0\)/))
+    expect(screen.queryByRole('button', { name: /Expenses/ })).toBeNull() // nothing in that bucket inside the range: no chip (DECISIONS #109)
+
+    setRange('2026-05-01', '2026-05-31') // Statutory is chosen and now has nothing in range
     expect(shown()).toEqual([])
+    expect(button(/Statutory \(0\)/).getAttribute('aria-pressed')).toBe('true') // the chosen chip stays, so it can be un-chosen
     expect(screen.getByText('No documents match these filters.')).toBeTruthy() // not "No documents uploaded yet."
+    fireEvent.click(button(/Statutory \(0\)/))
+    expect(button('All (0)').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('button', { name: /Statutory/ })).toBeNull() // un-chosen with nothing in it: gone
   })
 
   it('reads the upload day in the COMPANY timezone', () => {
@@ -165,33 +188,61 @@ describe('Company Files: the date range (A7)', () => {
   })
 })
 
-describe('Company Files: the owner\'s Purge (A5)', () => {
-  it('is offered on each company document to the owner only; an admin has Delete and no Purge', () => {
-    render(<CompanyFilesPage />)
-    expect(screen.getAllByRole('button', { name: 'Purge' })).toHaveLength(4)
-    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(4)
-    cleanup()
+describe('Company Files: the owner\'s permanent removal is a choice inside Delete\'s confirmation (A5, folded in by DECISIONS #109)', () => {
+  const openDelete = (index = 0) => {
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[index]!)
+    return screen.getByRole('alertdialog')
+  }
 
-    for (const role of ['admin', 'user', 'viewer']) {
-      auth.value = { ...auth.value, role }
-      render(<CompanyFilesPage />)
-      expect(screen.queryByRole('button', { name: 'Purge' }), role).toBeNull()
-      cleanup()
-    }
-    auth.value = { ...auth.value, role: 'admin' }
+  it('there is no Purge button on any card: one destructive action, Delete', () => {
     render(<CompanyFilesPage />)
+    expect(screen.queryAllByRole('button', { name: 'Purge' })).toHaveLength(0)
     expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(4)
   })
 
-  it('asks first, says what everyone else and the owner will see, requests the purge, reloads the list and confirms by name', async () => {
+  it('the OWNER\'s Delete dialog offers "Also remove it permanently"; an admin\'s is the ordinary one, unchanged', () => {
+    render(<CompanyFilesPage />)
+    expect(within(openDelete()).getByRole('checkbox', { name: 'Also remove it permanently' })).toBeTruthy()
+    cleanup()
+
+    auth.value = { ...auth.value, role: 'admin' }
+    render(<CompanyFilesPage />)
+    const dialog = openDelete()
+    expect(within(dialog).queryByRole('checkbox')).toBeNull()
+    expect(within(dialog).getByText("Delete file-1.txt? This can't be undone.")).toBeTruthy()
+    cleanup()
+
+    for (const role of ['user', 'viewer']) { // they have no Delete at all, so nothing to fold anything into
+      auth.value = { ...auth.value, role }
+      render(<CompanyFilesPage />)
+      expect(screen.queryByRole('button', { name: 'Delete' }), role).toBeNull()
+      cleanup()
+    }
+  })
+
+  it('unticked, the confirm is an ordinary delete: it archives and asks for no purge', async () => {
+    vi.mocked(opsApi.archiveDocument).mockResolvedValue({ status: 'archived' })
+    render(<CompanyFilesPage />)
+    const dialog = openDelete()
+    expect(within(dialog).getByText("Delete file-1.txt? This can't be undone.")).toBeTruthy()
+    expect(within(dialog).getByRole('checkbox').hasAttribute('checked')).toBe(false)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(opsApi.archiveDocument).toHaveBeenCalledWith(1))
+    expect(opsApi.requestPurge).not.toHaveBeenCalled()
+  })
+
+  it('ticked, the dialog says what a purge request does, the button becomes Purge, and confirming asks for the purge and NOT a plain delete', async () => {
     vi.mocked(opsApi.requestPurge).mockResolvedValue({ status: 'purge_requested' })
     render(<CompanyFilesPage />)
+    const dialog = openDelete()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Purge' })[0]!)
-    const dialog = screen.getByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Also remove it permanently' }))
     expect(within(dialog).getByText(/permanently removed/)).toBeTruthy()
     expect(within(dialog).getByText(/Everyone else stops seeing it now/)).toBeTruthy()
     expect(within(dialog).getByText(/You keep seeing it, marked "Purge requested", until the team removes it permanently/)).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Delete' })).toBeNull() // the confirm is now the stronger word
     expect(opsApi.requestPurge).not.toHaveBeenCalled() // asking is not doing
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Purge' }))
@@ -202,18 +253,33 @@ describe('Company Files: the owner\'s Purge (A5)', () => {
     expect(opsApi.archiveDocument).not.toHaveBeenCalled()
   })
 
-  it('cancelling asks for nothing', () => {
+  it('unticking goes back to the ordinary delete wording', () => {
     render(<CompanyFilesPage />)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Purge' })[0]!)
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
-    expect(opsApi.requestPurge).not.toHaveBeenCalled()
+    const dialog = openDelete()
+    fireEvent.click(within(dialog).getByRole('checkbox'))
+    fireEvent.click(within(dialog).getByRole('checkbox'))
+    expect(within(dialog).getByText("Delete file-1.txt? This can't be undone.")).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeTruthy()
   })
 
-  it('a refused request shows the server message and confirms nothing', async () => {
+  it('cancelling asks for nothing, and reopening starts unticked again', () => {
+    render(<CompanyFilesPage />)
+    let dialog = openDelete()
+    fireEvent.click(within(dialog).getByRole('checkbox'))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(opsApi.requestPurge).not.toHaveBeenCalled()
+    expect(opsApi.archiveDocument).not.toHaveBeenCalled()
+
+    dialog = openDelete()
+    expect((within(dialog).getByRole('checkbox') as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('a refused purge request shows the server message and confirms nothing', async () => {
     vi.mocked(opsApi.requestPurge).mockRejectedValue(new Error('Only the owner can request that a company document be purged'))
     render(<CompanyFilesPage />)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Purge' })[0]!)
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Purge' }))
+    const dialog = openDelete()
+    fireEvent.click(within(dialog).getByRole('checkbox'))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Purge' }))
 
     expect((await screen.findByRole('alert')).textContent).toContain('Only the owner')
     expect(screen.queryByText(/is hidden now/)).toBeNull()
@@ -246,8 +312,8 @@ describe('Company Files: a purge the owner asked for stays visible to them until
   it('the other documents beside it keep their own actions', () => {
     ops.documents = [...DOCS, requested()]
     render(<CompanyFilesPage />)
-    expect(screen.getAllByRole('button', { name: 'Purge' })).toHaveLength(4)
-    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(4)
+    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(4) // and no separate Purge button anywhere (DECISIONS #109)
+    expect(screen.queryAllByRole('button', { name: 'Purge' })).toHaveLength(0)
   })
 
   it('counts with the rest', () => {
