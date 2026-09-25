@@ -7,6 +7,7 @@
 import { useCallback, useState } from 'react'
 import { normalizeImageForUpload } from '../../lib/imageNormalize'
 import { opsApi, type UploadResult, type Visibility } from '../ops/opsApi'
+import { assertWithinFileLimit } from './fileLimit'
 import {
   appendPages, interpretDocumentSelection, movePage, removePage, type SelectionError,
 } from './uploadSelection'
@@ -17,8 +18,9 @@ interface Deps {
   refresh: () => Promise<void>
   /** Called with the server's answer for each finished upload (drives the toast). */
   onOutcome: (result: UploadResult) => void
-  /** null clears the page's error banner; a string shows it. */
-  onError: (message: string | null) => void
+  /** null clears the page's error banner; a string shows it. The error itself comes second, so a page can
+   * translate a known reason by its code (uploadErrorMessage.ts). */
+  onError: (message: string | null, error?: unknown) => void
   /** The checklist item this upload was started from (round 16, DECISIONS #90): a
    * doc_type slug sent to classify as a hint. Applies to documents, not photos. */
   docTypeHint?: string | null
@@ -54,7 +56,7 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
         onOutcome(result)
         return true
       } catch (e) {
-        onError(e instanceof Error ? e.message : String(e))
+        onError(e instanceof Error ? e.message : String(e), e)
         return false
       } finally {
         setBusy(false)
@@ -67,11 +69,15 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
   const uploadOne = useCallback(
     (file: File, isPicture: boolean) =>
       run(
-        async () =>
-          opsApi.uploadDocument(await normalizeImageForUpload(file), isPicture, language, {
+        async () => {
+          // A photo is downscaled first, so a 30 MB phone photo is judged as the small file it becomes.
+          const prepared = await normalizeImageForUpload(file)
+          await assertWithinFileLimit([prepared])
+          return opsApi.uploadDocument(prepared, isPicture, language, {
             docTypeHint: isPicture ? null : docTypeHint,
             visibility,
-          }),
+          })
+        },
         { name: file.name },
       ),
     [docTypeHint, language, run, visibility],
@@ -117,6 +123,7 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
         : await run(
             async () => {
               const pages = await Promise.all(staged.map(normalizeImageForUpload))
+              await assertWithinFileLimit(pages)
               return opsApi.uploadPages(pages, language, { docTypeHint, visibility })
             },
             { name: only.name, pages: staged.length },

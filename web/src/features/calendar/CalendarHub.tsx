@@ -36,12 +36,12 @@ export function CalendarHub() {
 
       <div className="space-y-10">
         <section>
-          <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">{t('ops.tabs.dates')}</h2>
+          <h2 className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">{t('ops.tabs.dates')}</h2>
           <DatesView documents={documents} />
         </section>
 
         <section>
-          <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">
+          <h2 className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">
             {t('ops.obligations.heading', { count: obligations.length })}
           </h2>
           <Card className="overflow-hidden p-0" interactive={false}>

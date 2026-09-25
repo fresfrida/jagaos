@@ -409,8 +409,13 @@ export const VENDOR_NAMES_DATALIST_ID = 'ops-vendor-names'
  * the bytes itself rather than pointing straight at the API URL — this is
  * that fetch-and-object-URL dance, pulled out once a third caller needed
  * it (2026-09-22). `enabled=false` skips the fetch entirely (the
- * thumbnail never fetches a PDF just to show a generic icon). */
-export function useDocumentBlobUrl(documentId: number, enabled = true): { blobUrl: string | null; failed: boolean } {
+ * thumbnail never fetches a file it has no picture for). `variant` picks what is fetched: the
+ * file itself, or (round 20, item 5) a PDF's first-page thumbnail. */
+export function useDocumentBlobUrl(
+  documentId: number,
+  enabled = true,
+  variant: 'file' | 'thumbnail' = 'file',
+): { blobUrl: string | null; failed: boolean } {
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -420,8 +425,8 @@ export function useDocumentBlobUrl(documentId: number, enabled = true): { blobUr
     let url: string | null = null
     setBlobUrl(null)
     setFailed(false)
-    opsApi
-      .fetchDocumentFile(documentId)
+    const load = variant === 'thumbnail' ? opsApi.fetchDocumentThumbnail : opsApi.fetchDocumentFile
+    load(documentId)
       .then((blob) => {
         if (cancelled) return
         url = URL.createObjectURL(blob)
@@ -434,7 +439,7 @@ export function useDocumentBlobUrl(documentId: number, enabled = true): { blobUr
       cancelled = true
       if (url) URL.revokeObjectURL(url)
     }
-  }, [documentId, enabled])
+  }, [documentId, enabled, variant])
 
   return { blobUrl, failed }
 }
@@ -445,11 +450,11 @@ export function useDocumentBlobUrl(documentId: number, enabled = true): { blobUr
  * for every label puts each input in the same place whatever the language; a label
  * longer than two lines is cut with an ellipsis rather than growing the row. */
 export function FieldLabelText({ children }: { children: ReactNode }) {
-  return <span className="line-clamp-2 h-8 overflow-hidden text-[12px] leading-4">{children}</span>
+  return <span className="line-clamp-2 h-8 overflow-hidden text-[13px] leading-4">{children}</span>
 }
 
 export const FIELD_CLASS =
-  'block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted'
+  'block h-9 w-full rounded-control border border-line bg-white px-2.5 text-[14px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted'
 
 /** Single-select pill/button group, replacing a `<select>` for a small
  * fixed vocabulary (2026-09-23, live user feedback: "should be buttons as
@@ -481,7 +486,7 @@ export function PillPicker({
   // word is cut with an ellipsis (its whole text is in the tooltip) instead of
   // pushing its neighbours.
   const pillClass = (active: boolean) =>
-    `min-w-0 truncate rounded-md border px-2 py-1 text-center text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+    `min-w-0 truncate rounded-md border px-2 py-1 text-center text-[14px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
       active ? 'border-ink bg-ink text-white' : 'border-line bg-white text-muted hover:border-ink/40 hover:text-ink'
     }`
   return (
@@ -663,7 +668,7 @@ export function StatusPill({ status }: { status: string }) {
   if (STATUSES_WITHOUT_A_BADGE.has(status)) return null
   const labelKey = STATUS_LABEL_KEY[status]
   return (
-    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-mono uppercase tracking-wide ${STATUS_TONE[status] ?? 'bg-canvas text-muted'}`}>
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[12px] font-mono uppercase tracking-wide ${STATUS_TONE[status] ?? 'bg-canvas text-muted'}`}>
       {labelKey ? t(labelKey) : status}
     </span>
   )
@@ -679,7 +684,7 @@ export function PersonalFileBadge({ className }: { className?: string }) {
   const { t } = useTranslation()
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-md bg-canvas px-2 py-0.5 text-[11px] font-mono uppercase tracking-wide text-ink ${className ?? ''}`}
+      className={`inline-flex items-center gap-1 rounded-md bg-canvas px-2 py-0.5 text-[12px] font-mono uppercase tracking-wide text-ink ${className ?? ''}`}
     >
       <Lock size={11} aria-hidden="true" /> {t('ops.visibility.onlyYou')}
     </span>

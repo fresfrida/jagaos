@@ -19,7 +19,7 @@ export function CalendarPreview() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold tracking-tight">{formatWeekRange(weekStart)}</h3>
-          <p className="font-mono text-[11px] text-muted">{weekEvents.length} events · sample data</p>
+          <p className="font-mono text-[12px] text-muted">{weekEvents.length} events · sample data</p>
         </div>
         <div className="flex gap-1.5">
           <Button variant="secondary" size="icon" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -7))} icon={<ChevronLeft size={20} />} />

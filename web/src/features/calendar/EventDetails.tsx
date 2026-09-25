@@ -10,7 +10,7 @@ import { formatTimeRange } from './time'
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wide text-muted">{title}</h4>
+      <h4 className="mb-2 font-mono text-[12px] uppercase tracking-wide text-muted">{title}</h4>
       {children}
     </div>
   )
@@ -47,13 +47,13 @@ function EventBody({ event }: { event: CalendarEvent }) {
     <>
       <div>
         <h3 className="text-lg font-semibold tracking-tight">{event.title}</h3>
-        <p className="mt-1 font-mono text-[12px] text-muted">
+        <p className="mt-1 font-mono text-[13px] text-muted">
           {formatWeekday(event.date)} {formatShortDate(event.date)} · {formatTimeRange(event.start, event.end)}
         </p>
       </div>
       <Group title="Related documents">
         {documents.length === 0 ? (
-          <p className="text-[13px] text-muted">None linked.</p>
+          <p className="text-[14px] text-muted">None linked.</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {documents.map((d) => (
@@ -64,11 +64,11 @@ function EventBody({ event }: { event: CalendarEvent }) {
       </Group>
       <Group title="Decisions">
         {decisions.length === 0 ? (
-          <p className="text-[13px] text-muted">No decisions recorded.</p>
+          <p className="text-[14px] text-muted">No decisions recorded.</p>
         ) : (
           <ul className="space-y-2">
             {decisions.map((m) => (
-              <li key={m.id} className="text-[13px] leading-5 text-ink">
+              <li key={m.id} className="text-[14px] leading-5 text-ink">
                 {m.text}
               </li>
             ))}
@@ -78,7 +78,7 @@ function EventBody({ event }: { event: CalendarEvent }) {
       <Group title="People">
         <ul className="space-y-1.5">
           {event.people.map((p) => (
-            <li key={p.name} className="flex items-baseline justify-between gap-3 text-[13px]">
+            <li key={p.name} className="flex items-baseline justify-between gap-3 text-[14px]">
               <span className="text-ink">{p.name}</span>
               <span className="text-muted">{p.role}</span>
             </li>

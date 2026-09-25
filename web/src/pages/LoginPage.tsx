@@ -23,7 +23,7 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (status === 'signed-in') navigate(routeHref('upload'))
+    if (status === 'signed-in') navigate(routeHref('home'))
   }, [status])
 
   const submit = async (event: React.FormEvent) => {
@@ -35,7 +35,7 @@ export function LoginPage() {
           ? { email, company_name: companyName, fye_month: fyeMonth, fye_day: fyeDay }
           : { email },
       )
-      navigate(routeHref('upload'))
+      navigate(routeHref('home'))
     } catch {
       // error state already surfaced by useAuth()
     } finally {
@@ -47,12 +47,12 @@ export function LoginPage() {
     <Container className="flex min-h-[calc(100svh-65px)] items-center justify-center py-16">
       <Card className="w-full max-w-sm p-6" interactive={false}>
         <h1 className="text-xl font-semibold text-ink">{t('auth.login.title')}</h1>
-        <p className="mt-1 text-[13px] text-muted">
+        <p className="mt-1 text-[14px] text-muted">
           {t('auth.login.subtitle')}
         </p>
 
         <form onSubmit={(e) => void submit(e)} className="mt-5 space-y-4">
-          <label className="block text-[13px] text-muted">
+          <label className="block text-[14px] text-muted">
             {t('auth.login.emailLabel')}
             <input
               type="email"
@@ -63,7 +63,7 @@ export function LoginPage() {
             />
           </label>
 
-          <label className="flex items-center gap-2 text-[13px] text-ink">
+          <label className="flex items-center gap-2 text-[14px] text-ink">
             <input
               type="checkbox"
               checked={isNewCompany}
@@ -74,7 +74,7 @@ export function LoginPage() {
 
           {isNewCompany && (
             <div className="space-y-3 border-l-2 border-line pl-3">
-              <label className="block text-[13px] text-muted">
+              <label className="block text-[14px] text-muted">
                 {t('auth.login.companyNameLabel')}
                 <input
                   required
@@ -84,7 +84,7 @@ export function LoginPage() {
                 />
               </label>
               <div className="flex gap-3">
-                <label className="text-[13px] text-muted">
+                <label className="text-[14px] text-muted">
                   {t('auth.login.fyeMonthLabel')}
                   <input
                     type="number" min={1} max={12} value={fyeMonth}
@@ -92,7 +92,7 @@ export function LoginPage() {
                     className="mt-1 block h-10 w-20 rounded-control border border-line px-3 text-sm text-ink outline-none focus:border-ink"
                   />
                 </label>
-                <label className="text-[13px] text-muted">
+                <label className="text-[14px] text-muted">
                   {t('auth.login.fyeDayLabel')}
                   <input
                     type="number" min={1} max={31} value={fyeDay}
@@ -105,7 +105,7 @@ export function LoginPage() {
           )}
 
           {error && (
-            <p className="rounded-card border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800" role="alert">
+            <p className="rounded-card border border-red-200 bg-red-50 px-3 py-2 text-[14px] text-red-800" role="alert">
               {error}
             </p>
           )}

@@ -19,8 +19,8 @@ const BOTH = JSON.stringify({ en: EN, ms: MS })
 const doc: DocumentRow = {
   id: 7,
   filename: 'acme.pdf',
-  // Not an image: DocumentThumbnail only fetches the file for images, so a
-  // PDF keeps this test free of any network call at all.
+  // A PDF: since round 20 its card asks the server for a first-page thumbnail once, when it mounts
+  // (the tests below check that a language switch never asks again).
   media_type: 'application/pdf',
   lane: 'invoice',
   doc_type: 'invoice',
@@ -41,7 +41,7 @@ const switchLanguage = (code: string) => act(async () => { await i18n.changeLang
 let fetchSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(async () => {
-  fetchSpy = vi.spyOn(globalThis, 'fetch')
+  fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(null, { status: 404 }))
   await i18n.changeLanguage('en')
 })
 
@@ -54,12 +54,13 @@ describe('DocumentCard description follows the selected language', () => {
   it('re-renders the shown description on a language switch with no re-fetch', async () => {
     renderCard()
     expect(screen.getByText(EN)).toBeTruthy()
+    const requestsAtMount = fetchSpy.mock.calls.length
 
     await switchLanguage('ms')
 
     expect(screen.getByText(MS)).toBeTruthy()
     expect(screen.queryByText(EN)).toBeNull()
-    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(fetchSpy).toHaveBeenCalledTimes(requestsAtMount)
   })
 
   it('falls back to English for a language the document has no text for', async () => {

@@ -8,6 +8,12 @@
 
 	# backend (same origin as the site, so no CORS setup is needed)
 	handle /api/* {
+		# Round 20 (DECISIONS #99): an outer bound on any request body, so an absurd upload is refused here
+		# before it reaches the API. The API enforces the real per-file limit (25 MB, app/limits.py) and its
+		# own body bound (26 MiB for one file, 51 MiB for several pages); this is the ceiling above both.
+		request_body {
+			max_size 52MiB
+		}
 		reverse_proxy 127.0.0.1:8000
 	}
 

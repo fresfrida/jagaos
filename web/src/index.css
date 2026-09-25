@@ -2,8 +2,8 @@
 
 @theme {
   --color-ink: #141414;
-  --color-charcoal: #55555e; /* softer heading tone ("at scale") */
-  --color-muted: #6b6b75;
+  --color-charcoal: #4a4a53; /* softer heading tone ("at scale"); darkened a step in round 20 (#55555e) */
+  --color-muted: #5a5a64; /* secondary text; 6.8:1 on white (was #6b6b75, 5.3:1) */
   --color-line: #e5e5e5;
   --color-canvas: #fafafa;
   --color-sage: #6ea99d;
@@ -12,6 +12,9 @@
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Geist', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Round 20 (item 9): the body-size step, 14px to 15px. Every `text-sm` in the app follows it. */
+  --text-sm: 0.9375rem;
 
   --radius-control: 8px;
   --radius-card: 12px;

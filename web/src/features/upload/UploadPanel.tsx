@@ -12,18 +12,18 @@ import { UploadProgress } from './UploadProgress'
 import { MAX_PAGES } from './uploadSelection'
 import type { UploadFlow } from './useUploadFlow'
 
-export function UploadPanel({ flow }: { flow: UploadFlow }) {
+export function UploadPanel({ flow, disabled = false }: { flow: UploadFlow; /** Off for a reason that is not an upload in progress (the private-file limit is reached, DECISIONS #99). */ disabled?: boolean }) {
   const { t } = useTranslation()
   return (
     <>
       {flow.busy && flow.uploading ? (
         <UploadProgress name={flow.uploading.name} pages={flow.uploading.pages} />
       ) : (
-        <UploadChoice disabled={flow.busy} onDocumentFiles={flow.chooseDocumentFiles} onPhotoFile={flow.uploadPhoto} />
+        <UploadChoice disabled={flow.busy || disabled} onDocumentFiles={flow.chooseDocumentFiles} onPhotoFile={flow.uploadPhoto} />
       )}
 
       {flow.selectionError && !flow.staged && (
-        <p role="alert" className="mt-3 text-[13px] text-red-700">
+        <p role="alert" className="mt-3 text-[14px] text-red-700">
           {t(`ops.upload.pages.error.${flow.selectionError}`, { max: MAX_PAGES })}
         </p>
       )}

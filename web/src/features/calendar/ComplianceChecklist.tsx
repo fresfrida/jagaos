@@ -33,7 +33,7 @@ export function ComplianceChecklist({
 
   return (
     <section>
-      <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">
+      <h2 className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">
         {t('ops.gaps.heading', { satisfied, total: expectations.length })}
       </h2>
       <Card className="overflow-hidden p-0" interactive={false}>
@@ -49,14 +49,14 @@ export function ComplianceChecklist({
               return (
                 <li key={exp.id} className="px-4 py-3" data-testid="checklist-row">
                   <div className="flex items-start justify-between gap-3">
-                    <p className="min-w-0 break-words text-[13px] font-medium text-ink">{exp.label}</p>
+                    <p className="min-w-0 break-words text-[14px] font-medium text-ink">{exp.label}</p>
                     <StatusPill status={exp.status} />
                   </div>
                   {evidence && (
                     <button
                       type="button"
                       onClick={() => setViewing(evidence)}
-                      className="mt-1 text-[12px] text-ink underline underline-offset-2 hover:text-muted"
+                      className="mt-1 text-[13px] text-ink underline underline-offset-2 hover:text-muted"
                     >
                       {t('ops.gaps.viewDocument')}
                     </button>

@@ -14,7 +14,7 @@ export function MemoryCard({ memory, compact = false }: { memory: Memory; compac
         {memory.sources.map((s) => (
           <SourceLabel key={s.label} kind={s.kind} label={s.label} />
         ))}
-        <time dateTime={memory.date} className="ml-auto font-mono text-[11px] text-muted">
+        <time dateTime={memory.date} className="ml-auto font-mono text-[12px] text-muted">
           {formatShortDate(memory.date)}
         </time>
       </div>

@@ -11,12 +11,39 @@
     "signIn": "Log masuk",
     "pitch": "Berhenti mencari dokumen dan terlepas tarikh akhir.",
     "demo": {
-      "button": "Jenguk-jenguk dahulu",
-      "hint": "Membuka syarikat demo sebagai pemiliknya. Tiada pendaftaran diperlukan.",
+      "button": "Pilih peranan demo",
+      "hint": "Lihat aplikasi sebagai pemilik, pentadbir, pengguna atau pelihat. Tidak perlu mendaftar.",
       "opening": "Membuka demo…",
-      "failed": "Tidak dapat membuka demo sekarang. Anda masih boleh log masuk."
+      "failed": "Tidak dapat membuka demo sekarang. Anda masih boleh log masuk.",
+      "pickerTitle": "Cuba demo sebagai",
+      "pickerIntro": "Setiap satu ialah log masuk sebenar ke syarikat demo yang sama. Pilih peranan yang anda mahu lihat.",
+      "accounts": {
+        "owner": {
+          "name": "Pemilik",
+          "text": "Akses penuh, termasuk menyunting Tetapan Syarikat. Akaun ini juga memiliki dua syarikat saudara, jadi ia satu-satunya akaun dengan penukar syarikat."
+        },
+        "admin": {
+          "name": "Pentadbir",
+          "text": "Mengesahkan atau menolak apa yang kami baca, menyunting atau memadam mana-mana dokumen syarikat, dan melihat Tetapan Syarikat secara baca sahaja."
+        },
+        "user": {
+          "name": "Pengguna",
+          "text": "Memuat naik dokumen dan menyunting dokumen sendiri. Menyimpan fail peribadi dalam Hanya saya. Tidak boleh mengesahkan atau memadam dokumen syarikat."
+        },
+        "user1": {
+          "name": "Pengguna 1",
+          "text": "Peranan sama seperti Pengguna. Log masuk sebagai dua pengguna untuk melihat fail dan fail peribadi setiap orang kekal miliknya."
+        },
+        "user2": {
+          "name": "Pengguna 2",
+          "text": "Peranan sama seperti Pengguna. Log masuk sebagai dua pengguna untuk melihat fail dan fail peribadi setiap orang kekal miliknya."
+        },
+        "viewer": {
+          "name": "Pelihat",
+          "text": "Baca sahaja. Melihat dokumen yang telah difailkan, Kalendar dan Carian, tetapi tidak boleh memuat naik, menyunting, atau melihat apa yang menunggu semakan."
+        }
+      }
     },
-    "haveAccount": "Sudah ada akaun?",
     "features": {
       "capture": {
         "title": "Tangkap",
@@ -30,7 +57,22 @@
         "title": "Kewajipan",
         "text": "Tarikh akhir dan pemfailan yang diperlukan muncul dalam kalendar anda, lengkap dengan peraturan di sebaliknya."
       }
-    }
+    },
+    "signedIn": {
+      "review": {
+        "mine": "{{count}} menunggu semakan anda",
+        "pending": "{{count}} muat naik anda menunggu semakan"
+      },
+      "pageTitle": "Laman utama",
+      "upload": {
+        "title": "Muat naik",
+        "hint": "Tambah dokumen atau foto. Kami membacanya dan anda mengesahkan hasilnya."
+      },
+      "onlyMe": {
+        "hint": "Fail peribadi yang hanya anda boleh lihat"
+      }
+    },
+    "signInHint": "Gunakan e-mel anda sendiri, atau sediakan syarikat baharu."
   },
   "companySettings": {
     "heading": "Tetapan Syarikat",
@@ -183,7 +225,7 @@
         "addMore": "Tambah lagi halaman",
         "submit": "Muat naik {{count}} halaman sebagai satu dokumen",
         "error": {
-          "mixed": "Pilih satu PDF atau beberapa foto. PDF tidak boleh digabungkan dengan foto.",
+          "mixed": "Pilih satu PDF, atau beberapa foto halaman bagi satu dokumen. PDF belum boleh digabungkan dengan foto atau dengan PDF lain, jadi muat naik setiap PDF secara berasingan.",
           "tooMany": "Satu dokumen boleh mempunyai paling banyak {{max}} halaman."
         }
       },
@@ -199,6 +241,9 @@
       "hint": {
         "filingFor": "Memfailkan untuk: {{label}}",
         "clear": "Kosongkan cadangan ini"
+      },
+      "error": {
+        "fileTooLarge": "Fail itu melebihi had {{mb}} MB."
       }
     },
     "review": {
@@ -301,7 +346,13 @@
         "cost": "Kos",
         "decision": "Keputusan"
       },
-      "noDocumentDate": "Tiada tarikh dokumen"
+      "noDocumentDate": "Tiada tarikh dokumen",
+      "purge": {
+        "message": "Ini memadam fail itu dan semua yang dibaca daripadanya secara kekal. Ia tidak boleh dibatalkan.",
+        "prompt": "Taip nama fail di bawah untuk mengesahkan.",
+        "inputLabel": "Nama fail",
+        "confirm": "Padam secara kekal"
+      }
     },
     "dates": {
       "uploadDate": "Tarikh muat naik",
@@ -418,7 +469,18 @@
       "canvasLabel": "Ruang lukisan. Lukis dengan jari, pen atau tetikus.",
       "clear": "Kosongkan",
       "save": "Simpan sebagai imej",
-      "hint": "Disimpan sebagai imej peribadi dalam fail anda di bawah."
+      "hint": "Disimpan sebagai imej peribadi dalam fail anda di bawah.",
+      "modeLabel": "Cara membuatnya",
+      "modeDraw": "Lukis",
+      "modeType": "Taip",
+      "textLabel": "Nota anda",
+      "textPlaceholder": "Taip nota untuk disimpan di sini",
+      "hintText": "Disimpan sebagai imej peribadi bagi teks anda, dalam fail anda di bawah."
+    },
+    "emptyViewer": "Belum ada apa-apa di sini. Anda masih boleh melayari Kalendar, Carian dan Fail Syarikat daripada navigasi.",
+    "limits": "Sehingga {{max}} fail peribadi, setiap satu {{mb}} MB. Anda ada {{used}}.",
+    "limit": {
+      "reached": "Anda telah mencapai had {{limit}} fail peribadi. Padam satu untuk menambah yang lain."
     }
   }
 }

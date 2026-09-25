@@ -18,7 +18,7 @@ export function TagsLanding() {
 
   return (
     <div>
-      <p className="mb-6 text-[13px] text-muted">{t('ops.tags.intro')}</p>
+      <p className="mb-6 text-[14px] text-muted">{t('ops.tags.intro')}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {BUCKETS.map((bucket) => (
           <Link

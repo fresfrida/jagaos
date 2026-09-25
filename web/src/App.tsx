@@ -71,8 +71,9 @@ function AppContent({ route }: { route: ResolvedRoute }) {
          session status, not the route: was `route !== 'home'` (every
          non-landing route, including all six signed-in pages); now
          `status !== 'signed-in'` (every logged-out page, landing
-         included, since a signed-in visitor never actually renders
-         `home` — DECISIONS #64's HomeRedirect fires first). */}
+         included). A signed-in visitor to `home` gets the signed-in home
+         (pages/SignedInHome.tsx, or Only me for a viewer), which is app
+         chrome, not the landing (round 20, item 2). */}
       {status !== 'signed-in' && <Footer />}
       {showBottomNav && <BottomNav current={route} />}
       <UploadSheetHost />

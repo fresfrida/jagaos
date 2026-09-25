@@ -26,7 +26,7 @@ import { accountMenuRoutes } from './headerNav'
  * them from `sm` up. Company Settings has no bottom-nav slot and shows always. */
 const PHONE_HAS_ITS_OWN: readonly RouteId[] = ['tags', 'search']
 
-const MENU_ITEM_CLASS = 'block w-full px-3 py-1.5 text-left text-[13px] text-ink hover:bg-canvas'
+const MENU_ITEM_CLASS = 'block w-full px-3 py-1.5 text-left text-[14px] text-ink hover:bg-canvas'
 
 export function UserMenu() {
   const { t } = useTranslation()
@@ -68,8 +68,8 @@ export function UserMenu() {
           className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-card border border-line bg-white py-2 shadow-lg"
         >
           <div className="border-b border-line px-3 pb-2">
-            {company && <p className="truncate text-[13px] font-medium text-ink">{company.name}</p>}
-            <p className="truncate text-[12px] text-muted">{user.email}</p>
+            {company && <p className="truncate text-[14px] font-medium text-ink">{company.name}</p>}
+            <p className="truncate text-[13px] text-muted">{user.email}</p>
             {role && <Badge mono className="mt-1">{roleLabel(t, role)}</Badge>}
           </div>
           {/* Renders nothing for anyone with fewer than two companies. */}

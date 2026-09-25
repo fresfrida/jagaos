@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 export function HintBanner({ label, onClear }: { label: string; onClear: () => void }) {
   const { t } = useTranslation()
   return (
-    <div className="mb-4 flex items-center justify-between gap-3 rounded-card border border-sage bg-canvas px-3 py-2.5 text-[13px] text-ink" data-testid="upload-hint">
+    <div className="mb-4 flex items-center justify-between gap-3 rounded-card border border-sage bg-canvas px-3 py-2.5 text-[14px] text-ink" data-testid="upload-hint">
       <p className="min-w-0">{t('ops.upload.hint.filingFor', { label })}</p>
       <button
         type="button"

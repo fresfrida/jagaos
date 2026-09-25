@@ -4,6 +4,8 @@ import pdfplumber
 import pytesseract
 from PIL import Image, ImageOps
 
+from app.extract.pdfium_lock import PDFIUM_LOCK
+
 # 2026-09-24: an image-only ("scanned") PDF has no text layer, so
 # app/extract/pdf.py finds nothing and app/graph/ingest.py routes it here —
 # but this file could only open a raw image, so it raised on the PDF
@@ -71,7 +73,9 @@ def extract_pdf_text(path: str) -> str:
     texts = []
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages[:MAX_PDF_OCR_PAGES]:
-            image = page.to_image(resolution=PDF_OCR_DPI).original.convert("RGB")
+            with PDFIUM_LOCK:  # PDFium is not thread-safe: two renders at once abort the process (pdfium_lock.py)
+                image = page.to_image(resolution=PDF_OCR_DPI).original
+            image = image.convert("RGB")
             texts.append(pytesseract.image_to_string(image, config=OCR_CONFIG).strip())
     if len(texts) == 1:
         return texts[0]

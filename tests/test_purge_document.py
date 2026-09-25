@@ -9,6 +9,7 @@ and confirm endpoints (canned model) so the event, obligation and checklist rows
 the ones the pipeline really writes, and purges that.
 """
 
+import hashlib
 import io
 import json
 import sys
@@ -24,6 +25,7 @@ import app.graph.classify as classify_module  # noqa: E402
 import app.graph.derive_events as derive_events_module  # noqa: E402
 import app.graph.extract as extract_module  # noqa: E402
 import purge_document  # noqa: E402
+from app import thumbnails  # noqa: E402
 from app.db import DB_PATH, get_conn, reindex_document_search  # noqa: E402
 from app.llm import LLMResult  # noqa: E402
 from app.main import app  # noqa: E402
@@ -258,6 +260,56 @@ def test_a_file_another_row_still_uses_is_kept(world):
     assert world["a"]["path"].exists()
 
 
+def _with_thumbnail(doc: dict, cache: Path) -> Path:
+    """Give `doc` a stored file named by a content hash, as ingest does, and a cached thumbnail for it."""
+    sha = hashlib.sha256(doc["path"].name.encode()).hexdigest()
+    renamed = doc["path"].with_name(f"{sha}.pdf")
+    doc["path"].rename(renamed)
+    with get_conn() as conn:
+        conn.execute("UPDATE document SET stored_path = ? WHERE id = ?", (str(renamed), doc["id"]))
+    doc["path"] = renamed
+    cache.mkdir(parents=True, exist_ok=True)
+    thumb = cache / f"{sha}.jpg"
+    thumb.write_bytes(b"jpeg")
+    return thumb
+
+
+def test_apply_removes_the_purged_pdfs_cached_thumbnail_and_only_that_one(world, tmp_path, monkeypatch):
+    """The thumbnail is derived from the document's content, so a purged (personal) file must not leave a
+    picture of its first page behind (round 20, DECISIONS #97)."""
+    cache = tmp_path / "thumbs"
+    monkeypatch.setattr(thumbnails, "THUMBS_PATH", cache)
+    a_thumb, b_thumb = _with_thumbnail(world["a"], cache), _with_thumbnail(world["b"], cache)
+
+    code, out = purge([world["a"]["id"]], apply=True)
+
+    assert code == 0, out
+    assert "thumbnail removed" in out
+    assert not a_thumb.exists()
+    assert b_thumb.exists()
+
+
+def test_a_dry_run_and_a_kept_shared_file_both_keep_the_thumbnail(world, tmp_path, monkeypatch):
+    cache = tmp_path / "thumbs"
+    monkeypatch.setattr(thumbnails, "THUMBS_PATH", cache)
+    thumb = _with_thumbnail(world["a"], cache)
+
+    purge([world["a"]["id"]])  # dry run
+    assert thumb.exists()
+
+    with get_conn() as conn:  # another row still uses the file
+        conn.execute("UPDATE document SET stored_path = ? WHERE id = ?", (str(world["a"]["path"]), world["b"]["id"]))
+    code, out = purge([world["a"]["id"]], apply=True)
+    assert code == 0 and "will be KEPT" in out
+    assert thumb.exists()
+
+
+def test_a_purge_with_no_thumbnail_is_unchanged(world, tmp_path, monkeypatch):
+    monkeypatch.setattr(thumbnails, "THUMBS_PATH", tmp_path / "no-such-dir")
+    code, out = purge([world["a"]["id"]], apply=True)
+    assert code == 0 and "thumbnail removed" not in out
+
+
 def test_a_file_that_cannot_be_removed_is_named_and_the_exit_code_says_so(world, monkeypatch):
     def refuse(self, *a, **k):
         raise PermissionError("nope")
@@ -275,7 +327,7 @@ def test_a_failure_part_way_rolls_the_whole_document_back(world, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(purge_document, "reopen_expectation", boom)
+    monkeypatch.setattr("app.purge.reopen_expectation", boom)  # the logic moved to app/purge.py in round 20
     before = _row_counts()
 
     with pytest.raises(RuntimeError):

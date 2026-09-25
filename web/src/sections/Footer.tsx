@@ -16,7 +16,7 @@ export function Footer() {
             <Logo />
             <p className="mt-3 max-w-[26rem] text-sm leading-6 text-muted">{FOOTER_TAGLINE}</p>
           </div>
-          <p className="text-[13px] text-muted">
+          <p className="text-[14px] text-muted">
             &copy; {new Date().getFullYear()} {PRODUCT_NAME}. All rights reserved.
           </p>
         </div>

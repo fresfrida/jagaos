@@ -74,7 +74,7 @@ function SearchContent() {
             if (!e.target.value.trim()) setResults(null)
           }}
           placeholder={t('ops.documents.searchPlaceholder')}
-          className="h-9 flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+          className="h-9 flex-1 rounded-control border border-line px-2.5 text-[14px] text-ink outline-none focus:border-ink"
         />
         {results !== null && (
           <Button

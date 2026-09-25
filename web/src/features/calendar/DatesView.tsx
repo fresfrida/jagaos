@@ -78,12 +78,12 @@ function DateGroupRow({ doc, onView }: { doc: DocumentRow; onView: () => void })
     <button
       type="button"
       onClick={onView}
-      className="flex w-full items-center gap-2 rounded-control border border-line bg-white px-3 py-2 text-left text-[13px] transition-colors hover:border-ink/40"
+      className="flex w-full items-center gap-2 rounded-control border border-line bg-white px-3 py-2 text-left text-[14px] transition-colors hover:border-ink/40"
     >
       <DocumentTypeIcon mediaType={doc.media_type} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-ink">{formatDocumentLabel(doc, i18n.language) || t('ops.documents.noCaptionYet')}</span>
-        <FileName name={doc.filename} max={34} className="block truncate text-[11px] text-muted" />
+        <FileName name={doc.filename} max={34} className="block truncate text-[12px] text-muted" />
       </span>
       {doc.bucket && <Badge tone="neutral">{bucketLabel(t, doc.bucket)}</Badge>}
       <StatusPill status={doc.status} />
@@ -144,7 +144,7 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
             <button
               key={opt.id}
               onClick={() => setBasis(opt.id)}
-              className={`rounded-md px-3 py-1.5 text-[13px] transition-colors ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
+              className={`rounded-md px-3 py-1.5 text-[14px] transition-colors ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
             >
               {t(opt.labelKey)}
             </button>
@@ -159,17 +159,17 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
         <MonthGrid month={month} documentsByDay={byDay} selectedDay={selectedDay} onSelectDay={setSelectedDay} onMonthChange={setMonth} timezone={timezone} />
 
         {documents.length === 0 ? (
-          <p className="text-[13px] text-muted" data-testid="no-documents-hint">{t('ops.dates.noneUploaded')}</p>
+          <p className="text-[14px] text-muted" data-testid="no-documents-hint">{t('ops.dates.noneUploaded')}</p>
         ) : (
           <>
             <section>
               {selectedDay ? (
                 <>
-                  <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">
+                  <h3 className="mb-2 text-[12px] font-mono uppercase tracking-wide text-muted">
                     {formatShortDate(selectedDay, localeFor(i18n.language))} ({selectedDocs.length})
                   </h3>
                   {selectedDocs.length === 0 ? (
-                    <p className="rounded-card border border-line bg-white p-4 text-[13px] text-muted">{t('ops.dates.noneOnDay')}</p>
+                    <p className="rounded-card border border-line bg-white p-4 text-[14px] text-muted">{t('ops.dates.noneOnDay')}</p>
                   ) : (
                     <div className="space-y-1">
                       {selectedDocs.map((doc) => <DateGroupRow key={doc.id} doc={doc} onView={() => setViewingDocument(doc)} />)}
@@ -177,13 +177,13 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
                   )}
                 </>
               ) : (
-                <p className="rounded-card border border-dashed border-line bg-white p-4 text-[13px] text-muted">{t('ops.dates.selectADay')}</p>
+                <p className="rounded-card border border-dashed border-line bg-white p-4 text-[14px] text-muted">{t('ops.dates.selectADay')}</p>
               )}
             </section>
 
             {basis === 'document' && noDate.length > 0 && (
               <section>
-                <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">
+                <h3 className="mb-2 text-[12px] font-mono uppercase tracking-wide text-muted">
                   {t('ops.dates.noDocumentDate', { count: noDate.length })}
                 </h3>
                 <div className="space-y-1">

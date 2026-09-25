@@ -57,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # seed_dev_db and purge_document
 import purge_document  # noqa: E402  (loads .env before app.db is imported)
 import seed_dev_db  # noqa: E402
 from app.db import DB_PATH, get_conn  # noqa: E402
+from app.thumbnails import remove_thumbnail  # noqa: E402
 
 OWNER_EMAIL = seed_dev_db.OWNER_EMAIL
 SEEDED_NAMES = {seed_dev_db.COMPANY_NAME, *(name for name, _, _ in seed_dev_db.SIBLING_COMPANIES)}
@@ -328,6 +329,7 @@ def reset(client: httpx.Client, *, apply: bool, include_unrecognised: bool = Fal
             if conn.execute("SELECT COUNT(*) FROM document WHERE stored_path = ?", (str(path),)).fetchone()[0]:
                 continue  # another document row (outside the scope) still uses this file
             try:
+                remove_thumbnail(path.stem)  # a PDF's cached thumbnail (round 20, DECISIONS #97) goes with its file
                 if path.exists():
                     path.unlink()
                     removed += 1

@@ -7,7 +7,9 @@ smallest slice of PLATFORM.md's model that makes that true, with a simpler
 4-role set (owner/admin/user/viewer) than PLATFORM.md's original six.
 """
 
+import hashlib
 import json
+import logging
 import os
 import sqlite3
 import tempfile
@@ -33,6 +35,7 @@ from app.auth import (  # noqa: E402
     list_memberships,
     may_archive_document,
     may_edit_document,
+    may_purge_document,
     may_resolve_review_item,
     may_see_document,
     may_see_review_item,
@@ -61,7 +64,18 @@ from app.rules.company_profile import (  # noqa: E402
 )
 from app.rules.expectations import LABEL_BY_DOC_TYPE  # noqa: E402
 from app.rules.transitions import InvalidTransition, transition_document  # noqa: E402
+from app.limits import (  # noqa: E402
+    BodySizeLimit,
+    MAX_FILE_BYTES,
+    MAX_PERSONAL_FILES,
+    file_too_large_detail,
+    personal_file_count,
+    personal_file_limit_detail,
+)
+from app.purge import PurgeRefused, purge_now  # noqa: E402
+from app.thumbnails import get_pdf_thumbnail  # noqa: E402
 from app.models import (  # noqa: E402
+    PurgeRequest,
     AddMemberRequest,
     AuthResponse,
     BusinessProfileOut,
@@ -106,6 +120,9 @@ CORS_ALLOWED_ORIGINS = (
     if _cors_origins_env
     else _DEFAULT_CORS_ORIGINS
 )
+# Round 20 (item 6, DECISIONS #99): a request body over the upload endpoints' bound is a 413 before it is read.
+# Added BEFORE CORS so CORS is the outer layer: the 413 then carries CORS headers, and a browser page can read it.
+app.add_middleware(BodySizeLimit)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED_ORIGINS,
@@ -575,6 +592,29 @@ def _process_upload(
     }
 
 
+def _refuse_a_full_personal_space(membership: CurrentMembership, visibility: str, sha256: str | None) -> None:
+    """The per-person cap on private files (app/limits.py): a 409 when this person already holds
+    MAX_PERSONAL_FILES in this company. Company uploads are never limited by it. A file the database already
+    holds (its hash is unique) is left to ingest to report as a duplicate rather than refused here, since it
+    would not become a new file."""
+    if visibility == "company":
+        return
+    with get_conn(DB_PATH) as conn:
+        if sha256 is not None and conn.execute("SELECT 1 FROM document WHERE sha256 = ?", (sha256,)).fetchone():
+            return
+        used = personal_file_count(conn, membership.company_id, membership.user_id)
+    if used >= MAX_PERSONAL_FILES:
+        raise HTTPException(409, detail=personal_file_limit_detail())
+
+
+def _read_within_the_file_limit(data: bytes) -> bytes:
+    """One uploaded file's bytes, or a 413 if it is over MAX_FILE_BYTES (the body middleware bounds the whole
+    request; this is the exact per-file answer, and the only one that catches a file that fits the body bound)."""
+    if len(data) > MAX_FILE_BYTES:
+        raise HTTPException(413, detail=file_too_large_detail())
+    return data
+
+
 @app.post("/api/documents")
 async def upload_document(
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
@@ -599,8 +639,10 @@ async def upload_document(
     # prompt and never decides the classification.
     doc_type_hint: str | None = None,
 ) -> dict:
+    data = _read_within_the_file_limit(await file.read())
+    _refuse_a_full_personal_space(membership, visibility, hashlib.sha256(data).hexdigest())
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
-        tmp.write(await file.read())
+        tmp.write(data)
         tmp_path = tmp.name
 
     # 2026-09-23 (live regression report, item 11): tmp_path was never
@@ -641,19 +683,22 @@ async def upload_document_pages(
     ordinary upload) and at most ocr.MAX_PDF_OCR_PAGES, the cap the OCR step
     already applies: past it the extra pages would be silently dropped, so a
     longer set is refused instead. A page that is not a readable image is a
-    400 naming the page, not a 500. No byte cap exists anywhere yet (a
-    known gap, docs/KANBAN.md); the web client downscales each photo before
-    sending."""
+    400 naming the page, not a 500. Each page is bounded by MAX_FILE_BYTES and the
+    whole request by app/limits.py's body bound (round 20); the web client also
+    downscales each photo before sending."""
     if len(files) < 2:
         raise HTTPException(400, "Send at least 2 pages. A single file is an ordinary upload.")
     if len(files) > MAX_PDF_OCR_PAGES:
         raise HTTPException(400, f"At most {MAX_PDF_OCR_PAGES} pages per document, got {len(files)}")
+    # One document, however many pages: it counts as one private file. The merged file's hash is not
+    # known yet, so a duplicate set of pages at the cap is told "full" rather than "duplicate".
+    _refuse_a_full_personal_space(membership, visibility, None)
 
     temp_paths: list[str] = []
     try:
         for upload in files:
             with tempfile.NamedTemporaryFile(delete=False, suffix=Path(upload.filename or "").suffix) as tmp:
-                tmp.write(await upload.read())
+                tmp.write(_read_within_the_file_limit(await upload.read()))
                 temp_paths.append(tmp.name)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as merged:
             temp_paths.append(merged.name)
@@ -758,6 +803,8 @@ def resolve_review(
                 "UPDATE review_item SET status = 'dismissed' WHERE id = ?",
                 (review_item_id,),
             )
+        if item["visibility"] != "company":
+            _purge_a_rejected_private_file(item["document_id"], membership.email)
         return {"status": "archived", "events": None, "obligations_created": None}
 
     # thread_id is client-supplied and is what actually gets resumed, so it must
@@ -793,8 +840,14 @@ def resolve_review(
             (review_item_id,),
         ).fetchone()
 
+    final_status = doc_status["status"] if doc_status else "resumed"
+    if final_status == "archived" and item["visibility"] != "company":
+        # A reject chains through to archived (human_review.py). For a private file that would leave a soft-deleted
+        # row nobody can see and that still counts toward the 15-file cap, so it is deleted for good instead.
+        _purge_a_rejected_private_file(item["document_id"], membership.email)
+
     return {
-        "status": doc_status["status"] if doc_status else "resumed",
+        "status": final_status,
         "events": result.get("events"),
         "obligations_created": result.get("obligations_created"),
     }
@@ -968,6 +1021,16 @@ def list_personal_files(
             (membership.company_id, membership.user_id),
         ).fetchall()
         return [_document_row_for(membership, r) for r in rows if _can_see(membership, r)]
+
+
+@app.get("/api/limits")
+def get_limits(membership: Annotated[CurrentMembership, Depends(get_current_membership)]) -> dict:
+    """The upload limits and how much of the private-file one this caller has used (round 20, item 6,
+    DECISIONS #99), so the page says what the rule says. `personal_files_used` is a number about the caller's
+    own private files in their current company: it names no file."""
+    with get_conn(DB_PATH) as conn:
+        used = personal_file_count(conn, membership.company_id, membership.user_id)
+    return {"max_file_bytes": MAX_FILE_BYTES, "max_personal_files": MAX_PERSONAL_FILES, "personal_files_used": used}
 
 
 @app.get("/api/search")
@@ -1165,6 +1228,40 @@ def get_document_file(
     )
 
 
+@app.get("/api/documents/{document_id}/thumbnail")
+def get_document_thumbnail(
+    document_id: int,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> FileResponse:
+    """A small JPEG of a PDF's first page, for the document card (round 20, item 5, DECISIONS #97).
+    Generated on the first request and cached on disk by the document's content hash
+    (app/thumbnails.py explains when, where and how), so it is derived from, and guarded exactly
+    like, the file itself: the same query, the same `status != 'archived'`, and the same
+    `_hidden_or_missing` rule, so a personal file's thumbnail is its uploader's alone and a
+    document the caller may not see is a 404 (never a 403, never a hint that it exists).
+
+    Only a PDF has one (a photo's own bytes are small enough to show directly): any other type is
+    a 404, and so is a PDF that cannot be rendered or whose stored file is missing, and the
+    page then keeps its generic icon. `Cache-Control: private` lets the browser reuse it for an
+    hour without ever letting a shared cache keep it."""
+    with get_conn(DB_PATH) as conn:
+        doc = conn.execute(
+            "SELECT company_id, stored_path, media_type, sha256, status, uploaded_by_user_id, visibility "
+            "FROM document WHERE id = ? AND status != 'archived'",
+            (document_id,),
+        ).fetchone()
+    if _hidden_or_missing(membership, doc):
+        raise HTTPException(404, "document not found")
+    if doc["media_type"] != "application/pdf":
+        raise HTTPException(404, "no thumbnail for this file type")
+    if not Path(doc["stored_path"]).is_file():
+        raise HTTPException(404, "document file is missing")
+    thumbnail = get_pdf_thumbnail(doc["sha256"], doc["stored_path"])
+    if thumbnail is None:
+        raise HTTPException(404, "no thumbnail could be made for this file")
+    return FileResponse(thumbnail, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
 @app.get("/api/business-profile")
 def get_business_profile(
     membership: Annotated[CurrentMembership, Depends(require_role("owner"))],
@@ -1241,11 +1338,10 @@ def archive_document(
     app/guards/injection.py::quarantine() — a separate, already-flagged
     pre-existing issue, not copied here).
 
-    Who: admin and owner (archiving is a real action on shared company data,
-    the same bar as resolving a review), and, since round 19 (DECISIONS #95),
-    the uploader of their own PERSONAL file — auth.may_archive_document. It is
-    "your file, you can remove it": nobody else can even see a personal file,
-    so without this its author could never delete it. A `user` still cannot
+    Who: admin and owner, for a COMPANY document (archiving is a real action on shared
+    company data, the same bar as resolving a review). A personal file is never archived:
+    its uploader deletes it for good with POST .../purge (round 20, DECISIONS #99, which
+    replaced the round 19 rule that let the uploader archive it). A `user` still cannot
     delete a company document, not even one they uploaded (403).
     """
     with get_conn(DB_PATH) as conn:
@@ -1258,9 +1354,9 @@ def archive_document(
     # "deleted" and not "forbidden" (a 403 would confirm it exists).
     if _hidden_or_missing(membership, doc):
         raise HTTPException(404, "document not found")
-    if not may_archive_document(
-        membership, uploaded_by_user_id=doc["uploaded_by_user_id"], visibility=doc["visibility"],
-    ):
+    if doc["visibility"] != "company":
+        raise HTTPException(403, "A private file is deleted for good, not archived: use its Delete in Only me")
+    if not may_archive_document(membership, visibility=doc["visibility"]):
         raise HTTPException(403, f"Requires role 'admin' or higher, caller is '{membership.role}'")
 
     try:
@@ -1279,6 +1375,70 @@ def archive_document(
             (document_id,),
         )
     return {"status": "archived"}
+
+
+# Uvicorn configures this logger at INFO, so an audit line here reaches the service's journal.
+_audit = logging.getLogger("uvicorn.error")
+
+
+def _purge_a_rejected_private_file(document_id: int, actor: str) -> None:
+    """A private file whose uploader REJECTED it is deleted for good, not left archived (round 20, DECISIONS #99):
+    a soft-deleted private row is invisible to its owner yet counts toward the private-file cap, and only an operator
+    could ever clear it. Company documents are unaffected (a reject still archives them). The answer to the reject
+    is unchanged (`archived`); a purge that could not run is logged, and the row stays archived."""
+    try:
+        failed_files = purge_now(document_id)
+    except PurgeRefused as e:
+        _audit.error("AUDIT purge: rejected private document %s could not be deleted for good: %s", document_id, e)
+        return
+    _audit.info("AUDIT purge: %s rejected private document %s, deleted for good", actor, document_id)
+    if failed_files:
+        _audit.error("AUDIT purge: rows of document %s deleted but the stored file was not removed: %s", document_id, failed_files)
+
+
+@app.post("/api/documents/{document_id}/purge")
+def purge_document_endpoint(
+    document_id: int, body: PurgeRequest,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> dict:
+    """Delete a PRIVATE file for good (round 20, item 6, DECISIONS #99). Irreversible: the stored file, the row and
+    its search row, everything read from it, and a PDF's thumbnail are removed (app/purge.py), so the person's slot
+    under the 15-file cap is really freed. This is what the Only me Delete does; a soft archive of a private file
+    no longer exists.
+
+    Who: only the uploader of their OWN personal file (auth.may_purge_document). Order: a document the caller may not
+    see is a 404 (so nobody learns a private file exists), then 403 for anyone who can see it but may not purge it
+    (a company document, for every role: purging those from the app is a separate, dedicated round), then the
+    confirmation: `confirm` must equal the file's exact name, so a stray call or a wrong id deletes nothing (400).
+    An archived private file left over from before this change can still be purged by its owner by id.
+
+    The audit line records who deleted what, because the purge removes the document's own trace and security
+    rows. If the rows are gone but the file could not be removed the answer says so (`file_removed: false`) and an
+    error is logged for the operator."""
+    with get_conn(DB_PATH) as conn:
+        doc = conn.execute(
+            "SELECT company_id, filename, status, uploaded_by_user_id, visibility FROM document WHERE id = ?",
+            (document_id,),
+        ).fetchone()
+    if _hidden_or_missing(membership, doc):
+        raise HTTPException(404, "document not found")
+    if not may_purge_document(membership, uploaded_by_user_id=doc["uploaded_by_user_id"], visibility=doc["visibility"]):
+        raise HTTPException(403, "Only the person who uploaded a private file can delete it for good")
+    if body.confirm != doc["filename"]:
+        raise HTTPException(400, detail={
+            "code": "confirmation_mismatch",
+            "message": "The name you typed does not match the file's name. Nothing was deleted.",
+        })
+    try:
+        failed_files = purge_now(document_id)
+    except PurgeRefused as e:
+        raise HTTPException(409, str(e)) from None
+    _audit.info(
+        "AUDIT purge: %s deleted private document %s (%r) for good", membership.email, document_id, doc["filename"],
+    )
+    if failed_files:
+        _audit.error("AUDIT purge: rows of document %s deleted but the stored file was not removed: %s", document_id, failed_files)
+    return {"status": "purged", "file_removed": not failed_files}
 
 
 @app.get("/api/trace/{document_id}")

@@ -30,6 +30,7 @@ from app.auth import (
     VISIBILITY_COMPANY,
     VISIBILITY_ONLY_ME,
     may_archive_document,
+    may_purge_document,
     may_resolve_review_item,
     may_see_document,
 )
@@ -413,24 +414,28 @@ def test_the_rows_no_longer_carry_a_toggle_flag(team):
     assert {i["document_id"] for i in queue} >= {doc, private}
     assert not any("can_change_visibility" in i for i in queue)
 
-@pytest.mark.parametrize("role,visibility,uploader,expected", [
-    ("owner", "company", 8, True), ("admin", "company", 8, True), ("admin", "only_me", 7, True),
-    ("user", "company", 7, False), ("user", "company", 8, False),  # a company document is never a user's to delete
-    ("user", "only_me", 7, True), ("user", "only_me", 8, False), ("user", "only_me", None, False),
-    ("user", "something", 7, True),  # an unrecognised value is personal (fails closed), so its uploader may
-    ("viewer", "only_me", 7, False), ("viewer", "company", 7, False),
+@pytest.mark.parametrize("role,visibility,expected", [
+    ("owner", "company", True), ("admin", "company", True),
+    ("user", "company", False), ("viewer", "company", False),  # a company document is never a user's to delete
+    # a personal file is never ARCHIVED by anyone (its uploader deletes it for good instead, may_purge_document)
+    ("owner", "only_me", False), ("admin", "only_me", False), ("user", "only_me", False), ("viewer", "only_me", False),
+    ("user", "something", False),  # an unrecognised value is personal (fails closed)
 ])
-def test_who_may_archive(role, visibility, uploader, expected):
-    assert may_archive_document(_member(role), uploaded_by_user_id=uploader, visibility=visibility) is expected
+def test_who_may_archive(role, visibility, expected):
+    assert may_archive_document(_member(role), visibility=visibility) is expected
 
 
-@pytest.mark.parametrize("role", ["owner", "admin", "user", "viewer"])
-@pytest.mark.parametrize("visibility", ["company", "only_me", "something"])
-@pytest.mark.parametrize("uploader", [7, 8, None])
-def test_archive_and_resolve_are_the_same_rule(role, visibility, uploader):
-    """One shared predicate (auth._admin_or_uploader_of_own_personal_file) behind both, so they cannot drift."""
-    args = dict(uploaded_by_user_id=uploader, visibility=visibility)
-    assert may_archive_document(_member(role), **args) is may_resolve_review_item(_member(role), **args)
+@pytest.mark.parametrize("role,visibility,uploader,expected", [
+    ("user", "only_me", 7, True), ("admin", "only_me", 7, True), ("owner", "only_me", 7, True),  # the uploader, whatever their role
+    ("user", "only_me", 8, False), ("admin", "only_me", 8, False), ("owner", "only_me", 8, False),  # never someone else's
+    ("user", "only_me", None, False),  # no recorded uploader: nobody
+    ("viewer", "only_me", 7, False),  # a viewer cannot have uploaded one
+    ("user", "something", 7, True),  # an unrecognised visibility fails closed as personal, so its uploader may
+    # a company document cannot be purged from the app, by anyone, its uploader included
+    ("owner", "company", 7, False), ("admin", "company", 7, False), ("user", "company", 7, False),
+])
+def test_who_may_purge(role, visibility, uploader, expected):
+    assert may_purge_document(_member(role), uploaded_by_user_id=uploader, visibility=visibility) is expected
 
 
 # --- the migration --------------------------------------------------------------------------

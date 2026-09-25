@@ -73,14 +73,14 @@ function DocumentPreview({
   const { t } = useTranslation()
   const { blobUrl, failed } = useDocumentBlobUrl(documentId)
 
-  if (failed) return <p className="mt-3 text-[12px] text-muted">{t('ops.documentPreview.loadFailed')}</p>
-  if (!blobUrl) return <p className="mt-3 text-[12px] text-muted">{t('ops.documentPreview.loading')}</p>
+  if (failed) return <p className="mt-3 text-[13px] text-muted">{t('ops.documentPreview.loadFailed')}</p>
+  if (!blobUrl) return <p className="mt-3 text-[13px] text-muted">{t('ops.documentPreview.loading')}</p>
 
   if (mediaType === 'application/pdf') {
     return (
       <div className="mt-3">
         <embed src={blobUrl} type="application/pdf" className="h-64 w-full rounded-control border border-line" />
-        <button type="button" onClick={onOpen} className="mt-1 inline-block text-[12px] text-muted underline hover:text-ink">
+        <button type="button" onClick={onOpen} className="mt-1 inline-block text-[13px] text-muted underline hover:text-ink">
           {t('ops.documentPreview.openSourcePdf')}
         </button>
       </div>
@@ -379,7 +379,7 @@ export function ReviewQueueCard({
       {item.document_visibility === 'only_me' && <PersonalFileBadge className="mb-2" />}
       <ReviewReasons
         reasons={reasons}
-        className={`text-[13px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}
+        className={`text-[14px] font-medium ${isFileMissing ? 'text-red-700' : isRoutine ? 'text-muted' : 'text-amber-800'}`}
       />
 
       <DocumentPreview
@@ -396,18 +396,18 @@ export function ReviewQueueCard({
          undifferentiated stack of same-weight labels. */}
       {!expired && (
         <div className="mt-4">
-          <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">{t('ops.review.document.heading')}</h3>
+          <h3 className="mb-2 text-[12px] font-mono uppercase tracking-wide text-muted">{t('ops.review.document.heading')}</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <label className="text-[12px] text-muted sm:col-span-3">
+            <label className="text-[13px] text-muted sm:col-span-3">
               <FieldLabelText>{t('ops.review.document.filenameLabel')}</FieldLabelText>
               <input
                 value={filename}
                 disabled={!canResolve}
                 onChange={(e) => setFilename(e.target.value)}
-                className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+                className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[14px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
               />
             </label>
-            <label className="text-[12px] text-muted sm:col-span-3">
+            <label className="text-[13px] text-muted sm:col-span-3">
               <FieldLabelText>{t('ops.review.document.descriptionLabel')}</FieldLabelText>
               <div className="mt-1 flex items-center gap-2">
                 <input
@@ -415,7 +415,7 @@ export function ReviewQueueCard({
                   disabled={!canResolve}
                   placeholder={isPendingCaption ? t('ops.review.document.descriptionPendingPlaceholder') : undefined}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="block h-9 w-full flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+                  className="block h-9 w-full flex-1 rounded-control border border-line px-2.5 text-[14px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
                 />
                 {/* Voice caption (2026-09-23): only for picture-lane
                    documents — a real document's description reads off
@@ -441,12 +441,12 @@ export function ReviewQueueCard({
                  isPendingCaption, so it disappears once the poll gives up
                  rather than showing forever. */}
               {isGeneratingCaption && (
-                <span className="mt-1 flex items-center gap-1 text-[11px] text-muted">
+                <span className="mt-1 flex items-center gap-1 text-[12px] text-muted">
                   <Loader2 size={11} className="animate-spin" /> {t('ops.review.document.generatingCaption')}
                 </span>
               )}
             </label>
-            <label className="text-[12px] text-muted sm:col-span-3">
+            <label className="text-[13px] text-muted sm:col-span-3">
               <FieldLabelText>{t('ops.review.document.bucketLabel')}</FieldLabelText>
               <div className="mt-1">
                 <BucketField
@@ -457,7 +457,7 @@ export function ReviewQueueCard({
                 />
               </div>
             </label>
-            <label className="text-[12px] text-muted sm:col-span-3">
+            <label className="text-[13px] text-muted sm:col-span-3">
               <FieldLabelText>{t('ops.review.document.docTypeLabel')}</FieldLabelText>
               {/* 2026-09-23 (live regression report, item 6): the separate
                  "is this a picture, not a document?" checkbox is gone —
@@ -477,12 +477,12 @@ export function ReviewQueueCard({
               />
               {/* min-h: this note wraps to one line in one language and two in another,
                  which moved every field below it (round 16, item 5); two lines are reserved. */}
-              {isPictureLane && <p className="mt-1 min-h-[2.125rem] text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
+              {isPictureLane && <p className="mt-1 min-h-9 text-[12px] leading-[18px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
               {docType === 'photo' && !isPictureLane && (
-                <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.reducesAccuracy')}</p>
+                <p className="mt-1 text-[12px] text-muted">{t('ops.pictureToggle.reducesAccuracy')}</p>
               )}
             </label>
-            <label className="text-[12px] text-muted">
+            <label className="text-[13px] text-muted">
               <FieldLabelText>{t('ops.review.document.vendorNameLabel')}</FieldLabelText>
               <input
                 value={vendorName}
@@ -490,7 +490,7 @@ export function ReviewQueueCard({
                 placeholder="-"
                 list={VENDOR_NAMES_DATALIST_ID}
                 onChange={(e) => setVendorName(e.target.value)}
-                className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+                className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[14px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
               />
             </label>
           </div>
@@ -499,7 +499,7 @@ export function ReviewQueueCard({
 
       {!expired && fieldNames.length > 0 && (
         <div className="mt-4 border-t border-line pt-4">
-          <h3 className="mb-2 text-[11px] font-mono uppercase tracking-wide text-muted">{t('ops.review.extractedFieldsHeading')}</h3>
+          <h3 className="mb-2 text-[12px] font-mono uppercase tracking-wide text-muted">{t('ops.review.extractedFieldsHeading')}</h3>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {fieldNames.map((name) => {
               // 2026-09-23 (live regression report, item 9): the raw
@@ -521,7 +521,7 @@ export function ReviewQueueCard({
               const isDateField = DATE_FIELD_NAMES.has(name)
               const isBooleanField = BOOLEAN_FIELD_NAMES.has(name)
               return (
-                <label key={name} className="text-[12px] text-muted">
+                <label key={name} className="text-[13px] text-muted">
                   <FieldLabelText>{fieldLabel(t, name)}</FieldLabelText>
                   {isBooleanField ? (
                     <select
@@ -551,14 +551,14 @@ export function ReviewQueueCard({
                         // directly whenever it doesn't parse yet.
                         setEdits((prev) => ({ ...prev, [name]: iso ?? text }))
                       }}
-                      className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+                      className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[14px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
                     />
                   ) : (
                     <input
                       value={edits[name]}
                       disabled={!canResolve}
                       onChange={(e) => setEdits((prev) => ({ ...prev, [name]: e.target.value }))}
-                      className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
+                      className="mt-1 block h-9 w-full rounded-control border border-line px-2.5 text-[14px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted"
                     />
                   )}
                 </label>
@@ -568,21 +568,21 @@ export function ReviewQueueCard({
         </div>
       )}
 
-      {error && <p className="mt-3 text-[13px] text-red-700">{error}</p>}
+      {error && <p className="mt-3 text-[14px] text-red-700">{error}</p>}
 
       {expired ? (
         <div className="mt-4">
-          <p className="text-[13px] text-red-700">{t('ops.review.expiredMessage')}</p>
+          <p className="text-[14px] text-red-700">{t('ops.review.expiredMessage')}</p>
           {canResolve ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Button size="sm" variant="secondary" onClick={() => setShowDeleteConfirm(true)} disabled={busy} icon={<Archive size={14} />}>
                 {t('ops.review.deleteButton')}
               </Button>
               {busy && <Loader2 size={16} className="animate-spin self-center text-muted" />}
-              <span className="text-[12px] text-muted">{t('ops.review.deleteOrReupload')}</span>
+              <span className="text-[13px] text-muted">{t('ops.review.deleteOrReupload')}</span>
             </div>
           ) : (
-            <p className="mt-2 text-[12px] text-muted">{t('ops.review.onlyAdminCanDelete')}</p>
+            <p className="mt-2 text-[13px] text-muted">{t('ops.review.onlyAdminCanDelete')}</p>
           )}
         </div>
       ) : canResolve ? (
@@ -594,7 +594,7 @@ export function ReviewQueueCard({
              clicking. Routine "no issues found" confirms have nothing to
              repeat, so this stays gated on !isRoutine like the top copy. */}
           {!isRoutine && (
-            <ReviewReasons reasons={reasons} className={`mb-2 text-[13px] ${isFileMissing ? 'text-red-700' : 'text-amber-800'}`} />
+            <ReviewReasons reasons={reasons} className={`mb-2 text-[14px] ${isFileMissing ? 'text-red-700' : 'text-amber-800'}`} />
           )}
           <div className="flex gap-2">
             {/* 2026-09-23 (DECISIONS #68): no Accept for a hard-quarantined
@@ -620,7 +620,7 @@ export function ReviewQueueCard({
           </div>
         </div>
       ) : (
-        <p className="mt-4 text-[12px] text-muted">{t('ops.review.onlyAdminCanResolve')}</p>
+        <p className="mt-4 text-[13px] text-muted">{t('ops.review.onlyAdminCanResolve')}</p>
       )}
 
       <ConfirmDialog

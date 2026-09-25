@@ -17,12 +17,15 @@ export function DocumentResultsList({
   documents,
   canEdit,
   canArchive,
+  permanentDelete = false,
   onSaved,
   emptyMessage,
 }: {
   documents: DocumentRow[]
   canEdit: boolean
   canArchive: boolean
+  /** Delete means delete FOR GOOD: the Only me list (a private file), with a typed confirmation (DECISIONS #99). */
+  permanentDelete?: boolean
   onSaved: () => void
   emptyMessage: string
 }) {
@@ -40,9 +43,10 @@ export function DocumentResultsList({
     }
   }
 
-  const archiveDocument = async (documentId: number) => {
+  const archiveDocument = async (doc: DocumentRow) => {
     try {
-      await opsApi.archiveDocument(documentId)
+      if (permanentDelete) await opsApi.purgeDocument(doc.id, doc.filename)
+      else await opsApi.archiveDocument(doc.id)
       onSaved()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -67,9 +71,10 @@ export function DocumentResultsList({
               doc={doc}
               canEdit={documentIsEditable(canEdit, doc)}
               canArchive={canArchive}
+              permanentDelete={permanentDelete}
               onView={() => setViewingDocument(doc)}
               onTrace={() => void viewTrace(doc.id)}
-              onArchive={() => void archiveDocument(doc.id)}
+              onArchive={() => void archiveDocument(doc)}
               onSaved={onSaved}
             />
           ))}
@@ -78,11 +83,11 @@ export function DocumentResultsList({
 
       {trace && (
         <section>
-          <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">
+          <h2 className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">
             {t('ops.documents.traceHeading', { documentId: trace.documentId, cost: trace.report.total_cost_usd.toFixed(4) })}
           </h2>
           <Card className="overflow-hidden p-0" interactive={false}>
-            <table className="w-full text-left text-[12px]">
+            <table className="w-full text-left text-[13px]">
               <thead className="bg-canvas text-muted">
                 <tr>
                   <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.node')}</th>

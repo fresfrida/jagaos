@@ -24,7 +24,7 @@ export function AgendaList({ weekStart, events, selectedId, onSelect }: AgendaLi
     <div className="space-y-5">
       {days.map((day) => (
         <section key={day} aria-label={`${formatWeekday(day, 'long')} ${formatDayMonth(day)}`}>
-          <h3 className="mb-2 font-mono text-[11px] uppercase tracking-wide text-muted">
+          <h3 className="mb-2 font-mono text-[12px] uppercase tracking-wide text-muted">
             {formatWeekday(day)} · {formatDayMonth(day)}
           </h3>
           <ul className="space-y-2">
@@ -44,7 +44,7 @@ export function AgendaList({ weekStart, events, selectedId, onSelect }: AgendaLi
                       )}
                     >
                       <span className="text-sm font-medium">{event.title}</span>
-                      <span className={cn('shrink-0 font-mono text-[11px]', selected ? 'text-white/70' : 'text-muted')}>
+                      <span className={cn('shrink-0 font-mono text-[12px]', selected ? 'text-white/70' : 'text-muted')}>
                         {formatTimeRange(event.start, event.end)}
                       </span>
                     </button>

@@ -58,9 +58,9 @@ export function UploadProgress({ name, pages }: { name: string; pages?: number }
         <FileName name={name} max={32} />
       </p>
       {pages !== undefined && pages > 1 && (
-        <p className="mt-0.5 text-[12px] text-muted" aria-hidden="true">{t('ops.upload.progress.pages', { count: pages })}</p>
+        <p className="mt-0.5 text-[13px] text-muted" aria-hidden="true">{t('ops.upload.progress.pages', { count: pages })}</p>
       )}
-      <p className="mt-1 h-5 text-[13px] text-muted" aria-hidden="true" data-testid="upload-narration">{t(line)}</p>
+      <p className="mt-1 h-5 text-[14px] text-muted" aria-hidden="true" data-testid="upload-narration">{t(line)}</p>
     </div>
   )
 }

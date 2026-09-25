@@ -9,7 +9,7 @@ export function ProductFrame({ children }: { children: ReactNode }) {
         <span className="h-2.5 w-2.5 rounded-full border border-line bg-white" aria-hidden="true" />
         <span className="h-2.5 w-2.5 rounded-full border border-line bg-white" aria-hidden="true" />
         <span className="h-2.5 w-2.5 rounded-full border border-line bg-white" aria-hidden="true" />
-        <span className="ml-2 font-mono text-[11px] text-muted">{PRODUCT_NAME.toLowerCase()} / workspace</span>
+        <span className="ml-2 font-mono text-[12px] text-muted">{PRODUCT_NAME.toLowerCase()} / workspace</span>
       </div>
       {children}
     </div>

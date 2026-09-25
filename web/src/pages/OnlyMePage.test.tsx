@@ -11,17 +11,21 @@ vi.mock('../router/navigate', () => ({ navigate: vi.fn() }))
 vi.mock('../lib/imageNormalize', () => ({ normalizeImageForUpload: vi.fn(async (f: File) => f) }))
 vi.mock('../features/ops/opsApi', async (importActual) => ({
   ...(await importActual<typeof import('../features/ops/opsApi')>()),
-  opsApi: { listPersonalFiles: vi.fn(), uploadDocument: vi.fn(), uploadPages: vi.fn(), getTrace: vi.fn(), editDocument: vi.fn(), archiveDocument: vi.fn() },
+  opsApi: { listPersonalFiles: vi.fn(), uploadDocument: vi.fn(), uploadPages: vi.fn(), getTrace: vi.fn(), editDocument: vi.fn(), archiveDocument: vi.fn(), fetchDocumentThumbnail: vi.fn(), getLimits: vi.fn(), purgeDocument: vi.fn() },
 }))
 
-import { opsApi, type DocumentRow } from '../features/ops/opsApi'
+import { ApiError } from '../lib/apiClient'
+import { resetFileLimitCache } from '../features/upload/fileLimit'
+import { opsApi, type DocumentRow, type Limits } from '../features/ops/opsApi'
 import { navigate } from '../router/navigate'
 import { OnlyMePage } from './OnlyMePage'
 
 const listPersonalFiles = vi.mocked(opsApi.listPersonalFiles)
 const uploadDocument = vi.mocked(opsApi.uploadDocument)
 const uploadPages = vi.mocked(opsApi.uploadPages)
-const archiveDocument = vi.mocked(opsApi.archiveDocument)
+const getLimits = vi.mocked(opsApi.getLimits)
+const purgeDocument = vi.mocked(opsApi.purgeDocument)
+const LIMITS: Limits = { max_file_bytes: 25 * 1024 * 1024, max_personal_files: 15, personal_files_used: 3 }
 
 const row = (id: number, over: Partial<DocumentRow> = {}): DocumentRow => ({
   id, filename: `file-${id}.pdf`, media_type: 'application/pdf', lane: 'invoice', doc_type: 'invoice', status: 'filed',
@@ -44,6 +48,9 @@ beforeEach(async () => {
   vi.resetAllMocks()
   auth.value = { status: 'signed-in', role: 'user' }
   listPersonalFiles.mockResolvedValue(FILES)
+  vi.mocked(opsApi.fetchDocumentThumbnail).mockRejectedValue(new Error('404')) // a PDF card asks for its first page; none here
+  getLimits.mockResolvedValue(LIMITS)
+  resetFileLimitCache()
   await i18n.changeLanguage('en')
   URL.createObjectURL = vi.fn(() => 'blob:preview')
   URL.revokeObjectURL = vi.fn()
@@ -51,12 +58,30 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 describe('Only me: who reaches it', () => {
-  it('a viewer, who cannot upload, is sent to the Calendar and nothing is fetched', async () => {
+  it('a viewer gets the page too, read-only: no redirect, no upload rows, no scratchpad, no Delete or Edit', async () => {
     auth.value = { status: 'signed-in', role: 'viewer' }
+    listPersonalFiles.mockResolvedValue(FILES)
     render(<OnlyMePage />)
-    await waitFor(() => expect(vi.mocked(navigate)).toHaveBeenCalledWith('/calendar'))
-    expect(listPersonalFiles).not.toHaveBeenCalled()
+
+    expect(await screen.findByText(LEASE)).toBeTruthy() // files they had before a role change are listed
+    expect(vi.mocked(navigate)).not.toHaveBeenCalled()
+    expect(listPersonalFiles).toHaveBeenCalledTimes(1)
     expect(screen.queryByTestId('document-input')).toBeNull()
+    expect(screen.queryByTestId('photo-input')).toBeNull()
+    expect(screen.queryByRole('button', { name: /scratchpad/i })).toBeNull()
+    expect(screen.queryByTestId('only-me-limits-note')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^delete$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^edit$/i })).toBeNull()
+  })
+
+  it('a viewer with no files sees a sentence about what they CAN do, not an invitation to add one', async () => {
+    auth.value = { status: 'signed-in', role: 'viewer' }
+    listPersonalFiles.mockResolvedValue([])
+    render(<OnlyMePage />)
+
+    expect(await screen.findByText('Nothing here yet. You can still browse Calendar, Search and Company Files from the nav.')).toBeTruthy()
+    expect(screen.queryByText(/Add a document or a photo above/)).toBeNull() // no invitation to add one
+    expect(screen.queryByRole('searchbox')).toBeNull()
   })
 
   it.each(['user', 'admin', 'owner'])('a %s gets the page with the upload area and their files', async (role) => {
@@ -76,6 +101,47 @@ describe('Only me: the files', () => {
     expect(screen.getByText('Your private files (3)')).toBeTruthy()
   })
 
+  it('says what the limits are and how many of the slots this person has used', async () => {
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    await waitFor(() => expect(screen.getByTestId('only-me-limits-note').textContent).toBe('Up to 15 private files, 25 MB each. You have 3.'))
+  })
+
+  it('says nothing about limits against a backend that has none, rather than something it cannot back up', async () => {
+    getLimits.mockRejectedValue(new ApiError(404, 'Not Found'))
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    await waitFor(() => expect(getLimits).toHaveBeenCalled())
+    await Promise.resolve()
+    expect(screen.queryByTestId('only-me-limits-note')).toBeNull()
+  })
+
+  it('at the limit it says so, and turns the Document and Photo rows and the scratchpad off', async () => {
+    getLimits.mockResolvedValue({ ...LIMITS, personal_files_used: 15 })
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+
+    await waitFor(() => expect(screen.getByTestId('only-me-limits-note').textContent).toBe('You have reached the limit of 15 private files. Delete one to add another.'))
+    for (const name of [/^document/i, /^photo/i, /scratchpad/i]) {
+      expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
+    }
+  })
+
+  it('just under the limit everything is still on', async () => {
+    getLimits.mockResolvedValue({ ...LIMITS, personal_files_used: 14 })
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    await waitFor(() => expect(screen.getByTestId('only-me-limits-note').textContent).toContain('You have 14'))
+    expect((screen.getByRole('button', { name: /^document/i }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('a viewer, who has no allowance, does not fetch the limits', async () => {
+    auth.value = { status: 'signed-in', role: 'viewer' }
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    expect(getLimits).not.toHaveBeenCalled()
+  })
+
   it.each(['user', 'admin', 'owner'])('a %s gets Delete on each of their own files', async (role) => {
     auth.value = { status: 'signed-in', role }
     render(<OnlyMePage />)
@@ -83,65 +149,97 @@ describe('Only me: the files', () => {
     expect(screen.getAllByRole('button', { name: /^delete$/i })).toHaveLength(3)
   })
 
-  it('confirming Delete archives that file and reloads the list without it', async () => {
-    archiveDocument.mockResolvedValue({ status: 'archived' })
+  const openDelete = (index = 0) => fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[index]!)
+  const confirmButton = () => within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete for good' }) as HTMLButtonElement
+  const typeName = (value: string) => fireEvent.change(within(screen.getByRole('alertdialog')).getByLabelText('File name'), { target: { value } })
+
+  it('Delete asks for the file\'s name, deletes FOR GOOD once it is typed, and reloads the list and the count', async () => {
+    purgeDocument.mockResolvedValue({ status: 'purged', file_removed: true })
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
     listPersonalFiles.mockResolvedValue(FILES.slice(1))
+    getLimits.mockResolvedValue({ ...LIMITS, personal_files_used: 2 })
 
-    fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0]!)
+    openDelete(0)
     const dialog = screen.getByRole('alertdialog')
-    expect(within(dialog).getByText(/Delete .*tenancy-agreement.*\? This can't be undone\./)).toBeTruthy()
-    expect(archiveDocument).not.toHaveBeenCalled() // asking is not doing
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    expect(within(dialog).getByText(/can't be undone/)).toBeTruthy()
+    expect(within(dialog).getByTestId('typed-confirm-expected').textContent).toBe('tenancy-agreement.pdf')
+    expect(confirmButton().disabled).toBe(true) // asking is not doing
+    typeName('tenancy-agreement.pdf')
+    expect(confirmButton().disabled).toBe(false)
+    fireEvent.click(confirmButton())
 
-    await waitFor(() => expect(archiveDocument).toHaveBeenCalledWith(1))
+    await waitFor(() => expect(purgeDocument).toHaveBeenCalledWith(1, 'tenancy-agreement.pdf'))
     await waitFor(() => expect(screen.queryByText(LEASE)).toBeNull())
-    expect(screen.getByText(RECEIPT)).toBeTruthy()
     expect(screen.getByText('Your private files (2)')).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('only-me-limits-note').textContent).toContain('You have 2'))
+    expect(vi.mocked(opsApi.archiveDocument)).not.toHaveBeenCalled() // never a soft archive
   })
 
-  it('cancelling the confirmation deletes nothing', async () => {
+  it('the confirm button stays off for anything but the exact name', async () => {
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
+    openDelete(0)
 
-    fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0]!)
+    for (const wrong of ['', 'tenancy', 'Tenancy-Agreement.pdf', 'tenancy-agreement.pdf ', ' tenancy-agreement.pdf']) {
+      typeName(wrong)
+      expect(confirmButton().disabled, JSON.stringify(wrong)).toBe(true)
+    }
+    expect(purgeDocument).not.toHaveBeenCalled()
+  })
+
+  it('cancelling the confirmation deletes nothing, and the next time it opens empty', async () => {
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    openDelete(0)
+    typeName('tenancy-agreement.pdf')
+
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
-
-    expect(archiveDocument).not.toHaveBeenCalled()
+    expect(purgeDocument).not.toHaveBeenCalled()
     expect(screen.getByText(LEASE)).toBeTruthy()
+
+    openDelete(0)
+    expect((within(screen.getByRole('alertdialog')).getByLabelText('File name') as HTMLInputElement).value).toBe('')
   })
 
   it('a refused delete shows the server message and keeps the file in the list', async () => {
-    archiveDocument.mockRejectedValue(new Error('document not found'))
+    purgeDocument.mockRejectedValue(new Error('document not found'))
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
 
-    fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0]!)
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+    openDelete(0)
+    typeName('tenancy-agreement.pdf')
+    fireEvent.click(confirmButton())
 
     expect((await screen.findByRole('alert')).textContent).toContain('document not found')
     expect(screen.getByText(LEASE)).toBeTruthy()
   })
 
-  it('with none yet, says so, and shows no search box to search nothing', async () => {
-    listPersonalFiles.mockResolvedValue([])
+  it('an upload refused for size or for the limit is explained in the page\'s language, with the number', async () => {
+    uploadDocument.mockRejectedValueOnce(new ApiError(413, 'That file is larger than the 25 MB limit.', 'file_too_large', { code: 'file_too_large', limit_bytes: 25 * 1024 * 1024 }))
     render(<OnlyMePage />)
-    expect(await screen.findByText(/Nothing here yet/)).toBeTruthy()
-    expect(screen.queryByRole('searchbox')).toBeNull()
-    expect(screen.getByText('Your private files (0)')).toBeTruthy()
+    await screen.findByText(LEASE)
+
+    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: [pdf] } }) })
+    expect((await screen.findByRole('alert')).textContent).toBe('That file is larger than the 25 MB limit.')
+
+    uploadDocument.mockRejectedValueOnce(new ApiError(409, 'You already have 15 private files.', 'personal_file_limit', { code: 'personal_file_limit', limit: 15 }))
+    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: [pdf] } }) })
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('You have reached the limit of 15 private files. Delete one to add another.'))
   })
 
-  it('a failed load is a visible error with a retry that loads again', async () => {
-    listPersonalFiles.mockRejectedValueOnce(new Error('boom'))
+  it('a file over the limit is refused in the browser before anything is sent', async () => {
     render(<OnlyMePage />)
-    expect(await screen.findByText("Couldn't load your private files.")).toBeTruthy()
+    await screen.findByText(LEASE)
+    const huge = new File(['x'], 'huge.pdf', { type: 'application/pdf' })
+    Object.defineProperty(huge, 'size', { value: 25 * 1024 * 1024 + 1 })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: [huge] } }) })
 
-    expect(await screen.findByText(LEASE)).toBeTruthy()
-    expect(screen.queryByText("Couldn't load your private files.")).toBeNull()
+    expect((await screen.findByRole('alert')).textContent).toBe('That file is larger than the 25 MB limit.')
+    expect(uploadDocument).not.toHaveBeenCalled()
   })
+
 })
 
 describe('Only me: the scoped search', () => {

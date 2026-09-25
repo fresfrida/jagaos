@@ -244,6 +244,14 @@ class DocumentEditRequest(BaseModel):
     language: str | None = None
 
 
+class PurgeRequest(BaseModel):
+    """POST /api/documents/{id}/purge body (round 20, DECISIONS #99): the file's exact name, typed by the person.
+    The server compares it to the document's own filename, so the delete cannot be triggered by a stray click or a
+    wrong id: whoever calls it has had to name what they are deleting."""
+
+    confirm: str
+
+
 class ReviewResolution(BaseModel):
     """POST /api/review/{id}/resolve body. A human action, never reachable
     from an LLM node (app/graph/human_review.py, ARCHITECTURE.md §5.2)."""

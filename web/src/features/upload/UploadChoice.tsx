@@ -47,7 +47,7 @@ export function ChoiceRow({ icon: Icon, title, hint, disabled, onClick }: Choice
       <Icon size={28} strokeWidth={1.75} className="shrink-0 text-ink" aria-hidden="true" />
       <span className="min-w-0 flex-1">
         <span className="block text-base font-semibold text-ink">{title}</span>
-        <span className="mt-0.5 block text-[13px] leading-snug text-muted">{hint}</span>
+        <span className="mt-0.5 block text-[14px] leading-snug text-muted">{hint}</span>
       </span>
       <ChevronRight size={18} className="shrink-0 text-muted group-hover:text-ink" aria-hidden="true" />
     </button>
@@ -83,7 +83,7 @@ export function UploadChoice({
   return (
     <div ref={ref} role="group" aria-label={showHeading ? undefined : t('ops.upload.pictureQuestion')} aria-labelledby={showHeading ? 'upload-choice-heading' : undefined}>
       {showHeading && (
-        <h2 id="upload-choice-heading" className="mb-1 text-[15px] font-medium text-ink">
+        <h2 id="upload-choice-heading" className="mb-1 text-[16px] font-medium text-ink">
           {t('ops.upload.pictureQuestion')}
         </h2>
       )}

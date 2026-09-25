@@ -39,7 +39,7 @@ export function CompanySwitcher({ className }: { className?: string }) {
           )
         }}
         className={cn(
-          'w-full rounded-md border bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-ink',
+          'w-full rounded-md border bg-white px-2 py-1.5 text-[14px] text-ink outline-none focus:border-ink',
           error ? 'border-red-400' : 'border-line',
         )}
       >
@@ -52,7 +52,7 @@ export function CompanySwitcher({ className }: { className?: string }) {
           )
         })}
       </select>
-      {error && <p role="alert" className="mt-1 text-[12px] text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-[13px] text-red-700">{error}</p>}
     </div>
   )
 }

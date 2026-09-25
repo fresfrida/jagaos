@@ -18,6 +18,7 @@ import { LoginPage } from './LoginPage'
 import { NotFoundPage } from './NotFoundPage'
 import { OnlyMePage } from './OnlyMePage'
 import { SearchPage } from './SearchPage'
+import { SignedInHome } from './SignedInHome'
 import { UploadPage } from './UploadPage'
 
 /** /ops is superseded by /upload (2026-09-23, header/nav restructure) —
@@ -28,23 +29,22 @@ function OpsRedirect() {
   return null
 }
 
-/** Same bare mount-effect pattern as OpsRedirect above (2026-09-23,
- * role/permission work) — a signed-in visitor to / used to see the
- * marketing hero (Hero.tsx, now deleted) instead of the app, a confirmed
- * gap: `home` never branched on session status the way `calendar`/`tags`
- * already did. Redirects into Calendar, the real signed-in hub. */
-function HomeRedirect() {
-  useEffect(() => navigate(routeHref('calendar')), [])
-  return null
-}
-
 /** Maps a route to its page. Pages compose features; they hold no logic of their own. */
 export function Page({ route }: { route: ResolvedRoute }) {
-  const { status } = useAuth()
+  const { status, role } = useAuth()
 
   switch (route) {
     case 'home':
-      return status === 'signed-in' ? <HomeRedirect /> : <WelcomeHero />
+      // Signed in: the hub (SignedInHome); a viewer, who cannot upload, gets the Only me page here instead.
+      // Both are a direct render at `/`, never a redirect. Signed out: the landing page.
+      if (status !== 'signed-in') return <WelcomeHero />
+      return role === 'viewer' ? (
+        <FramePage route="only-me">
+          <OnlyMePage />
+        </FramePage>
+      ) : (
+        <SignedInHome />
+      )
     case 'calendar':
       // Same URL for everyone (2026-09-23, header/nav restructure) — a
       // signed-in visitor gets the real Calendar hub (dates/obligations/

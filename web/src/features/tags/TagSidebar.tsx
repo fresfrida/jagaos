@@ -33,7 +33,7 @@ export function TagSidebar({ tags, memories, active, onChange, className }: TagS
                 )}
               >
                 {item.label}
-                <span className={cn('font-mono text-[11px]', selected ? 'text-white/70' : 'text-muted')}>{item.count}</span>
+                <span className={cn('font-mono text-[12px]', selected ? 'text-white/70' : 'text-muted')}>{item.count}</span>
               </button>
             </li>
           )

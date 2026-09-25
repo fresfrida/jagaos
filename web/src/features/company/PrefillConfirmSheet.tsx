@@ -42,17 +42,17 @@ export function PrefillConfirmSheet({
     <BottomSheet open={open} onClose={onCancel} title={t('companySettings.prefill.confirmTitle')}>
       {changes.length === 0 ? (
         <>
-          <p className="text-[13px] text-ink">{t('companySettings.prefill.noChanges')}</p>
+          <p className="text-[14px] text-ink">{t('companySettings.prefill.noChanges')}</p>
           <div className="mt-4 flex justify-end">
             <Button size="sm" variant="secondary" onClick={onCancel}>{t('common.buttons.close')}</Button>
           </div>
         </>
       ) : (
         <>
-          <p className="text-[13px] text-muted">{t('companySettings.prefill.confirmIntro')}</p>
+          <p className="text-[14px] text-muted">{t('companySettings.prefill.confirmIntro')}</p>
           <ul className="mt-3 max-h-[50vh] divide-y divide-line overflow-y-auto rounded-card border border-line" data-testid="prefill-changes">
             {changes.map((change) => (
-              <li key={change.field} className="px-3 py-2.5 text-[13px]">
+              <li key={change.field} className="px-3 py-2.5 text-[14px]">
                 <p className="font-medium text-ink">{t(FIELD_LABEL_KEYS[change.field])}</p>
                 <dl className="mt-1 grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-0.5">
                   <dt className="text-muted">{t('companySettings.prefill.now')}</dt>
@@ -63,7 +63,7 @@ export function PrefillConfirmSheet({
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-[12px] text-muted">{t('companySettings.prefill.saveNote')}</p>
+          <p className="mt-3 text-[13px] text-muted">{t('companySettings.prefill.saveNote')}</p>
           <div className="mt-4 flex justify-end gap-2">
             <Button size="sm" variant="secondary" onClick={onCancel}>{t('common.buttons.cancel')}</Button>
             <Button size="sm" onClick={onApply}>{t('companySettings.prefill.apply')}</Button>

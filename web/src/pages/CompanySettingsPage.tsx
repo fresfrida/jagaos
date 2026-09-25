@@ -147,13 +147,13 @@ function CompanySettingsContent() {
       )}
 
       {prefillState.status === 'loading' && (
-        <p className="mb-4 text-[12px] text-muted" role="status">{t('companySettings.prefill.loading')}</p>
+        <p className="mb-4 text-[13px] text-muted" role="status">{t('companySettings.prefill.loading')}</p>
       )}
       {prefillState.status === 'failed' && (
-        <p className="mb-4 text-[12px] text-red-700" role="alert">{t('companySettings.prefill.failed')}</p>
+        <p className="mb-4 text-[13px] text-red-700" role="alert">{t('companySettings.prefill.failed')}</p>
       )}
       {appliedFrom !== null && (
-        <div className="mb-4 rounded-control border border-sage bg-canvas p-3 text-[12px] text-ink" role="status">
+        <div className="mb-4 rounded-control border border-sage bg-canvas p-3 text-[13px] text-ink" role="status">
           <p>{t('companySettings.prefill.banner', { filename: middleEllipsis(appliedFrom, 36) })}</p>
           <button type="button" onClick={discardPrefill} className="mt-1.5 underline hover:text-muted">
             {t('companySettings.prefill.discard')}
@@ -167,7 +167,7 @@ function CompanySettingsContent() {
         onCancel={() => setPrefillDocumentId(null)}
       />
 
-      <label className="block text-[13px] text-muted">
+      <label className="block text-[14px] text-muted">
         {t('companySettings.nameLabel')}
         <input
           value={form.name}
@@ -178,7 +178,7 @@ function CompanySettingsContent() {
       </label>
 
       {showIdentityFields && (
-        <label className="mt-3 block text-[13px] text-muted">
+        <label className="mt-3 block text-[14px] text-muted">
           {t('companySettings.uenLabel')}
           <input
             value={form.uen}
@@ -190,7 +190,7 @@ function CompanySettingsContent() {
       )}
 
       <div className="mt-3 flex gap-3">
-        <label className="text-[13px] text-muted">
+        <label className="text-[14px] text-muted">
           {t('companySettings.fyeMonthLabel')}
           <input
             type="number" min={1} max={12}
@@ -200,7 +200,7 @@ function CompanySettingsContent() {
             className={fieldClass('fyeMonth', 'w-20')}
           />
         </label>
-        <label className="text-[13px] text-muted">
+        <label className="text-[14px] text-muted">
           {t('companySettings.fyeDayLabel')}
           <input
             type="number" min={1} max={31}
@@ -214,7 +214,7 @@ function CompanySettingsContent() {
 
       {showIdentityFields && (
         <>
-          <label className="mt-3 block text-[13px] text-muted">
+          <label className="mt-3 block text-[14px] text-muted">
             {t('companySettings.addressLabel')}
             <textarea
               rows={2}
@@ -222,7 +222,7 @@ function CompanySettingsContent() {
               disabled={!canEdit}
               onChange={(e) => set('registeredAddress', e.target.value)}
               className={cn(
-                'mt-1 block w-full rounded-control border border-line bg-white px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted',
+                'mt-1 block w-full rounded-control border border-line bg-white px-2.5 py-1.5 text-[14px] text-ink outline-none focus:border-ink disabled:bg-canvas disabled:text-muted',
                 prefilled.includes('registeredAddress') && PREFILLED_CLASS,
               )}
             />
@@ -230,7 +230,7 @@ function CompanySettingsContent() {
 
           <label
             className={cn(
-              'mt-3 flex items-center gap-2 rounded-control text-[13px] text-ink',
+              'mt-3 flex items-center gap-2 rounded-control text-[14px] text-ink',
               prefilled.includes('gstRegistered') && cn(PREFILLED_CLASS, 'px-2 py-1'),
             )}
           >
@@ -246,9 +246,9 @@ function CompanySettingsContent() {
         </>
       )}
 
-      {!canEdit && <p className="mt-3 text-[12px] text-muted">{t('companySettings.readOnlyNotice')}</p>}
-      {error && <p className="mt-3 text-[12px] text-red-700">{error}</p>}
-      {saved && <p className="mt-3 text-[12px] text-sage-ink">{t('companySettings.saved')}</p>}
+      {!canEdit && <p className="mt-3 text-[13px] text-muted">{t('companySettings.readOnlyNotice')}</p>}
+      {error && <p className="mt-3 text-[13px] text-red-700">{error}</p>}
+      {saved && <p className="mt-3 text-[13px] text-sage-ink">{t('companySettings.saved')}</p>}
 
       {canEdit && (
         <Button size="sm" className="mt-4" onClick={() => void save()} disabled={busy}>

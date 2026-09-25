@@ -35,6 +35,7 @@ import { useOpsData } from '../features/ops/useOpsData'
 import { HintBanner } from '../features/upload/HintBanner'
 import { onSelectionHandedOff, takePendingSelection } from '../features/upload/pendingSelection'
 import { UploadPanel } from '../features/upload/UploadPanel'
+import { uploadErrorMessage } from '../features/upload/uploadErrorMessage'
 import { hintLabel, hintSlugFromSearch } from '../features/upload/uploadHint'
 import { useUploadFlow } from '../features/upload/useUploadFlow'
 import { openUploadSheet } from '../lib/uploadTrigger'
@@ -75,7 +76,10 @@ function UploadReviewContent() {
     },
     [clearHint, showToast, t],
   )
-  const onError = useCallback((message: string | null) => setError(message), [setError])
+  const onError = useCallback(
+    (message: string | null, error?: unknown) => setError(message === null ? null : uploadErrorMessage(t, message, error)),
+    [setError, t],
+  )
 
   const flow = useUploadFlow({
     language: i18n.language, refresh, onOutcome, onError, docTypeHint: activeHintLabel ? hintSlug : null,
@@ -132,7 +136,7 @@ function UploadReviewContent() {
 
         {reviewItems.length > 0 && (
           <section>
-            <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-amber-800">
+            <h2 className="mb-3 text-[12px] font-mono uppercase tracking-wide text-amber-800">
               {t('ops.review.needsReview', { count: reviewItems.length })}
             </h2>
             <div className="space-y-3">
@@ -164,7 +168,7 @@ function UploadReviewContent() {
         onClose={() => setJustRejectedFilename(null)}
         title={t('ops.upload.rejectedTitle')}
       >
-        <p className="text-[13px] text-ink">
+        <p className="text-[14px] text-ink">
           {justRejectedFilename !== null && <FileName name={justRejectedFilename} max={36} className="font-medium" />}{' '}
           {t('ops.upload.rejectedPromptSuffix')}
         </p>

@@ -10,13 +10,14 @@
  * quiet link for someone with a real account. A signed-in visitor never renders
  * this: Page.tsx redirects `home` into the Calendar. */
 
-import { CalendarClock, ClipboardCheck, Loader2, ScanLine } from 'lucide-react'
+import { CalendarClock, ClipboardCheck, ScanLine } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
+import { ButtonLink } from '../components/ui/ButtonLink'
 import { Card } from '../components/ui/Card'
 import { Container } from '../components/ui/Container'
-import { useDemoLogin } from '../features/auth/useDemoLogin'
-import { Link } from '../router/Link'
+import { DemoPicker } from '../features/auth/DemoPicker'
 import { routeHref } from '../router/routes'
 
 const FEATURES = [
@@ -27,7 +28,7 @@ const FEATURES = [
 
 export function WelcomeHero() {
   const { t } = useTranslation()
-  const demo = useDemoLogin()
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   return (
     <section className="py-8 sm:py-14">
@@ -36,25 +37,14 @@ export function WelcomeHero() {
           <h1 className="max-w-xl text-[28px] font-semibold leading-[1.15] text-ink sm:text-4xl">{t('home.pitch')}</h1>
 
           <div className="mt-6">
-            <Button
-              size="md"
-              className="w-full sm:w-auto"
-              disabled={demo.busy}
-              onClick={() => void demo.start()}
-              icon={demo.busy ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : undefined}
-            >
-              {demo.busy ? t('home.demo.opening') : t('home.demo.button')}
+            <Button size="md" className="w-full sm:w-auto" onClick={() => setPickerOpen(true)} aria-haspopup="dialog">
+              {t('home.demo.button')}
             </Button>
-            <p className="mt-2 text-[13px] text-muted">{t('home.demo.hint')}</p>
-            {demo.failed && (
-              <p role="alert" className="mt-2 text-[13px] text-red-700">{t('home.demo.failed')}</p>
-            )}
-            <p className="mt-4 text-[13px] text-muted">
-              {t('home.haveAccount')}{' '}
-              <Link href={routeHref('login')} className="text-ink underline underline-offset-2 hover:text-muted">
-                {t('home.signIn')}
-              </Link>
-            </p>
+            <p className="mt-2 text-[14px] text-muted">{t('home.demo.hint')}</p>
+            <ButtonLink href={routeHref('login')} variant="secondary" size="md" className="mt-5 w-full sm:w-auto">
+              {t('home.signIn')}
+            </ButtonLink>
+            <p className="mt-2 text-[14px] text-muted">{t('home.signInHint')}</p>
           </div>
 
           <ul className="mt-8 grid gap-3 sm:grid-cols-3">
@@ -62,14 +52,15 @@ export function WelcomeHero() {
               <li key={id}>
                 <Card className="h-full p-4" interactive={false}>
                   <Icon size={20} strokeWidth={1.75} className="text-sage-ink" aria-hidden="true" />
-                  <h2 className="mt-3 text-[15px] font-semibold text-ink">{t(`home.features.${id}.title`)}</h2>
-                  <p className="mt-1 text-[13px] leading-5 text-muted">{t(`home.features.${id}.text`)}</p>
+                  <h2 className="mt-3 text-[16px] font-semibold text-ink">{t(`home.features.${id}.title`)}</h2>
+                  <p className="mt-1 text-[14px] leading-5 text-muted">{t(`home.features.${id}.text`)}</p>
                 </Card>
               </li>
             ))}
           </ul>
         </div>
       </Container>
+      <DemoPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </section>
   )
 }

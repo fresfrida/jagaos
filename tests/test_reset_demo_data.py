@@ -133,6 +133,27 @@ def test_running_it_twice_in_a_row_gives_the_same_clean_state(corpus):
     assert "Wiped 3 company(ies), 3 document(s), 3 file(s) removed" in out
 
 
+def test_the_wipe_removes_the_demo_pdfs_cached_thumbnails_and_leaves_a_bystanders(corpus, tmp_path, monkeypatch):
+    """A cached first-page thumbnail (round 20, DECISIONS #97) is derived from a stored file, so it goes when the
+    file goes, and only for documents the reset wipes."""
+    from app import thumbnails
+
+    monkeypatch.setattr(thumbnails, "THUMBS_PATH", tmp_path / "thumbs")
+    assert run(corpus, apply=True)[0] == 0
+    bystander = _bystander()
+    with get_conn() as conn:
+        rows = conn.execute("SELECT id, sha256, stored_path, company_id FROM document").fetchall()
+    made = {r["id"]: thumbnails.get_pdf_thumbnail(r["sha256"], r["stored_path"]) for r in rows}
+    assert all(path is not None and path.exists() for path in made.values())
+    demo_thumbs = {path for doc_id, path in made.items() if doc_id != bystander["doc_id"]}
+    assert len(demo_thumbs) == 3
+
+    assert run(corpus, apply=True)[0] == 0
+
+    assert not any(path.exists() for path in demo_thumbs), "a wiped document's thumbnail was left behind"
+    assert made[bystander["doc_id"]].exists(), "a bystander's thumbnail was removed"
+
+
 def test_tampering_is_repaired(corpus):
     assert run(corpus, apply=True)[0] == 0
     clean = _state()

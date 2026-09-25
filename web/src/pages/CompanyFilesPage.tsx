@@ -51,7 +51,7 @@ function CompanyFilesContent() {
         </div>
       )}
 
-      <h2 className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">
+      <h2 className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">
         {t('ops.documents.heading', { count: visibleDocuments.length })}
       </h2>
 
@@ -64,7 +64,7 @@ function CompanyFilesContent() {
             <button
               key={b}
               onClick={() => setActiveBucketFilter(active ? null : b)}
-              className={`rounded-md px-2 py-0.5 font-mono text-[11px] transition-colors ${active ? 'bg-ink text-white' : 'bg-canvas text-muted hover:text-ink'}`}
+              className={`rounded-md px-2 py-0.5 font-mono text-[12px] transition-colors ${active ? 'bg-ink text-white' : 'bg-canvas text-muted hover:text-ink'}`}
             >
               {bucketLabel(t, b)} ({bucketCounts[b]})
             </button>

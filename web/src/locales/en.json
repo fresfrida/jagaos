@@ -11,12 +11,39 @@
     "signIn": "Sign in",
     "pitch": "Stop hunting for paperwork and missing deadlines.",
     "demo": {
-      "button": "Take a look around",
-      "hint": "Opens a demo company as its owner. No sign-up needed.",
+      "button": "Pick a demo role",
+      "hint": "See the app as an owner, admin, user or viewer. No sign-up needed.",
       "opening": "Opening the demo…",
-      "failed": "Couldn't open the demo right now. You can still sign in."
+      "failed": "Couldn't open the demo right now. You can still sign in.",
+      "pickerTitle": "Try the demo as",
+      "pickerIntro": "Each one is a real login to the same demo company. Pick the role you want to see.",
+      "accounts": {
+        "owner": {
+          "name": "Owner",
+          "text": "Full access, including editing Company Settings. It also owns two sibling companies, so it is the only account with the company switcher."
+        },
+        "admin": {
+          "name": "Admin",
+          "text": "Confirms or rejects what we read, edits or deletes any company document, and sees Company Settings read-only."
+        },
+        "user": {
+          "name": "User",
+          "text": "Uploads documents and edits their own. Keeps private files in Only me. Cannot confirm or delete company documents."
+        },
+        "user1": {
+          "name": "User 1",
+          "text": "Same role as User. Sign in as two users to see that one person's files, and private files, stay theirs."
+        },
+        "user2": {
+          "name": "User 2",
+          "text": "Same role as User. Sign in as two users to see that one person's files, and private files, stay theirs."
+        },
+        "viewer": {
+          "name": "Viewer",
+          "text": "Read-only. Sees filed documents, the Calendar and Search, but cannot upload, edit, or see what is waiting for review."
+        }
+      }
     },
-    "haveAccount": "Already have an account?",
     "features": {
       "capture": {
         "title": "Capture",
@@ -30,7 +57,22 @@
         "title": "Obligations",
         "text": "Deadlines and required filings land on your calendar, each with the rule behind it."
       }
-    }
+    },
+    "signedIn": {
+      "review": {
+        "mine": "{{count}} waiting for your review",
+        "pending": "{{count}} of your uploads waiting for review"
+      },
+      "pageTitle": "Home",
+      "upload": {
+        "title": "Upload",
+        "hint": "Add a document or a photo. We read it, and you confirm what we found."
+      },
+      "onlyMe": {
+        "hint": "Private files that only you can see"
+      }
+    },
+    "signInHint": "Use your own email, or set up a new company."
   },
   "header": {
     "primaryNav": "Primary",
@@ -183,7 +225,7 @@
         "addMore": "Add more pages",
         "submit": "Upload {{count}} pages as one document",
         "error": {
-          "mixed": "Choose either one PDF or several photos. A PDF can't be combined with photos.",
+          "mixed": "Choose one PDF, or several photos of one document's pages. PDFs can't be combined with photos or with each other yet, so upload each PDF on its own.",
           "tooMany": "A document can have at most {{max}} pages."
         }
       },
@@ -199,6 +241,9 @@
       "hint": {
         "filingFor": "Filing this for: {{label}}",
         "clear": "Clear this suggestion"
+      },
+      "error": {
+        "fileTooLarge": "That file is larger than the {{mb}} MB limit."
       }
     },
     "review": {
@@ -301,6 +346,12 @@
         "tokens": "Tokens in/out",
         "cost": "Cost",
         "decision": "Decision"
+      },
+      "purge": {
+        "message": "This deletes the file and everything read from it for good. It can't be undone.",
+        "prompt": "Type the file name below to confirm.",
+        "inputLabel": "File name",
+        "confirm": "Delete for good"
       }
     },
     "dates": {
@@ -418,7 +469,18 @@
       "canvasLabel": "Drawing area. Draw with a finger, a pen or the mouse.",
       "clear": "Clear",
       "save": "Save as image",
-      "hint": "Saved as a private image in your files below."
+      "hint": "Saved as a private image in your files below.",
+      "modeLabel": "How to make it",
+      "modeDraw": "Draw",
+      "modeType": "Type",
+      "textLabel": "Your note",
+      "textPlaceholder": "Type a note to keep here",
+      "hintText": "Saved as a private image of your text, in your files below."
+    },
+    "emptyViewer": "Nothing here yet. You can still browse Calendar, Search and Company Files from the nav.",
+    "limits": "Up to {{max}} private files, {{mb}} MB each. You have {{used}}.",
+    "limit": {
+      "reached": "You have reached the limit of {{limit}} private files. Delete one to add another."
     }
   }
 }

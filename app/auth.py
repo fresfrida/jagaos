@@ -283,13 +283,10 @@ def may_see_document(
 def _admin_or_uploader_of_own_personal_file(
     membership: CurrentMembership, *, uploaded_by_user_id: int | None, visibility: str,
 ) -> bool:
-    """The one predicate behind "may act on this document": admin and owner for
-    any document they can see, and a `user` only for a PERSONAL file they
-    uploaded themselves (a viewer never; a company document, never). Two actions
-    share it, so they cannot drift: resolving a review item (round 13, DECISIONS
-    #85) and archiving a document (round 19, DECISIONS #95). Whether the caller
-    may SEE the document is a separate question (may_see_document) and is checked
-    first, so this only answers "may they act on it"."""
+    """The predicate behind "may act on this review item": admin and owner for any document they can see, and
+    a `user` only for a PERSONAL file they uploaded themselves (a viewer never; a company document, never).
+    Used by may_resolve_review_item (round 13, DECISIONS #85). Whether the caller may SEE the document is a
+    separate question (may_see_document) and is checked first, so this only answers "may they act on it"."""
     if ROLE_ORDER[membership.role] >= ROLE_ORDER["admin"]:
         return True
     return (
@@ -315,18 +312,28 @@ def may_resolve_review_item(
     )
 
 
-def may_archive_document(
+def may_archive_document(membership: CurrentMembership, *, visibility: str) -> bool:
+    """Who may archive ("Delete") a COMPANY document: admin and owner (DECISIONS #37/#53). A personal file is
+    never archived by anyone: its uploader deletes it for good (may_purge_document, round 20, DECISIONS #99), which
+    frees their slot under the private-file cap, and nobody else can even see it. Round 19 (#95) had let the
+    uploader archive it; that left a soft-deleted row nobody could see or clean up, still counting toward the cap.
+    Visibility itself is checked first (may_see_document)."""
+    return visibility == VISIBILITY_COMPANY and ROLE_ORDER[membership.role] >= ROLE_ORDER["admin"]
+
+
+def may_purge_document(
     membership: CurrentMembership, *, uploaded_by_user_id: int | None, visibility: str,
 ) -> bool:
-    """Who may archive ("Delete") a document: admin and owner, as always
-    (DECISIONS #37/#53), and, new in round 19 (DECISIONS #95), the uploader of
-    their own PERSONAL file. A personal file is invisible to admin and owner, so
-    without this its own author could never remove it: nobody else can reach it.
-    Scoped to personal files on purpose: a `user` still cannot delete a company
-    document, not even one they uploaded (a company record is the company's,
-    DECISIONS #37). Visibility itself is checked first (may_see_document)."""
-    return _admin_or_uploader_of_own_personal_file(
-        membership, uploaded_by_user_id=uploaded_by_user_id, visibility=visibility,
+    """Who may delete a document FOR GOOD from the app: the uploader of their OWN personal file (role `user` or
+    above; a viewer cannot upload, so has none). Nobody else, an admin and the owner included: a personal file
+    is invisible to them, and a company document cannot be purged from the app at all (that is a separate,
+    dedicated round: KANBAN, DECISIONS #98). A personal file with no recorded uploader can be purged by nobody.
+    Visibility itself is checked first (may_see_document)."""
+    return (
+        ROLE_ORDER[membership.role] >= ROLE_ORDER["user"]
+        and visibility != VISIBILITY_COMPANY
+        and uploaded_by_user_id is not None
+        and uploaded_by_user_id == membership.user_id
     )
 
 

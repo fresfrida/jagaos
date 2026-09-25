@@ -105,7 +105,9 @@ export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onM
             onClick={onTitle}
             aria-expanded={picker !== null}
             aria-label={t(picker === null ? 'ops.dates.pickMonth' : 'ops.dates.backToDays', { label: titleFor() })}
-            className="-ml-1.5 flex items-center gap-1 rounded-control px-1.5 py-1 hover:bg-canvas"
+            // Bordered at rest, like the step buttons beside it (the shared secondary Button look), so it reads as
+            // something to press before it is hovered (round 20, item 3).
+            className="flex h-9 items-center gap-1.5 rounded-control border border-line bg-white px-3 transition-colors hover:border-ink/40"
           >
             <span className="truncate">{titleFor()}</span>
             <ChevronDown size={16} aria-hidden="true" className={cn('shrink-0 text-muted transition-transform', picker !== null && 'rotate-180')} />
@@ -135,7 +137,7 @@ export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onM
         <>
           <div className="grid grid-cols-7">
             {weekdayLabels(locale).map((label, i) => (
-              <div key={i} className="border-b border-line px-1 py-1.5 text-center font-mono text-[10px] uppercase tracking-wide text-muted">
+              <div key={i} className="border-b border-line px-1 py-1.5 text-center font-mono text-[11px] uppercase tracking-wide text-muted">
                 {label}
               </div>
             ))}
@@ -169,11 +171,11 @@ export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onM
                     isSelected && 'bg-canvas ring-1 ring-inset ring-ink',
                   )}
                 >
-                  <span className={cn('flex h-5 w-5 items-center justify-center rounded-full text-[12px]', isToday ? 'bg-ink font-medium text-white' : 'text-ink')}>
+                  <span className={cn('flex h-5 w-5 items-center justify-center rounded-full text-[13px]', isToday ? 'bg-ink font-medium text-white' : 'text-ink')}>
                     {Number(day.slice(8))}
                   </span>
                   {count > 0 && (
-                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-sage px-1 font-mono text-[9px] font-medium text-white">
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-sage px-1 font-mono text-[10px] font-medium text-white">
                       {count}
                     </span>
                   )}

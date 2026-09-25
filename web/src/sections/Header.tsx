@@ -1,5 +1,8 @@
 /** The site header. Signed out: logo, Calendar, Tags, language, Log In, Get
- * Started (the marketing header, unchanged). Signed in (2026-09-24, round 14,
+ * Started from `sm` up (the marketing header); on a phone only the logo, the
+ * language select and Log In (round 20, item 8: five things in one row before any
+ * call to action crowded each other at 375px, and Tags was pushed out of the row).
+ * Signed in (2026-09-24, round 14,
  * DECISIONS #88), desktop:
  *
  *   [logo] Calendar  Company Files            language  company  (user)  [Upload]
@@ -36,7 +39,7 @@ function LanguageSwitcher() {
       value={i18n.language}
       onChange={(e) => setLanguage(e.target.value as LanguageCode)}
       aria-label={t('header.language')}
-      className="rounded-md border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-ink"
+      className="rounded-md border border-line bg-white px-2 py-1.5 text-[14px] text-ink outline-none focus:border-ink"
     >
       {SUPPORTED_LANGUAGES.map((lang) => (
         <option key={lang.code} value={lang.code}>{lang.label}</option>
@@ -45,10 +48,12 @@ function LanguageSwitcher() {
   )
 }
 
-function PrimaryNav({ routes, current, phoneHidden }: { routes: readonly RouteId[]; current: ResolvedRoute; phoneHidden: boolean }) {
+/** The inline nav: from `sm` up only. On a phone a signed-in person has the bottom bar, and a
+ * signed-out visitor has the two calls to action on the page itself. */
+function PrimaryNav({ routes, current }: { routes: readonly RouteId[]; current: ResolvedRoute }) {
   const { t } = useTranslation()
   return (
-    <nav aria-label={t('header.primaryNav')} className={phoneHidden ? 'hidden sm:block' : 'block'}>
+    <nav aria-label={t('header.primaryNav')} className="hidden sm:block">
       <ul className="flex items-center gap-0.5">
         {routes.map((id) => {
           const active = current === id
@@ -89,7 +94,7 @@ export function Header({ current }: { current: ResolvedRoute }) {
       <Container className="flex h-16 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3 sm:gap-6">
           <Logo />
-          <PrimaryNav routes={signedIn ? SIGNED_IN_NAV_ROUTES : TAB_ROUTES} current={current} phoneHidden={signedIn} />
+          <PrimaryNav routes={signedIn ? SIGNED_IN_NAV_ROUTES : TAB_ROUTES} current={current} />
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <LanguageSwitcher />

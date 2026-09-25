@@ -16,7 +16,7 @@ export function OpsStatusBar({ apiUp }: { apiUp?: boolean | null }) {
   const { status, company, user, role } = useAuth()
 
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
+    <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-muted">
       {apiUp !== undefined && (
         <span className="inline-flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${apiUp ? 'bg-sage' : 'bg-red-500'}`} aria-hidden="true" />

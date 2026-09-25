@@ -10,6 +10,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { TypedConfirmDialog } from '../../components/ui/TypedConfirmDialog'
 import { FileName } from '../../components/ui/FileName'
 import { ApiError } from '../../lib/apiClient'
 import { formatShortDate, localeFor } from '../../lib/dates'
@@ -32,16 +33,21 @@ import { useEditableDescription } from './useEditableDescription'
 /** Small preview next to each row in the Documents list (2026-09-22, doc
  * 2's preview UX pass) — a photo is often more recognizable at a glance
  * than its filename. Images fetch the real file (small, via the shared
- * blob-URL hook); PDFs get a generic icon rather than a rendered first
- * page, which is more machinery than this needs. */
+ * blob-URL hook). A PDF shows a picture of its first page since round 20 (item 5,
+ * DECISIONS #97): a small JPEG the server renders on the first request and caches
+ * (app/thumbnails.py). Until it arrives, and whenever there is none (it cannot be
+ * rendered, or it is not the caller's to see), the generic file icon stays. Any other
+ * type gets the icon and makes no request. */
 export function DocumentThumbnail({ documentId, mediaType }: { documentId: number; mediaType: string }) {
   const isImage = mediaType.startsWith('image/')
-  const { blobUrl } = useDocumentBlobUrl(documentId, isImage)
+  const isPdf = mediaType === 'application/pdf'
+  const { blobUrl } = useDocumentBlobUrl(documentId, isImage || isPdf, isPdf ? 'thumbnail' : 'file')
 
-  if (isImage) {
+  if (isImage || (isPdf && blobUrl)) {
     return (
       <div className="h-12 w-12 shrink-0 overflow-hidden rounded-control border border-line bg-canvas">
-        {blobUrl && <img src={blobUrl} alt="" className="h-full w-full object-cover" />}
+        {/* The top of a page is what identifies it, so a portrait page is cropped from the top. */}
+        {blobUrl && <img src={blobUrl} alt="" className={`h-full w-full object-cover ${isPdf ? 'object-top' : ''}`} />}
       </div>
     )
   }
@@ -100,8 +106,8 @@ export function DocumentViewerModal({
           </button>
         </div>
         <div className="flex-1 overflow-auto p-4">
-          {failed && <p className="text-[13px] text-red-700">{t('ops.documentViewer.loadFailed')}</p>}
-          {!failed && !blobUrl && <p className="text-[13px] text-muted">{t('ops.documentViewer.loading')}</p>}
+          {failed && <p className="text-[14px] text-red-700">{t('ops.documentViewer.loadFailed')}</p>}
+          {!failed && !blobUrl && <p className="text-[14px] text-muted">{t('ops.documentViewer.loading')}</p>}
           {blobUrl && mediaType === 'application/pdf' && (
             <embed src={blobUrl} type="application/pdf" className="h-[70vh] w-full rounded-control border border-line" />
           )}
@@ -123,6 +129,7 @@ export function DocumentCard({
   doc,
   canEdit,
   canArchive,
+  permanentDelete = false,
   onView,
   onTrace,
   onArchive,
@@ -131,6 +138,9 @@ export function DocumentCard({
   doc: DocumentRow
   canEdit: boolean
   canArchive: boolean
+  /** Delete is FOR GOOD (a private file, round 20, DECISIONS #99): the person must type the file's name, and
+   * `onArchive` then means "delete permanently". Default is the soft delete with a plain confirm. */
+  permanentDelete?: boolean
   onView: () => void
   onTrace: () => void
   onArchive: () => void
@@ -233,7 +243,7 @@ export function DocumentCard({
               )}
             </p>
             {localDescription && (
-              <p className="mt-0.5 break-words text-[12px] text-muted">{doc.lane ?? '-'} / {doc.doc_type ? docTypeLabel(t, doc.doc_type) : '-'}</p>
+              <p className="mt-0.5 break-words text-[13px] text-muted">{doc.lane ?? '-'} / {doc.doc_type ? docTypeLabel(t, doc.doc_type) : '-'}</p>
             )}
             {/* 2026-09-23, live user feedback: both dates already exist in
                the API response but neither was ever shown on this card —
@@ -245,12 +255,12 @@ export function DocumentCard({
                locale-aware formatShortDate (lib/dates.ts) the Calendar
                page's own day heading already uses, not a second
                date-formatting approach. */}
-            <p className="mt-0.5 break-words text-[12px] text-muted">
+            <p className="mt-0.5 break-words text-[13px] text-muted">
               {t('ops.dates.uploadDate')}: {formatShortDate(doc.received_at, localeFor(i18n.language))}
               {' · '}
               {t('ops.dates.documentDate')}: {doc.occurred_on ? formatShortDate(doc.occurred_on, localeFor(i18n.language)) : t('ops.documents.noDocumentDate')}
             </p>
-            {doc.vendor_name && <p className="mt-0.5 break-words text-[12px] text-muted">{doc.vendor_name}</p>}
+            {doc.vendor_name && <p className="mt-0.5 break-words text-[13px] text-muted">{doc.vendor_name}</p>}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
@@ -265,14 +275,14 @@ export function DocumentCard({
             value={filename}
             onChange={(e) => setFilename(e.target.value)}
             placeholder={t('ops.documents.filenamePlaceholder')}
-            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink sm:col-span-3"
+            className="block h-9 w-full rounded-control border border-line px-2.5 text-[14px] text-ink outline-none focus:border-ink sm:col-span-3"
           />
           <div className="flex items-center gap-2 sm:col-span-3">
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={isPendingCaption ? t('ops.review.document.descriptionPendingPlaceholder') : t('ops.documents.descriptionPlaceholder')}
-              className="block h-9 w-full flex-1 rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+              className="block h-9 w-full flex-1 rounded-control border border-line px-2.5 text-[14px] text-ink outline-none focus:border-ink"
             />
             {isPictureLane && <VoiceCaptionButton onCaption={setDescription} disabled={false} />}
           </div>
@@ -292,9 +302,9 @@ export function DocumentCard({
                ReviewQueueCard.tsx. Still locks once already in memory
                lane, same one-directional correction as before. */}
             <DocTypeField lane={doc.lane} value={docType} disabled={isPictureLane} onChange={setDocType} className={FIELD_CLASS} />
-            {isPictureLane && <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
+            {isPictureLane && <p className="mt-1 text-[12px] text-muted">{t('ops.pictureToggle.docTypeLocked')}</p>}
             {docType === 'photo' && !isPictureLane && (
-              <p className="mt-1 text-[11px] text-muted">{t('ops.pictureToggle.reducesAccuracy')}</p>
+              <p className="mt-1 text-[12px] text-muted">{t('ops.pictureToggle.reducesAccuracy')}</p>
             )}
           </div>
           <input
@@ -302,9 +312,9 @@ export function DocumentCard({
             onChange={(e) => setVendorName(e.target.value)}
             placeholder={t('ops.documents.vendorNamePlaceholder')}
             list={VENDOR_NAMES_DATALIST_ID}
-            className="block h-9 w-full rounded-control border border-line px-2.5 text-[13px] text-ink outline-none focus:border-ink"
+            className="block h-9 w-full rounded-control border border-line px-2.5 text-[14px] text-ink outline-none focus:border-ink"
           />
-          {error && <p className="text-[12px] text-red-700 sm:col-span-3">{error}</p>}
+          {error && <p className="text-[13px] text-red-700 sm:col-span-3">{error}</p>}
           <div className="flex gap-2 sm:col-span-3">
             <Button size="sm" onClick={() => void save()} disabled={busy}>{t('common.buttons.save')}</Button>
             <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>{t('common.buttons.cancel')}</Button>
@@ -313,7 +323,7 @@ export function DocumentCard({
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <button onClick={onView} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink">
+        <button onClick={onView} className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-ink">
           {t('ops.documents.view')}
         </button>
         {canEdit && !editing && (
@@ -324,7 +334,7 @@ export function DocumentCard({
               resetDescription()
               setEditing(true)
             }}
-            className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink"
+            className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-ink"
           >
             {t('ops.documents.edit')}
           </button>
@@ -344,7 +354,7 @@ export function DocumentCard({
            unchanged — see its own comment in opsApi.ts. Gated behind
            ConfirmDialog below, not a single unconfirmed click. */}
         {canArchive && (
-          <button onClick={() => setShowDeleteConfirm(true)} className="text-[12px] font-mono uppercase tracking-wide text-muted hover:text-red-700">
+          <button onClick={() => setShowDeleteConfirm(true)} className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-red-700">
             {t('ops.documents.delete')}
           </button>
         )}
@@ -378,7 +388,7 @@ export function DocumentCard({
                   setShowMenu(false)
                   onTrace()
                 }}
-                className="block w-full px-3 py-1.5 text-left text-[12px] font-mono uppercase tracking-wide text-muted hover:bg-canvas hover:text-ink"
+                className="block w-full px-3 py-1.5 text-left text-[13px] font-mono uppercase tracking-wide text-muted hover:bg-canvas hover:text-ink"
               >
                 {t('ops.documents.trace')}
               </button>
@@ -387,17 +397,34 @@ export function DocumentCard({
         </div>
       </div>
 
-      <ConfirmDialog
-        open={showDeleteConfirm}
-        message={t('ops.documents.deleteConfirmMessage', { filename: middleEllipsis(doc.filename, 40) })}
-        confirmLabel={t('common.buttons.delete')}
-        cancelLabel={t('common.buttons.cancel')}
-        onConfirm={() => {
-          setShowDeleteConfirm(false)
-          onArchive()
-        }}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
+      {permanentDelete ? (
+        <TypedConfirmDialog
+          open={showDeleteConfirm}
+          message={t('ops.documents.purge.message')}
+          prompt={t('ops.documents.purge.prompt')}
+          expected={doc.filename}
+          inputLabel={t('ops.documents.purge.inputLabel')}
+          confirmLabel={t('ops.documents.purge.confirm')}
+          cancelLabel={t('common.buttons.cancel')}
+          onConfirm={() => {
+            setShowDeleteConfirm(false)
+            onArchive()
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      ) : (
+        <ConfirmDialog
+          open={showDeleteConfirm}
+          message={t('ops.documents.deleteConfirmMessage', { filename: middleEllipsis(doc.filename, 40) })}
+          confirmLabel={t('common.buttons.delete')}
+          cancelLabel={t('common.buttons.cancel')}
+          onConfirm={() => {
+            setShowDeleteConfirm(false)
+            onArchive()
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </Card>
   )
 }

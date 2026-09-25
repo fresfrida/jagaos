@@ -58,7 +58,7 @@ export function Toast({ toast, onDismiss }: { toast: ToastState | null; onDismis
       role="status"
       aria-live="polite"
       className={cn(
-        'fixed inset-x-4 bottom-20 z-50 mx-auto flex max-w-sm items-center justify-between gap-3 rounded-card border px-4 py-3 text-[13px] shadow-lg sm:bottom-6',
+        'fixed inset-x-4 bottom-20 z-50 mx-auto flex max-w-sm items-center justify-between gap-3 rounded-card border px-4 py-3 text-[14px] shadow-lg sm:bottom-6',
         TONE_CLASS[toast.tone],
       )}
     >

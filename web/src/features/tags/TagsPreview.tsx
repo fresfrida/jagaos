@@ -75,7 +75,7 @@ export function TagsPreview() {
             </AnimatePresence>
           </div>
 
-          <p className="mb-3 mt-4 font-mono text-[11px] text-muted" aria-live="polite">
+          <p className="mb-3 mt-4 font-mono text-[12px] text-muted" aria-live="polite">
             {visible.length} {visible.length === 1 ? 'memory' : 'memories'} · {activeLabel} · sample data
           </p>
 
@@ -104,7 +104,7 @@ export function TagsPreview() {
         </div>
 
         <div className="hidden sm:block">
-          <p className="mb-2 px-3 font-mono text-[11px] uppercase tracking-wide text-muted">Tags</p>
+          <p className="mb-2 px-3 font-mono text-[12px] uppercase tracking-wide text-muted">Tags</p>
           <TagSidebar tags={TAGS} memories={MEMORIES} active={tag} onChange={setTag} />
         </div>
       </div>

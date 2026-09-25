@@ -137,6 +137,13 @@ export interface DocumentRow {
   visibility?: Visibility
 }
 
+/** GET /api/limits (round 20, DECISIONS #99). */
+export interface Limits {
+  max_file_bytes: number
+  max_personal_files: number
+  personal_files_used: number
+}
+
 export interface Expectation {
   id: number
   doc_type: string
@@ -273,6 +280,18 @@ export const opsApi = {
   // #94). Same row shape as listDocuments; nobody else's, ever.
   listPersonalFiles: () => request<DocumentRow[]>('/api/personal-files'),
 
+  // Round 20 (item 6, DECISIONS #99): the upload limits, and how many of the private-file slots this person
+  // has used. A backend older than this answers 404, and callers treat that as "no limits known".
+  getLimits: () => request<Limits>('/api/limits'),
+
+  // Delete a PRIVATE file for good (its uploader only). `confirm` must be the file's exact name. Irreversible.
+  purgeDocument: (documentId: number, confirm: string) =>
+    request<{ status: string; file_removed: boolean }>(`/api/documents/${documentId}/purge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm }),
+    }),
+
   listExpectations: () => request<Expectation[]>('/api/expectations'),
 
   listObligations: () => request<Obligation[]>('/api/obligations'),
@@ -343,6 +362,14 @@ export const opsApi = {
   // fetches the bytes itself and points at a local blob: URL instead.
   fetchDocumentFile: (documentId: number): Promise<Blob> =>
     fetch(`${API_BASE_URL}/api/documents/${documentId}/file`, { headers: authHeaders() }).then((res) => {
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+      return res.blob()
+    }),
+  // Round 20 (item 5, DECISIONS #97): a small JPEG of a PDF's first page, made by the server on the
+  // first request and cached there. A 404 (not a PDF, cannot be rendered, or not yours to see) is
+  // just "no thumbnail": the card keeps its generic icon.
+  fetchDocumentThumbnail: (documentId: number): Promise<Blob> =>
+    fetch(`${API_BASE_URL}/api/documents/${documentId}/thumbnail`, { headers: authHeaders() }).then((res) => {
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       return res.blob()
     }),

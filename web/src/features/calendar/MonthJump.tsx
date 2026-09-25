@@ -14,7 +14,7 @@ function monthNames(locale: string): string[] {
   return Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString(locale, { month: 'short' }))
 }
 
-const CELL = 'flex h-11 items-center justify-center rounded-control text-[13px] transition-colors hover:bg-canvas'
+const CELL = 'flex h-11 items-center justify-center rounded-control text-[14px] transition-colors hover:bg-canvas'
 
 export function MonthJump({
   view,

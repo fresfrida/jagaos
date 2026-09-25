@@ -54,10 +54,10 @@ export function BusinessProfileSection({
       <h2 id="business-profile-heading" className="sr-only">{t('companySettings.businessProfile.title')}</h2>
 
       {state.status === 'loading' && (
-        <p className="py-4 text-[13px] text-muted" role="status">{t('companySettings.businessProfile.loading')}</p>
+        <p className="py-4 text-[14px] text-muted" role="status">{t('companySettings.businessProfile.loading')}</p>
       )}
       {state.status === 'failed' && (
-        <p className="py-4 text-[13px] text-red-700" role="alert">{t('companySettings.businessProfile.loadFailed')}</p>
+        <p className="py-4 text-[14px] text-red-700" role="alert">{t('companySettings.businessProfile.loadFailed')}</p>
       )}
 
       {uploading !== null && (
@@ -65,7 +65,7 @@ export function BusinessProfileSection({
           <Loader2 size={28} strokeWidth={1.75} className="shrink-0 animate-spin text-ink" aria-hidden="true" />
           <span className="min-w-0 flex-1">
             <span className="block text-base font-semibold text-ink">{t('companySettings.businessProfile.uploading')}</span>
-            <FileName name={uploading.name} max={30} className="mt-0.5 block text-[13px] text-muted" />
+            <FileName name={uploading.name} max={30} className="mt-0.5 block text-[14px] text-muted" />
           </span>
         </div>
       )}
@@ -95,8 +95,8 @@ export function BusinessProfileSection({
             </button>
             <span className="min-w-0 flex-1">
               <span className="block text-base font-semibold text-ink">{t('companySettings.businessProfile.title')}</span>
-              <FileName name={document.filename} max={30} className="mt-0.5 block text-[13px] text-muted" />
-              <span className="mt-0.5 block text-[12px] text-muted">{t(STATUS_KEYS[document.status] ?? STATUS_KEYS.needs_review ?? '')}</span>
+              <FileName name={document.filename} max={30} className="mt-0.5 block text-[14px] text-muted" />
+              <span className="mt-0.5 block text-[13px] text-muted">{t(STATUS_KEYS[document.status] ?? STATUS_KEYS.needs_review ?? '')}</span>
             </span>
             <ChevronRight size={18} className="shrink-0 text-muted" aria-hidden="true" />
           </div>
@@ -113,7 +113,7 @@ export function BusinessProfileSection({
               {t('companySettings.businessProfile.remove')}
             </Button>
             {document.status === 'needs_review' && (
-              <Link href={routeHref('upload')} className="text-[13px] text-ink underline underline-offset-2 hover:text-muted">
+              <Link href={routeHref('upload')} className="text-[14px] text-ink underline underline-offset-2 hover:text-muted">
                 {t('companySettings.businessProfile.openQueue')}
               </Link>
             )}
@@ -122,7 +122,7 @@ export function BusinessProfileSection({
       )}
 
       {notice && (
-        <p role={notice === 'failed' ? 'alert' : 'status'} className={`mt-2 text-[13px] ${notice === 'failed' ? 'text-red-700' : 'text-muted'}`}>
+        <p role={notice === 'failed' ? 'alert' : 'status'} className={`mt-2 text-[14px] ${notice === 'failed' ? 'text-red-700' : 'text-muted'}`}>
           {t(`companySettings.businessProfile.notice.${notice}`)}
         </p>
       )}

@@ -36,7 +36,7 @@ export function MemorySearch() {
             }}
             placeholder={HERO.searchPlaceholder}
             autoComplete="off"
-            className="h-full min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-[13px] placeholder:text-muted sm:placeholder:text-base [&::-webkit-search-cancel-button]:hidden"
+            className="h-full min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-[14px] placeholder:text-muted sm:placeholder:text-base [&::-webkit-search-cancel-button]:hidden"
           />
           {value && (
             <button
@@ -90,7 +90,7 @@ export function MemorySearch() {
               )}
               {state.status === 'done' && state.result.matches.length > 0 && (
                 <div className="space-y-2.5">
-                  <p className="font-mono text-[11px] uppercase tracking-wide text-muted">
+                  <p className="font-mono text-[12px] uppercase tracking-wide text-muted">
                     {state.result.matches.length} grounded {state.result.matches.length === 1 ? 'answer' : 'answers'} · sample data
                   </p>
                   {state.result.matches.map((memory) => (

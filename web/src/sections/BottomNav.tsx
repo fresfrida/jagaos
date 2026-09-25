@@ -80,7 +80,7 @@ function NavItem({ id, active }: { id: RouteId; active: boolean }) {
       // py-1.5 -> py-2.5, icon 20 -> 22 — the bar felt cramped on a real
       // phone. The raised center button below grows proportionally too.
       className={cn(
-        'flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[11px] leading-none transition-colors',
+        'flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[12px] leading-none transition-colors',
         active ? 'text-ink' : 'text-muted',
       )}
     >
@@ -147,7 +147,7 @@ export function BottomNav({ current }: { current: ResolvedRoute }) {
           >
             <Upload size={22} aria-hidden="true" />
           </button>
-          <span className={cn('mt-1 text-[11px] leading-none', uploadActive ? 'text-ink' : 'text-muted')}>
+          <span className={cn('mt-1 text-[12px] leading-none', uploadActive ? 'text-ink' : 'text-muted')}>
             {t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
           </span>
         </div>

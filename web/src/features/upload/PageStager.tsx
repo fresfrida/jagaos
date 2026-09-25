@@ -50,10 +50,10 @@ export function PageStager({
 
   return (
     <section aria-labelledby="page-stager-heading" className="mt-6 rounded-card border border-line bg-canvas p-4">
-      <h3 id="page-stager-heading" className="text-[14px] font-medium text-ink">
+      <h3 id="page-stager-heading" className="text-[15px] font-medium text-ink">
         {t('ops.upload.pages.heading', { count: files.length })}
       </h3>
-      <p className="mt-0.5 text-[12px] text-muted">{t('ops.upload.pages.hint')}</p>
+      <p className="mt-0.5 text-[13px] text-muted">{t('ops.upload.pages.hint')}</p>
 
       <ol className="mt-3 space-y-2">
         {files.map((file, index) => (
@@ -62,8 +62,8 @@ export function PageStager({
               {thumbnails[index] && <img src={thumbnails[index]} alt="" className="h-full w-full object-cover" />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium text-ink">{t('ops.upload.pages.pageLabel', { n: index + 1 })}</p>
-              <p className="text-[12px] text-muted"><FileName name={file.name} max={30} /></p>
+              <p className="text-[14px] font-medium text-ink">{t('ops.upload.pages.pageLabel', { n: index + 1 })}</p>
+              <p className="text-[13px] text-muted"><FileName name={file.name} max={30} /></p>
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
               <Button variant="ghost" size="icon" disabled={busy || index === 0} onClick={() => onMove(index, -1)}
@@ -84,7 +84,7 @@ export function PageStager({
       </ol>
 
       {error && (
-        <p role="alert" className="mt-3 text-[13px] text-red-700">
+        <p role="alert" className="mt-3 text-[14px] text-red-700">
           {t(`ops.upload.pages.error.${error}`, { max: MAX_PAGES })}
         </p>
       )}

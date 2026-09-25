@@ -8,20 +8,22 @@
  *
  * Composition only: the same Document / Photo upload area as the Upload page
  * (UploadPanel, a flow that sends every upload as only_me), the person's files as the
- * same cards Company Files uses (DocumentResultsList, WITH Delete: since round 19,
- * DECISIONS #95, the uploader may archive their own personal file, the one case where a
- * `user` may delete anything), and
+ * same cards Company Files uses (DocumentResultsList, WITH Delete, which here deletes FOR GOOD
+ * after the person types the file's name: round 20, DECISIONS #99; a private file is never
+ * soft-archived, so a delete really frees one of the 15 slots), and
  * this section's own search box and a bare scratchpad (features/personal/Scratchpad.tsx: draw,
  * clear, save; a save is uploaded as a private image like any Photo). The search filters the loaded list in the browser as they
  * type (features/personal/personalSearch.ts): it never touches the company search.
  *
- * Who: user and above (a viewer cannot upload, so there is nothing to add; a viewer
- * who opens the address is sent to the Calendar, like Company Settings for a role that
- * has no page there). A new private file is confirmed like any upload, in the review
+ * Who: everyone signed in (round 20, final ruling of item 2). User and above get the whole page.
+ * A viewer cannot upload, so for them it is the read-only variant: the same heading, the privacy note and
+ * the list (empty unless the person was demoted from a role that could upload), with no upload rows, no
+ * scratchpad and no Delete. It is a viewer's signed-in home, rendered at `/` by Page.tsx (and at /only-me),
+ * never a redirect. A new private file is confirmed like any upload, in the review
  * queue on the Upload page, and shows here with its status meanwhile. */
 
 import { Lock, PenLine, Search, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -35,26 +37,24 @@ import { type UploadResult } from '../features/ops/opsApi'
 import { filterPersonalFiles } from '../features/personal/personalSearch'
 import { Scratchpad } from '../features/personal/Scratchpad'
 import { usePersonalFiles } from '../features/personal/usePersonalFiles'
+import { usePersonalLimits } from '../features/personal/usePersonalLimits'
 import { UploadPanel } from '../features/upload/UploadPanel'
 import { ChoiceRow } from '../features/upload/UploadChoice'
+import { uploadErrorMessage } from '../features/upload/uploadErrorMessage'
 import { useUploadFlow } from '../features/upload/useUploadFlow'
 import { Link } from '../router/Link'
-import { navigate } from '../router/navigate'
 import { routeHref } from '../router/routes'
 
 function OnlyMeContent() {
   const { t, i18n } = useTranslation()
   const { role } = useAuth()
   const canUpload = role !== null && roleAtLeast(role, 'user')
-  const personal = usePersonalFiles(canUpload)
+  const personal = usePersonalFiles(role !== null)
+  const personalLimits = usePersonalLimits(canUpload)
   const { toast, showToast, dismissToast } = useToast()
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [padOpen, setPadOpen] = useState(false)
-
-  useEffect(() => {
-    if (role !== null && !canUpload) navigate(routeHref('calendar'))
-  }, [role, canUpload])
 
   const onOutcome = useCallback(
     (result: UploadResult) => {
@@ -64,17 +64,27 @@ function OnlyMeContent() {
     },
     [showToast, t],
   )
-  const flow = useUploadFlow({ language: i18n.language, refresh: personal.refresh, onOutcome, onError: setUploadError, visibility: 'only_me' })
+  // After an upload or a delete, both the list and "you have N of 15" are re-read, so neither is stale.
+  const { refresh: refreshFiles } = personal
+  const { refresh: refreshLimits } = personalLimits
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refreshFiles(), refreshLimits()])
+  }, [refreshFiles, refreshLimits])
+  const onError = useCallback(
+    (message: string | null, error?: unknown) => setUploadError(message === null ? null : uploadErrorMessage(t, message, error)),
+    [t],
+  )
+  const flow = useUploadFlow({ language: i18n.language, refresh: refreshAll, onOutcome, onError, visibility: 'only_me' })
+  const limits = personalLimits.limits
+  const atLimit = limits !== null && limits.personal_files_used >= limits.max_personal_files
 
   const files = personal.state.status === 'ready' ? personal.state.files : []
   const shown = useMemo(() => filterPersonalFiles(files, query, (b) => bucketLabel(t, b)), [files, query, t])
   const searching = query.trim() !== ''
 
-  if (!canUpload) return <p className="py-16 text-sm text-muted">{t('ops.session.redirecting')}</p>
-
   return (
     <div>
-      <p className="mb-4 flex items-start gap-2 text-[13px] leading-5 text-muted">
+      <p className="mb-4 flex items-start gap-2 text-[14px] leading-5 text-muted">
         <Lock size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
         <span>{t('onlyMe.intro')}</span>
       </p>
@@ -85,30 +95,45 @@ function OnlyMeContent() {
         </div>
       )}
 
-      <Card className="p-6" interactive={false}>
-        <UploadPanel flow={flow} />
-        <p className="mt-4 text-[12px] leading-5 text-muted">
-          {t('onlyMe.reviewHint')}{' '}
-          <Link href={routeHref('upload')} className="text-ink underline underline-offset-2 hover:text-muted">
-            {t('onlyMe.reviewLink')}
-          </Link>
-        </p>
-      </Card>
+      {canUpload && (
+        <>
+        <Card className="p-6" interactive={false}>
+          <UploadPanel flow={flow} disabled={atLimit} />
+          <p className="mt-4 text-[13px] leading-5 text-muted">
+            {t('onlyMe.reviewHint')}{' '}
+            <Link href={routeHref('upload')} className="text-ink underline underline-offset-2 hover:text-muted">
+              {t('onlyMe.reviewLink')}
+            </Link>
+          </p>
+          {limits !== null && (
+            <p
+              className={`mt-2 text-[13px] leading-5 ${atLimit ? 'font-medium text-ink' : 'text-muted'}`}
+              data-testid="only-me-limits-note"
+              role="status"
+            >
+              {atLimit
+                ? t('onlyMe.limit.reached', { limit: limits.max_personal_files })
+                : t('onlyMe.limits', { max: limits.max_personal_files, mb: Math.round(limits.max_file_bytes / (1024 * 1024)), used: limits.personal_files_used })}
+            </p>
+          )}
+        </Card>
 
-      <Card className={padOpen ? 'mt-4 p-4' : 'mt-4 p-6'} interactive={false}>
-        {padOpen ? (
-          <Scratchpad onSave={flow.uploadPhoto} busy={flow.busy} onClose={() => setPadOpen(false)} />
-        ) : (
-          <ChoiceRow icon={PenLine} title={t('onlyMe.scratchpad.title')} hint={t('onlyMe.scratchpad.rowHint')} disabled={flow.busy} onClick={() => setPadOpen(true)} />
-        )}
-      </Card>
+        <Card className={padOpen ? 'mt-4 p-4' : 'mt-4 p-6'} interactive={false}>
+          {padOpen ? (
+            <Scratchpad onSave={flow.uploadPhoto} busy={flow.busy || atLimit} onClose={() => setPadOpen(false)} />
+          ) : (
+            <ChoiceRow icon={PenLine} title={t('onlyMe.scratchpad.title')} hint={t('onlyMe.scratchpad.rowHint')} disabled={flow.busy || atLimit} onClick={() => setPadOpen(true)} />
+          )}
+        </Card>
+        </>
+      )}
 
       <section className="mt-8" aria-labelledby="only-me-files-heading">
-        <h2 id="only-me-files-heading" className="mb-3 text-[11px] font-mono uppercase tracking-wide text-muted">
+        <h2 id="only-me-files-heading" className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">
           {t('onlyMe.filesHeading', { count: personal.state.status === 'ready' ? files.length : 0 })}
         </h2>
 
-        {personal.state.status === 'loading' && <p className="text-[13px] text-muted" role="status">{t('onlyMe.loading')}</p>}
+        {personal.state.status === 'loading' && <p className="text-[14px] text-muted" role="status">{t('onlyMe.loading')}</p>}
         {personal.state.status === 'failed' && (
           <div className="rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
             <p>{t('onlyMe.loadFailed')}</p>
@@ -130,7 +155,7 @@ function OnlyMeContent() {
                   }}
                   placeholder={t('onlyMe.searchPlaceholder')}
                   aria-label={t('onlyMe.searchLabel')}
-                  className="h-10 w-full rounded-control border border-line bg-white pl-9 pr-9 text-[14px] text-ink outline-none focus:border-ink [&::-webkit-search-cancel-button]:hidden"
+                  className="h-10 w-full rounded-control border border-line bg-white pl-9 pr-9 text-[15px] text-ink outline-none focus:border-ink [&::-webkit-search-cancel-button]:hidden"
                 />
                 {searching && (
                   <button
@@ -145,16 +170,17 @@ function OnlyMeContent() {
               </div>
             )}
             {searching && files.length > 0 && (
-              <p className="mb-2 text-[12px] text-muted" role="status" data-testid="only-me-search-count">
+              <p className="mb-2 text-[13px] text-muted" role="status" data-testid="only-me-search-count">
                 {t('onlyMe.searchCount', { shown: shown.length, total: files.length })}
               </p>
             )}
             <DocumentResultsList
               documents={shown}
               canEdit={canUpload}
-              canArchive
-              onSaved={() => void personal.refresh()}
-              emptyMessage={searching ? t('onlyMe.noMatches', { query: query.trim() }) : t('onlyMe.empty')}
+              canArchive={canUpload}
+              permanentDelete
+              onSaved={() => void refreshAll()}
+              emptyMessage={searching ? t('onlyMe.noMatches', { query: query.trim() }) : t(canUpload ? 'onlyMe.empty' : 'onlyMe.emptyViewer')}
             />
           </>
         )}
