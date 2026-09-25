@@ -27,7 +27,7 @@ jagaos.13-251-52-222.nip.io, 13-251-52-222.nip.io {
 		file_server
 	}
 
-	# everything else: root files (icon.svg, manifest.webmanifest, index.html)
+	# everything else: root files (icon-32/192/512.png, apple-touch-icon.png, manifest.webmanifest, index.html)
 	# with SPA fallback. Must stay last so /api/* and /assets/* win.
 	handle {
 		root * /var/www/jaga/web
