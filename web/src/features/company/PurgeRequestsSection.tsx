@@ -17,7 +17,7 @@ export function PurgeRequestsSection({ enabled }: { enabled: boolean }) {
 
   const count = state.status === 'ready' ? state.requests.length : 0
   return (
-    <section className="mt-10 max-w-2xl" aria-labelledby="company-purge-requests-heading">
+    <section className="mt-10" aria-labelledby="company-purge-requests-heading">
       <h2 id="company-purge-requests-heading" className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">
         {t('companySettings.purgeRequests.heading', { count })}
       </h2>

@@ -4,7 +4,7 @@
   --color-ink: #141414;
   --color-charcoal: #4a4a53; /* softer heading tone ("at scale"); darkened a step in round 20 (#55555e) */
   --color-muted: #5a5a64; /* secondary text; 6.8:1 on white (was #6b6b75, 5.3:1) */
-  --color-line: #e5e5e5;
+  --color-line: #d4d4d4; /* card, input and divider edge; one step down the neutral scale from #e5e5e5 (DECISIONS #111) */
   --color-canvas: #fafafa;
   --color-sage: #6ea99d;
   --color-sage-ink: #3f7468; /* darker sage for text on white (contrast) */

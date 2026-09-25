@@ -4,8 +4,8 @@
  *
  * Register: Apple's. Short sentences, no exclamation marks, no superlatives; the product steps back and the owner's life
  * steps forward. The page, top to bottom: a headline and one supporting sentence with the one call to action (a demo, through
- * the ordinary login: features/auth/useDemoLogin.ts, config/demo.ts, no bypass), a real screenshot of the app in a plain phone
- * frame, and three cards (Capture, Review, Remember); the page ends there, straight into the footer (the closing line and its
+ * the ordinary login: features/auth/useDemoLogin.ts, config/demo.ts, no bypass), a screen recording of the app in a plain phone
+ * frame (a still under reduced motion), and three cards (Capture, Review, Remember); the page ends there, straight into the footer (the closing line and its
  * second call to action were removed in DECISIONS #108). The button opens the shared demo picker
  * (features/auth/DemoPickerHost.tsx), the same dialog the header's and the footer's Get Started open.
  * There is no Log In anywhere on the signed-out chrome any more.
@@ -15,11 +15,13 @@
 
 import { CalendarClock, ClipboardCheck, ScanLine } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import appScreenshot from '../assets/landing-calendar.webp'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Container } from '../components/ui/Container'
+import { useDemoVideo } from '../hooks/useDemoVideo'
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion'
 import { openDemoPicker } from '../lib/demoPickerTrigger'
+import { HERO_POSTER, HERO_VIDEO_SIZE, HeroVideo, HeroVideoToggle } from './HeroVideo'
 
 const FEATURES = [
   { id: 'capture', icon: ScanLine },
@@ -27,25 +29,34 @@ const FEATURES = [
   { id: 'remember', icon: CalendarClock },
 ] as const
 
-/** A real screenshot of the app (the Calendar, signed in as the demo owner) in a plain phone frame: a dark bezel, rounded
- * screen, a small speaker slot. Not a mockup of a screen that does not exist. */
+/** The app in a plain phone frame: a dark bezel, rounded screen, a small speaker slot. What plays in it is a screen recording of the
+ * LIVE app (sections/HeroVideo.tsx, DECISIONS #113), not a mockup of a screen that does not exist; where the person asked for reduced
+ * motion it is the recording's first frame, a still, and nothing moves. */
 function PhoneFrame() {
   const { t } = useTranslation()
+  const reducedMotion = usePrefersReducedMotion()
+  const demo = useDemoVideo()
   return (
     <figure className="mx-auto w-[236px] sm:w-[264px] lg:mx-0 lg:justify-self-center" data-testid="hero-phone">
       <div className="relative rounded-[2rem] bg-ink p-[7px] shadow-[0_24px_60px_-20px_rgba(20,20,20,0.45)]">
         <span className="absolute left-1/2 top-[13px] z-10 h-[5px] w-14 -translate-x-1/2 rounded-full bg-black/70" aria-hidden="true" />
         <div className="overflow-hidden rounded-[1.4rem] bg-white">
-          <img
-            src={appScreenshot}
-            alt={t('home.hero.imageAlt')}
-            width={600}
-            height={1299}
-            fetchPriority="high"
-            className="block h-auto w-full"
-          />
+          {reducedMotion ? (
+            <img
+              src={HERO_POSTER}
+              alt={t('home.hero.imageAlt')}
+              width={HERO_VIDEO_SIZE.width}
+              height={HERO_VIDEO_SIZE.height}
+              fetchPriority="high"
+              className="block h-auto w-full"
+            />
+          ) : (
+            <HeroVideo demo={demo} />
+          )}
         </div>
       </div>
+      {/* Under reduced motion there is a still and nothing to pause; and no button if no source can be played (DECISIONS #115). */}
+      {!reducedMotion && !demo.unavailable && <HeroVideoToggle demo={demo} />}
     </figure>
   )
 }
@@ -66,7 +77,8 @@ export function WelcomeHero() {
               <Button size="md" className="w-full sm:w-auto" onClick={openDemoPicker} aria-haspopup="dialog">
                 {t('home.demo.button')}
               </Button>
-              <p className="mt-2 text-[14px] text-muted">{t('home.demo.hint')}</p>
+              {/* 16px, up from 14 (DECISIONS #111): the line under the button read as fine print. Same colour. */}
+              <p className="mt-2 text-base leading-6 text-muted">{t('home.demo.hint')}</p>
             </div>
           </div>
           <PhoneFrame />
@@ -78,7 +90,9 @@ export function WelcomeHero() {
               <Card className="h-full p-5" interactive={false}>
                 <Icon size={22} strokeWidth={1.75} className="text-sage-ink" aria-hidden="true" />
                 <h2 className="mt-3 text-[16px] font-semibold text-ink">{t(`home.features.${id}.title`)}</h2>
-                <p className="mt-1 text-[15px] leading-6 text-muted">{t(`home.features.${id}.text`)}</p>
+                {/* font-semibold, the title's own weight (DECISIONS #111): the title still leads by colour (ink vs muted), size and
+                   face; bold would make the description heavier than the title above it. */}
+                <p className="mt-1 text-[15px] font-semibold leading-6 text-muted">{t(`home.features.${id}.text`)}</p>
               </Card>
             </li>
           ))}

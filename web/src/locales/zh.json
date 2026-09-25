@@ -10,7 +10,7 @@
   "home": {
     "demo": {
       "button": "选择演示角色",
-      "hint": "以所有者、管理员、用户或查看者的身份体验，无需注册。",
+      "hint": "以不同身份体验（所有者、管理员、用户、查看者），无需注册。",
       "opening": "正在打开演示…",
       "failed": "暂时无法打开演示。您仍可登录。",
       "pickerTitle": "以此身份体验演示",
@@ -73,7 +73,10 @@
     "hero": {
       "headline": "JagaOS 替你记住，你不必再记。",
       "subhead": "上传一份文件。JagaOS 会读懂它，找出日期和细节，让一切一搜即得。",
-      "imageAlt": "手机上的 JagaOS 日历，按上传日期显示文件。"
+      "imageAlt": "手机上的 JagaOS 日历，按上传日期显示文件。",
+      "videoAlt": "手机上的 JagaOS 日历屏幕录制，依次切换英文、中文、马来文和泰米尔文。",
+      "pauseVideo": "暂停视频",
+      "playVideo": "播放视频"
     }
   },
   "companySettings": {

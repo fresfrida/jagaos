@@ -8,7 +8,8 @@ import i18n from '../i18n'
 
 const auth = vi.hoisted(() => ({ value: { status: 'signed-out', user: null, role: null } as Record<string, unknown> }))
 vi.mock('../features/auth/AuthContext', () => ({ useAuth: () => auth.value }))
-vi.mock('../hooks/useScrolled', () => ({ useScrolled: () => false }))
+const scrolled = vi.hoisted(() => ({ value: false }))
+vi.mock('../hooks/useScrolled', () => ({ useScrolled: () => scrolled.value }))
 vi.mock('../features/auth/CompanySwitcher', () => ({ CompanySwitcher: ({ className }: { className?: string }) => <div data-testid="switcher" className={className} /> }))
 vi.mock('../lib/demoPickerTrigger', () => ({ openDemoPicker: vi.fn() }))
 
@@ -21,8 +22,29 @@ beforeEach(async () => {
   await i18n.changeLanguage('en')
   vi.mocked(openDemoPicker).mockReset()
   auth.value = { status: 'signed-out', user: null, role: null }
+  scrolled.value = false
 })
 afterEach(cleanup)
+
+describe('Header, the divider under it (DECISIONS #111)', () => {
+  it.each([false, true])('has its bottom border whether or not the page is scrolled (scrolled: %s)', (isScrolled) => {
+    scrolled.value = isScrolled
+    render(<Header current="home" />)
+    const header = screen.getByRole('banner')
+    expect(header.className).toContain('border-b')
+    expect(header.className).toContain('border-line')
+    expect(header.className).not.toContain('border-transparent') // it used to be, until 8px of scroll: no line at the top of any page
+  })
+
+  it('only the translucent, blurred background is a scroll effect', () => {
+    render(<Header current="home" />)
+    expect(screen.getByRole('banner').className).not.toContain('backdrop-blur')
+    cleanup()
+    scrolled.value = true
+    render(<Header current="home" />)
+    expect(screen.getByRole('banner').className).toContain('backdrop-blur')
+  })
+})
 
 describe('Header, signed out', () => {
   it('has no Log In and no Calendar or Tags tabs: only the logo, the language select and Get Started', () => {

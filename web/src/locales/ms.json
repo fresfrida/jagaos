@@ -10,7 +10,7 @@
   "home": {
     "demo": {
       "button": "Pilih peranan demo",
-      "hint": "Lihat aplikasi sebagai pemilik, pentadbir, pengguna atau pelihat. Tidak perlu mendaftar.",
+      "hint": "Lihat aplikasi sebagai (pemilik, pentadbir, pengguna, pelihat). Tidak perlu mendaftar.",
       "opening": "Membuka demo…",
       "failed": "Tidak dapat membuka demo sekarang. Anda masih boleh log masuk.",
       "pickerTitle": "Cuba demo sebagai",
@@ -73,7 +73,10 @@
     "hero": {
       "headline": "JagaOS mengingatkan, supaya anda tidak perlu.",
       "subhead": "Muat naik satu dokumen. JagaOS membacanya, mencari tarikh dan butiran, dan memastikan semuanya hanya satu carian jauhnya.",
-      "imageAlt": "Kalendar JagaOS pada telefon, menunjukkan dokumen mengikut hari ia dimuat naik."
+      "imageAlt": "Kalendar JagaOS pada telefon, menunjukkan dokumen mengikut hari ia dimuat naik.",
+      "videoAlt": "Rakaman skrin kalendar JagaOS pada telefon, bertukar antara bahasa Inggeris, Cina, Melayu dan Tamil.",
+      "pauseVideo": "Jeda video",
+      "playVideo": "Mainkan video"
     }
   },
   "companySettings": {

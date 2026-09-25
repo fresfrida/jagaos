@@ -28,7 +28,7 @@ Status: **tentative**, agreed 2026-09-21, updated same day (placeholder retired)
 |---|---|
 | A non-AWS host URL in the repo or submission invites a GAPS §5 question | Rule 2, protection level `all`, `.vercel/` and `vercel.json` are git-ignored, `scripts/prepush-check.sh` fails on any `vercel.app` string |
 | Vercel cannot be the deployment evidence | Rule 1, cutover checklist |
-| UAT on Vercel tests a different serving path than production | Rule 3. `deploy/Caddyfile` now serves root static files (`icon.svg`, `manifest.webmanifest`) via a catch-all `handle`, and the Lightsail checklist tests that path |
+| UAT on Vercel tests a different serving path than production | Rule 3. `deploy/Caddyfile` now serves root static files (the icons, `manifest.webmanifest`) via a catch-all `handle`, and the Lightsail checklist tests that path |
 | Backend on Lightsail + frontend on Vercel needs cross-origin setup | Rules 4 and 5. Vercel never talks to the API; once the backend exists, UAT moves to Lightsail where Caddy serves site and `/api/*` on one origin |
 
 ## Vercel UAT deployment (login required)
@@ -93,7 +93,7 @@ sudo systemctl reload caddy
 Verify on the live URL, and attach a screenshot to the report:
 
 - [ ] `/` loads; hero, preview, How It Works, Stack, CTA, footer render
-- [ ] `/icon.svg` and `/manifest.webmanifest` return 200 (this was the Caddy 404 bug)
+- [ ] `/icon-32.png`, `/icon-192.png`, `/icon-512.png`, `/apple-touch-icon.png` and `/manifest.webmanifest` return 200 (root static files: this was the Caddy 404 bug; the icons were `/icon.svg` until DECISIONS #114)
 - [ ] `/assets/*.js` and `.css` return 200 with gzip
 - [ ] `/api/health` returns 200 once the backend exists
 - [ ] Hero: Start Free Trial opens Calendar, Watch Demo opens Tags, search returns a result

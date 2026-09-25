@@ -9,17 +9,32 @@ vi.mock('../router/navigate', () => ({ navigate: vi.fn() }))
 import { DEMO_OWNER_EMAIL } from '../config/demo'
 import { DemoPickerHost } from '../features/auth/DemoPickerHost'
 import { navigate } from '../router/navigate'
+import { HERO_POSTER } from './HeroVideo'
 import { WelcomeHero } from './WelcomeHero'
+
+/** jsdom has no `matchMedia`; this is the person's "reduce motion" setting, on or off. */
+function reduceMotion(on: boolean) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: on && query.includes('prefers-reduced-motion'), media: query, onchange: null,
+    addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+  }))
+}
+let play: ReturnType<typeof vi.spyOn>
 
 beforeEach(async () => {
   await i18n.changeLanguage('en')
   login.mockReset()
   vi.mocked(navigate).mockReset()
+  play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined) // jsdom cannot play media
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  Reflect.deleteProperty(window, 'matchMedia')
+})
 
 const HERO_KEYS = [
-  'home.hero.headline', 'home.hero.subhead', 'home.hero.imageAlt',
+  'home.hero.headline', 'home.hero.subhead', 'home.hero.imageAlt', 'home.hero.videoAlt',
   'home.features.capture.title', 'home.features.capture.text', 'home.features.review.title', 'home.features.review.text',
   'home.features.remember.title', 'home.features.remember.text',
 ]
@@ -33,12 +48,63 @@ describe('WelcomeHero', () => {
     expect(screen.getAllByRole('button', { name: 'Pick a demo role' })).toHaveLength(1) // the hero's: the closing section's second button is gone
   })
 
-  it('shows a real screenshot of the app in a phone frame, with a description for people who cannot see it', () => {
+  it('plays a screen recording of the live app in the phone frame: muted, looping, inline, autoplaying, opening on its poster (DECISIONS #113)', () => {
     render(<><WelcomeHero /><DemoPickerHost /></>)
-    const shot = within(screen.getByTestId('hero-phone')).getByRole('img') as HTMLImageElement
-    expect(shot.getAttribute('src')).toBeTruthy()
-    expect(shot.alt).toBe('The JagaOS calendar on a phone, showing documents by the day they were uploaded.')
-    expect(Number(shot.getAttribute('width')) / Number(shot.getAttribute('height'))).toBeCloseTo(375 / 812, 1) // the size it was taken at: no layout jump
+    const frame = screen.getByTestId('hero-phone')
+    const video = frame.querySelector('video')!
+    expect(video).toBeTruthy()
+    expect(frame.querySelector('img')).toBeNull() // the still is only for reduced motion
+    expect(video.autoplay).toBe(true)
+    expect(video.loop).toBe(true)
+    expect(video.muted).toBe(true) // muted, or a browser will not autoplay it
+    expect(video.hasAttribute('playsinline')).toBe(true) // or iOS takes it full screen
+    expect(video.getAttribute('poster')).toBe(HERO_POSTER)
+    expect(video.getAttribute('aria-label')).toBe('A screen recording of the JagaOS calendar on a phone, switching between English, Chinese, Malay and Tamil.')
+    expect(Number(video.getAttribute('width')) / Number(video.getAttribute('height'))).toBeCloseTo(375 / 812, 2) // the size it was recorded at: no layout jump
+    expect(play).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers H.264 first, then VP9 for a browser built without it', () => {
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    const sources = [...screen.getByTestId('hero-phone').querySelectorAll('video source')]
+    expect(sources.map((s) => s.getAttribute('type'))).toEqual(['video/mp4', 'video/webm'])
+    for (const source of sources) expect(source.getAttribute('src')).toBeTruthy()
+  })
+
+  it('a browser that refuses to autoplay leaves the poster showing: the refusal is swallowed, the video stays', async () => {
+    play.mockRejectedValue(new DOMException('play() failed', 'NotAllowedError'))
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    await Promise.resolve()
+    expect(screen.getByTestId('hero-phone').querySelector('video')).toBeTruthy()
+    expect(screen.getByTestId('hero-phone').querySelector('video')!.getAttribute('poster')).toBe(HERO_POSTER)
+  })
+
+  it('with reduced motion asked for, the whole video is replaced by its first frame as a picture, and nothing plays', () => {
+    reduceMotion(true)
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    const frame = screen.getByTestId('hero-phone')
+    expect(frame.querySelector('video')).toBeNull()
+    expect(play).not.toHaveBeenCalled()
+    const still = within(frame).getByRole('img') as HTMLImageElement
+    expect(still.getAttribute('src')).toBe(HERO_POSTER)
+    expect(still.alt).toBe('The JagaOS calendar on a phone, showing documents by the day they were uploaded.')
+    expect(Number(still.getAttribute('width')) / Number(still.getAttribute('height'))).toBeCloseTo(375 / 812, 2)
+  })
+
+  it('with reduced motion NOT asked for, it is the video', () => {
+    reduceMotion(false)
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    expect(screen.getByTestId('hero-phone').querySelector('video')).toBeTruthy()
+  })
+
+  it.each([
+    ['zh', '手机上的 JagaOS 日历屏幕录制，依次切换英文、中文、马来文和泰米尔文。'],
+    ['ms', 'Rakaman skrin kalendar JagaOS pada telefon, bertukar antara bahasa Inggeris, Cina, Melayu dan Tamil.'],
+    ['ta', 'தொலைபேசியில் JagaOS நாட்காட்டியின் திரைப் பதிவு, ஆங்கிலம், சீனம், மலாய், தமிழ் மொழிகளுக்கு மாறுகிறது.'],
+  ])('describes the recording in %s too', async (language, label) => {
+    await i18n.changeLanguage(language)
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    expect(screen.getByTestId('hero-phone').querySelector('video')!.getAttribute('aria-label')).toBe(label)
   })
 
   it('has three cards, Capture, Review and Remember, and the page ends after them', () => {
@@ -48,6 +114,35 @@ describe('WelcomeHero', () => {
     expect(screen.getByText('It reads. You confirm.')).toBeTruthy()
     expect(screen.getByText('Nothing gets lost. Everything stays one search away.')).toBeTruthy()
     expect(screen.queryByText('Deadlines surface before they cost you.')).toBeNull()
+  })
+
+  it('the card descriptions are semibold, the same weight as their titles, and still muted (DECISIONS #111)', () => {
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    for (const text of ['A photo becomes a filed document.', 'It reads. You confirm.', 'Nothing gets lost. Everything stays one search away.']) {
+      const description = screen.getByText(text)
+      expect(description.className, text).toContain('font-semibold')
+      expect(description.className, text).not.toContain('font-bold') // bold would outweigh the 600-weight title above it
+      expect(description.className, text).toContain('text-muted') // weight only; the colour did not change
+    }
+    for (const title of screen.getAllByRole('heading', { level: 2 })) expect(title.className).toContain('font-semibold')
+  })
+
+  it('the line under the demo button names the roles in brackets and reads at 16px, not 14 (DECISIONS #111)', () => {
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    const hint = screen.getByText('See the app as (owner, admin, user, viewer). No sign-up needed.')
+    expect(hint.className).toContain('text-base')
+    expect(hint.className).not.toContain('text-[14px]')
+    expect(hint.className).toContain('text-muted') // size only
+  })
+
+  it.each([
+    ['zh', '以不同身份体验（所有者、管理员、用户、查看者），无需注册。'],
+    ['ms', 'Lihat aplikasi sebagai (pemilik, pentadbir, pengguna, pelihat). Tidak perlu mendaftar.'],
+    ['ta', 'ஆப்பை (உரிமையாளர், நிர்வாகி, பயனர், பார்வையாளர்) ஆகப் பாருங்கள். பதிவு தேவையில்லை.'],
+  ])('the same line, with the four roles in brackets, in %s', async (language, text) => {
+    await i18n.changeLanguage(language)
+    render(<><WelcomeHero /><DemoPickerHost /></>)
+    expect(screen.getByText(text)).toBeTruthy()
   })
 
   it('has no "How it works" section any more (DECISIONS #106): no heading, no Upload. Read. Confirm. beats', () => {

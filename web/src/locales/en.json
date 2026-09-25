@@ -10,7 +10,7 @@
   "home": {
     "demo": {
       "button": "Pick a demo role",
-      "hint": "See the app as an owner, admin, user or viewer. No sign-up needed.",
+      "hint": "See the app as (owner, admin, user, viewer). No sign-up needed.",
       "opening": "Opening the demo…",
       "failed": "Couldn't open the demo right now. You can still sign in.",
       "pickerTitle": "Try the demo as",
@@ -73,7 +73,10 @@
     "hero": {
       "headline": "JagaOS remembers, so you don't need to.",
       "subhead": "Upload a document. JagaOS reads it, finds the dates and details, and keeps everything one search away.",
-      "imageAlt": "The JagaOS calendar on a phone, showing documents by the day they were uploaded."
+      "imageAlt": "The JagaOS calendar on a phone, showing documents by the day they were uploaded.",
+      "videoAlt": "A screen recording of the JagaOS calendar on a phone, switching between English, Chinese, Malay and Tamil.",
+      "pauseVideo": "Pause video",
+      "playVideo": "Play video"
     }
   },
   "header": {

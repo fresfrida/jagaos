@@ -1,7 +1,7 @@
 /** Company Settings' sections by role (round 21, A2 and A5, DECISIONS #101): the compliance checklist for admin and owner, and
  * the purge requests for the owner alone. Anyone lower is sent back to the Calendar, as before. */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 
@@ -41,6 +41,21 @@ describe('CompanySettingsPage sections', () => {
     expect(await screen.findByText('old.pdf')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Purge requests (1)' })).toBeTruthy()
     expect(opsApi.listPurgeRequests).toHaveBeenCalledTimes(1)
+  })
+
+  it('all three sections share ONE centred column, and none sets a width of its own (DECISIONS #111)', async () => {
+    const { container } = render(<CompanySettingsPage />)
+    await screen.findByText('old.pdf')
+    const column = screen.getByTestId('settings-column')
+    expect(column.className).toContain('mx-auto')
+    expect(column.className).toContain('max-w-2xl')
+    // The profile card, the checklist section and the purge-requests section are all inside it...
+    expect(column.querySelector('.rounded-card')).toBeTruthy()
+    expect(within(column).getByRole('region', { name: 'Compliance checklist' })).toBeTruthy()
+    expect(within(column).getByRole('heading', { name: 'Purge requests (1)' })).toBeTruthy()
+    // ...and there is no other max-width anywhere under the column: it used to be 448px on the card and 672px on the two sections.
+    expect([...column.querySelectorAll('*')].filter((el) => /(^|\s)max-w-(md|2xl)(\s|$)/.test(el.getAttribute('class') ?? ''))).toEqual([])
+    expect(container.querySelectorAll('[data-testid="settings-column"]')).toHaveLength(1)
   })
 
   it('an admin gets the checklist (read-only settings above it) and no purge requests, and never asks for them', async () => {

@@ -145,8 +145,10 @@ function CompanySettingsContent() {
   }
 
   return (
-    <>
-    <Card className="max-w-md p-6" interactive={false}>
+    // ONE width and one centre for the whole page (DECISIONS #111). The profile card was 448px and the checklist and the purge
+    // requests 672px, all left-aligned; the three sections now share this column and none sets its own width.
+    <div className="mx-auto w-full max-w-2xl" data-testid="settings-column">
+    <Card className="p-6" interactive={false}>
       {canEdit && (
         <BusinessProfileSection
           profile={businessProfile}
@@ -267,12 +269,12 @@ function CompanySettingsContent() {
     </Card>
 
     {/* The checklist draws its own heading ("Compliance checklist: 2 of 6 held"), so this section is only named, not headed twice. */}
-    <section className="mt-10 max-w-2xl" aria-label={t('companySettings.checklist.heading')}>
+    <section className="mt-10" aria-label={t('companySettings.checklist.heading')}>
       <ComplianceChecklistSection enabled={canView} />
     </section>
 
     {canEdit && <PurgeRequestsSection enabled />}
-    </>
+    </div>
   )
 }
 

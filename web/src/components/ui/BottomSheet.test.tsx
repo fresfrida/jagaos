@@ -19,6 +19,24 @@ const renderSheet = (open: boolean, onClose = vi.fn()) =>
     </>,
   )
 
+describe('BottomSheet placement (DECISIONS #111)', () => {
+  it('is anchored to the bottom on a phone and rests in the CENTRE from sm up, corners and grab handle following', () => {
+    renderSheet(true)
+    const backdrop = screen.getByTestId('bottom-sheet-backdrop')
+    expect(backdrop.className).toContain('items-end') // phone: exactly as it was
+    expect(backdrop.className).toContain('sm:items-center') // desktop: centred, not hanging off the bottom edge
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.className).toContain('rounded-t-card') // phone: only the top corners are round
+    expect(dialog.className).toContain('sm:rounded-card') // desktop: a floating panel, all four
+    expect(dialog.querySelector('[aria-hidden="true"]')!.className).toContain('sm:hidden') // the grab handle is a phone cue
+  })
+
+  it('keeps its bottom safe-area padding, which the phone still needs', () => {
+    renderSheet(true)
+    expect(screen.getByRole('dialog').style.paddingBottom).toContain('safe-area-inset-bottom')
+  })
+})
+
 describe('BottomSheet', () => {
   it('renders nothing while closed', () => {
     renderSheet(false)

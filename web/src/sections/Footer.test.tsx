@@ -6,17 +6,14 @@ import i18n from '../i18n'
 
 const auth = vi.hoisted(() => ({ value: { status: 'signed-out' } as { status: string } }))
 vi.mock('../features/auth/AuthContext', () => ({ useAuth: () => auth.value }))
-vi.mock('../lib/demoPickerTrigger', () => ({ openDemoPicker: vi.fn() }))
 
 import { LEGAL_ENTITY } from '../config/site'
-import { openDemoPicker } from '../lib/demoPickerTrigger'
 import { PHONE_BOTTOM_NAV_CLEARANCE } from './BottomNav'
 import { Footer } from './Footer'
 
 beforeEach(async () => {
   await i18n.changeLanguage('en')
   auth.value = { status: 'signed-out' }
-  vi.mocked(openDemoPicker).mockReset()
 })
 afterEach(cleanup)
 
@@ -64,12 +61,17 @@ describe('Footer content', () => {
 })
 
 describe('Footer, signed out', () => {
-  it('offers Get Started, which opens the demo picker', () => {
-    render(<Footer />)
-    const button = screen.getByRole('button', { name: 'Get Started' })
-    expect(button.getAttribute('aria-haspopup')).toBe('dialog')
-    fireEvent.click(button)
-    expect(openDemoPicker).toHaveBeenCalledTimes(1)
+  it('has NO call-to-action button (DECISIONS #111): the header\'s Get Started and the landing page\'s own button are the two', () => {
+    const { container } = render(<Footer />)
+    expect(screen.queryByRole('button', { name: 'Get Started' })).toBeNull()
+    expect(container.querySelectorAll('footer button')).toHaveLength(0)
+  })
+
+  it('renders each of the three links exactly once, in ONE nav (there is no second link row under a divider)', () => {
+    const { container } = render(<Footer />)
+    expect(container.querySelectorAll('footer nav')).toHaveLength(1)
+    for (const name of ['Watch our intro video', 'Proposal (Business, PDF)', 'Tech Write Up (PDF)']) expect(screen.getAllByText(name)).toHaveLength(1)
+    expect(container.querySelectorAll('footer > div > nav')).toHaveLength(0) // the old row, a nav directly under the container, is gone
   })
 
   it('does not carry the phone bottom-bar clearance: there is no bar', () => {
@@ -97,7 +99,7 @@ describe('Footer, signed in', () => {
 })
 
 describe('Footer layout (DECISIONS #108)', () => {
-  it('PHONE: everything is centred in one column, in order: mark, tagline, copyright, Get Started, then the links', () => {
+  it('PHONE: everything is centred in one column, in order: mark, tagline, copyright, then the links', () => {
     const { container } = render(<Footer />)
     const top = container.querySelector('footer > div > div')!
     expect(top.className).toContain('flex-col')
@@ -106,7 +108,7 @@ describe('Footer layout (DECISIONS #108)', () => {
     const order = [...container.querySelectorAll('footer a, footer p, footer button')].map((n) => n.textContent)
     expect(order).toEqual([
       'JagaOS', "JagaOS keeps your team's memory on record.", '© 2026 Platform R PCIB Pte Ltd. All rights reserved.',
-      'Get Started', 'Watch our intro video', 'Proposal (Business, PDF)', 'Tech Write Up (PDF)',
+      'Watch our intro video', 'Proposal (Business, PDF)', 'Tech Write Up (PDF)',
     ])
   })
 
@@ -118,14 +120,27 @@ describe('Footer layout (DECISIONS #108)', () => {
     for (const link of within(list).getAllByRole('link')) expect(link.className).toContain('min-h-[44px]')
   })
 
-  it('DESKTOP (sm and up) keeps the layout it had: brand block left, Get Started right, links in a row', () => {
+  it('DESKTOP (sm and up): the brand block on the left, the three links STACKED on the right, in the slot Get Started had', () => {
     const { container } = render(<Footer />)
     const top = container.querySelector('footer > div > div')!
     for (const cls of ['sm:flex-row', 'sm:items-start', 'sm:justify-between', 'sm:text-left']) expect(top.className, cls).toContain(cls)
-    expect(screen.getByRole('button', { name: 'Get Started' }).className).toContain('sm:self-start')
+    // The links are the row's second child, right after the brand block: the right-hand slot.
+    expect(top.children).toHaveLength(2)
+    expect(top.children[1]!.tagName).toBe('NAV')
     const list = screen.getByRole('navigation', { name: 'Footer links' }).querySelector('ul')!
-    for (const cls of ['sm:flex-row', 'sm:flex-wrap', 'sm:gap-x-6']) expect(list.className, cls).toContain(cls)
-    for (const link of within(list).getAllByRole('link')) expect(link.className).toContain('sm:min-h-0') // no tap-target padding on a desktop row
+    expect(list.className).toContain('flex-col') // one under another, on a desktop too
+    expect(list.className).not.toContain('sm:flex-row')
+    expect(list.className).toContain('sm:items-end') // hugging the right edge
+    for (const link of within(list).getAllByRole('link')) expect(link.className).toContain('sm:min-h-0') // no tap-target padding on a desktop stack
+  })
+
+  it('the links are a step larger and heavier than the muted body text, and NOT a different colour (DECISIONS #111)', () => {
+    render(<Footer />)
+    for (const link of within(screen.getByRole('navigation', { name: 'Footer links' })).getAllByRole('link')) {
+      expect(link.className).toContain('text-[15px]')
+      expect(link.className).toContain('font-medium')
+      expect(link.className).toContain('text-muted')
+    }
   })
 })
 

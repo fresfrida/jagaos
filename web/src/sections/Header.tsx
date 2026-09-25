@@ -85,10 +85,13 @@ export function Header({ current }: { current: ResolvedRoute }) {
   const signedIn = status === 'signed-in' && user !== null
 
   return (
+    // The bottom border is ALWAYS on (DECISIONS #111). It used to appear only after 8px of scroll, so at the top of every page,
+    // the landing hero included, nothing separated the header from the page, and every route change (the scroll resets to 0)
+    // faded the line out and back. Only the translucent, blurred background is a scroll effect now.
     <header
       className={cn(
-        'sticky top-0 z-40 border-b transition-colors duration-300',
-        scrolled ? 'border-line bg-white/80 backdrop-blur-md' : 'border-transparent bg-white',
+        'sticky top-0 z-40 border-b border-line transition-colors duration-300',
+        scrolled ? 'bg-white/80 backdrop-blur-md' : 'bg-white',
       )}
     >
       <Container className="flex h-16 items-center justify-between gap-3">

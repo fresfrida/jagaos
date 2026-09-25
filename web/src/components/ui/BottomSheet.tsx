@@ -8,8 +8,14 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 /** The one bottom sheet (2026-09-24, round 16, items 3 and 10c): a panel that
  * slides up from the bottom edge over a dimmed page. Built once and shared by
  * everything that needs "a short question or choice, then out of the way" — the
- * post-rejection prompt, the universal Upload choice reachable from every page,
- * and the prefill confirmation in Company Settings.
+ * demo picker, the post-rejection prompt, the universal Upload choice reachable
+ * from every page, the prefill confirmation in Company Settings, and Only me's
+ * naming step.
+ *
+ * On a phone it is anchored to the bottom edge, with a grab handle. From `sm` up
+ * (DECISIONS #111) the same panel rests in the CENTRE of the screen, with all four
+ * corners rounded and no handle: anchored to the bottom of a tall desktop window
+ * a short panel read as hanging low. The slide-in motion is unchanged.
  *
  * It is a dialog: it takes focus when it opens, keeps Tab inside itself, closes on
  * Escape, on the dimmed area, and on the handle's close button, and gives focus
@@ -83,7 +89,7 @@ export function BottomSheet({
       {open && (
         <motion.div
           // z-60: above a toast (z-50), which is fixed to the same edge and would otherwise sit on top of the sheet's text
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/50"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/50 sm:items-center sm:p-6"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -97,7 +103,7 @@ export function BottomSheet({
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
-            className="w-full max-w-lg rounded-t-card bg-white px-5 pt-3 shadow-xl outline-none"
+            className="w-full max-w-lg rounded-t-card bg-white px-5 pt-3 shadow-xl outline-none sm:rounded-card sm:pt-5"
             style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
@@ -105,7 +111,7 @@ export function BottomSheet({
             transition={{ type: 'tween', duration: 0.22, ease: 'easeOut' }}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" aria-hidden="true" />
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line sm:hidden" aria-hidden="true" />
             <div className="flex items-start justify-between gap-3">
               <h2 id={titleId} className="text-base font-semibold text-ink">{title}</h2>
               <button
