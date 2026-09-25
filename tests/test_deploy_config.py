@@ -35,9 +35,15 @@ def _site_address(text: str) -> str:
 def test_the_site_address_is_a_literal_hostname_not_a_template():
     address = _site_address(_text())
     assert "{" not in address and "$" not in address, f"{address!r} is templated: an unset variable silently changes it"
-    assert re.fullmatch(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+", address), (
-        f"{address!r} is not a literal domain name"
-    )
+    # Caddy accepts several comma-separated hostnames on one site block (jagaos.<ip>.nip.io and the bare
+    # <ip>.nip.io both resolve to the same box via nip.io's wildcard DNS); each one must still be a literal
+    # hostname, not a template.
+    hostnames = [h.strip() for h in address.split(",")]
+    assert hostnames, f"{address!r} has no hostname"
+    for hostname in hostnames:
+        assert re.fullmatch(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+", hostname), (
+            f"{hostname!r} is not a literal domain name"
+        )
 
 
 def test_no_environment_placeholder_with_a_fallback_anywhere_in_the_file():
