@@ -16,6 +16,8 @@ admin/
 Kiro/
 DB/
 assets/
+!web/src/assets/
+!web/src/assets/**
 !web/vercel.json
 # regenerated duplicate copies of evals/demo_corpus/files/*, written by
 # evals/demo_corpus/run.py — not meant to be checked in
