@@ -5,7 +5,17 @@
 
 import { trackRequest } from './pendingRequests'
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+/** Where the browser sends API calls (DECISIONS #119). Three cases, set at BUILD time through `VITE_API_BASE_URL`:
+ *   - not set at all: `http://127.0.0.1:8000`, local development against `uvicorn app.main:app`;
+ *   - a URL: that API, from wherever the site is served. It is a CROSS-ORIGIN call unless it is the site's own address, so the API
+ *     must allow the site in its CORS list (`CORS_ALLOWED_ORIGINS`), and the URL is baked into the build: a build for one hostname
+ *     does not work from another (what broke the second hostname of the AWS-served copy);
+ *   - set but EMPTY (`VITE_API_BASE_URL=`): the page's OWN origin. Calls are relative (`/api/...`), which is what a copy served by
+ *     Caddy next to the API needs, and one build then works from every hostname that reaches that Caddy, with no CORS involved.
+ * `??` and not `||`: an empty string is a real choice (the third case), not "missing". */
+export const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000'
+export const resolveApiBase = (configured: string | undefined): string => configured ?? DEFAULT_API_BASE_URL
+export const API_BASE_URL = resolveApiBase(import.meta.env.VITE_API_BASE_URL)
 
 /** Thrown by apiRequest on a non-2xx response. Carries the HTTP status so
  * callers can branch on it (e.g. a 410 needing a different UI than a
