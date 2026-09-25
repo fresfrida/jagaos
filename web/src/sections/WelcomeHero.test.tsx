@@ -64,12 +64,12 @@ describe('WelcomeHero', () => {
     expect(play).toHaveBeenCalledTimes(1)
   })
 
-  it('plays at 1.8x, set as the default rate too so a reload of the media cannot slow it (DECISIONS #118)', () => {
+  it('plays at 2.0x, set as the default rate too so a reload of the media cannot slow it (DECISIONS #118)', () => {
     render(<><WelcomeHero /><DemoPickerHost /></>)
     const video = screen.getByTestId('hero-phone').querySelector('video')!
     expect(video.playbackRate).toBe(HERO_PLAYBACK_RATE)
     expect(video.defaultPlaybackRate).toBe(HERO_PLAYBACK_RATE)
-    expect(HERO_PLAYBACK_RATE).toBe(1.8)
+    expect(HERO_PLAYBACK_RATE).toBe(2.0)
   })
 
   it('has a one-line caption under the video and its button, as the figure\'s own <figcaption> (DECISIONS #118)', () => {

@@ -26,7 +26,7 @@ export const HERO_POSTER = demoPoster
 export const HERO_VIDEO_SIZE = { width: 600, height: 1300 } as const
 /** How fast the recording plays (DECISIONS #118). It is muted, so there is no audio to keep in step, and the loop still ends on the frame
  * it began on: the rate changes how fast the content goes by, not the content. */
-export const HERO_PLAYBACK_RATE = 1.8
+export const HERO_PLAYBACK_RATE = 2.0
 
 export function HeroVideo({ demo }: { demo: DemoVideo }) {
   const { t } = useTranslation()

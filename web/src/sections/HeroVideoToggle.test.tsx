@@ -65,11 +65,11 @@ describe('the demo video\'s pause button', () => {
     expect(screen.getByRole('button', { name: 'Pause video' })).toBeTruthy()
   })
 
-  it('resuming after a pause keeps the 1.8x rate (DECISIONS #118)', () => {
+  it('resuming after a pause keeps the 2.0x rate (DECISIONS #118)', () => {
     render(<WelcomeHero />)
     fireEvent.click(screen.getByRole('button', { name: 'Pause video' }))
     fireEvent.click(screen.getByRole('button', { name: 'Play video' }))
-    expect(video().playbackRate).toBe(1.8)
+    expect(video().playbackRate).toBe(2.0)
   })
 
   it('follows what the video does by itself: a browser that pauses it (scrolled away, low power) makes the button read "Play video"', () => {
