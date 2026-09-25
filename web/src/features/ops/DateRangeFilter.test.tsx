@@ -19,7 +19,7 @@ describe('DateRangeFilter', () => {
     show()
     expect((screen.getByLabelText('From') as HTMLInputElement).type).toBe('date')
     expect((screen.getByLabelText('To') as HTMLInputElement).type).toBe('date')
-    expect(screen.getByRole('button', { name: 'Uploaded' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Uploaded dates' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('button', { name: 'Document dates' }).getAttribute('aria-pressed')).toBe('false')
   })
 

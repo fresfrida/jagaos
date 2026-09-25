@@ -24,7 +24,12 @@ const doc = (over: Partial<DocumentRow> = {}): DocumentRow => ({
   occurred_on: '2026-09-01', ...over,
 })
 
-beforeEach(async () => { await i18n.changeLanguage('en') })
+beforeEach(async () => {
+  await i18n.changeLanguage('en')
+  // DatesView keeps its view in the URL and the tab (DECISIONS #105): start each test with neither.
+  window.sessionStorage.clear()
+  window.history.replaceState(null, '', '/calendar')
+})
 afterEach(cleanup)
 
 describe('DatesView with nothing uploaded (item 7)', () => {
@@ -37,9 +42,10 @@ describe('DatesView with nothing uploaded (item 7)', () => {
 
   it('uses the renamed toggle labels', () => {
     render(<DatesView documents={[]} />)
-    expect(screen.getByRole('button', { name: 'Uploaded' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Uploaded dates' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Document dates' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'When filed' })).toBeNull() // renamed in round 21: it always meant the upload date
+    expect(screen.queryByRole('button', { name: 'Uploaded' })).toBeNull() // and to "Uploaded dates" in DECISIONS #106, to pair with "Document dates"
     expect(screen.queryByRole('button', { name: 'Upload date' })).toBeNull()
   })
 
@@ -53,7 +59,7 @@ describe('DatesView with nothing uploaded (item 7)', () => {
 describe('MonthGrid header navigation (item 8)', () => {
   it('the month header is a button, and three taps reach a month in a distant year', () => {
     const onMonthChange = vi.fn()
-    render(<MonthGrid month="2026-09-01" documentsByDay={new Map()} selectedDay={null} onSelectDay={vi.fn()} onMonthChange={onMonthChange} timezone="Asia/Singapore" />)
+    render(<MonthGrid month="2026-09-01" documentsByDay={new Map()} selectedDay={null} onSelectDay={vi.fn()} onMonthChange={onMonthChange} onToday={vi.fn()} timezone="Asia/Singapore" />)
 
     fireEvent.click(screen.getByRole('button', { name: /september 2026/i })) // tap 1: the year grid
     const years = screen.getByTestId('year-grid')
@@ -69,7 +75,7 @@ describe('MonthGrid header navigation (item 8)', () => {
   })
 
   it('the chevrons page by a whole set of years on the year grid, and by year on the month grid', () => {
-    render(<MonthGrid month="2026-09-01" documentsByDay={new Map()} selectedDay={null} onSelectDay={vi.fn()} onMonthChange={vi.fn()} timezone="Asia/Singapore" />)
+    render(<MonthGrid month="2026-09-01" documentsByDay={new Map()} selectedDay={null} onSelectDay={vi.fn()} onMonthChange={vi.fn()} onToday={vi.fn()} timezone="Asia/Singapore" />)
     fireEvent.click(screen.getByRole('button', { name: /september 2026/i }))
     expect(screen.getByRole('button', { name: /2009 - 2032/ })).toBeTruthy()
 
@@ -83,7 +89,7 @@ describe('MonthGrid header navigation (item 8)', () => {
   })
 
   it('tapping the header again goes back up one level, then closes', () => {
-    render(<MonthGrid month="2026-09-01" documentsByDay={new Map()} selectedDay={null} onSelectDay={vi.fn()} onMonthChange={vi.fn()} timezone="Asia/Singapore" />)
+    render(<MonthGrid month="2026-09-01" documentsByDay={new Map()} selectedDay={null} onSelectDay={vi.fn()} onMonthChange={vi.fn()} onToday={vi.fn()} timezone="Asia/Singapore" />)
     fireEvent.click(screen.getByRole('button', { name: /september 2026/i }))
     fireEvent.click(within(screen.getByTestId('year-grid')).getByRole('button', { name: '2020' }))
     expect(screen.getByTestId('month-grid')).toBeTruthy()
@@ -96,9 +102,20 @@ describe('MonthGrid header navigation (item 8)', () => {
     expect(screen.getByRole('button', { name: /september 2026/i })).toBeTruthy()
   })
 
+  it('Today closes an open picker and asks for today, so it never seems to do nothing under the year grid', () => {
+    const onToday = vi.fn()
+    render(<MonthGrid month="2012-03-01" documentsByDay={new Map()} selectedDay={null} onSelectDay={vi.fn()} onMonthChange={vi.fn()} onToday={onToday} timezone="Asia/Singapore" />)
+    fireEvent.click(screen.getByRole('button', { name: /march 2012/i }))
+    expect(screen.getByTestId('year-grid')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }))
+    expect(onToday).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('year-grid')).toBeNull()
+  })
+
   it('the chevrons still move one month at a time on the days', () => {
     const onMonthChange = vi.fn()
-    render(<MonthGrid month="2026-09-01" documentsByDay={new Map()} selectedDay={null} onSelectDay={vi.fn()} onMonthChange={onMonthChange} timezone="Asia/Singapore" />)
+    render(<MonthGrid month="2026-09-01" documentsByDay={new Map()} selectedDay={null} onSelectDay={vi.fn()} onMonthChange={onMonthChange} onToday={vi.fn()} timezone="Asia/Singapore" />)
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
     expect(onMonthChange).toHaveBeenLastCalledWith('2026-10-01')
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
@@ -193,7 +210,7 @@ describe('DatesView: tapping a day lists that day\'s documents (the ruling of ro
     return cell
   }
 
-  it('lists every document of that day, held checklist evidence included, each opening its file', () => {
+  it('lists every document of that day, held checklist evidence included, each a link to its card in Company Files', () => {
     const docs = [
       doc({ id: 1, filename: 'evidence.pdf', doc_type: 'Certificate of Incorporation', received_at: `${today} 03:00:00`, description: JSON.stringify({ en: 'Certificate of Incorporation' }) }),
       doc({ id: 2, filename: 'lease.pdf', status: 'purge_requested', received_at: `${today} 04:00:00`, description: JSON.stringify({ en: 'Old lease' }) }),
@@ -204,10 +221,11 @@ describe('DatesView: tapping a day lists that day\'s documents (the ruling of ro
 
     expect(screen.getByText('Certificate of Incorporation')).toBeTruthy()
     expect(screen.getByText('Old lease')).toBeTruthy()
-    const rows = screen.getAllByRole('button').filter((b) => /evidence\.pdf|lease\.pdf/.test(b.textContent ?? ''))
+    const rows = screen.getAllByRole('link').filter((a) => /evidence\.pdf|lease\.pdf/.test(a.textContent ?? ''))
     expect(rows).toHaveLength(2)
+    expect(rows.map((a) => a.getAttribute('href'))).toEqual(['/company-files?doc=1', '/company-files?doc=2'])
     expect(within(rows[1]!).getByText('Purge requested')).toBeTruthy() // the owner's own request is marked on the day list too
     fireEvent.click(rows[0]!)
-    expect(screen.getByRole('dialog')).toBeTruthy() // the file opens in the viewer
+    expect(screen.queryByRole('dialog')).toBeNull() // the Calendar has no viewer of its own any more (DECISIONS #105)
   })
 })

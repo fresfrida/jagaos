@@ -1,5 +1,7 @@
-/** The two-way "Uploaded / Document dates" switch, shared by the Calendar's Dates view and the date-range filter
- * (round 21, A1 and A7, DECISIONS #101): one segmented control, one set of labels. */
+/** The two-way "Uploaded dates / Document dates" switch, shared by the Calendar's Dates view and the date-range filter
+ * (round 21, A1 and A7, DECISIONS #101): one segmented control, one set of labels. The first label was renamed from "Uploaded"
+ * in DECISIONS #106; its button padding is 2.5 below `sm` because at 320px the longer pair was about 2px too wide and wrapped
+ * onto two lines in English and Malay (Tamil still wraps at 320: about 280px of text in 272px). */
 
 import { useTranslation } from 'react-i18next'
 import type { DateBasis } from './documentDates'
@@ -27,7 +29,7 @@ export function DateBasisToggle({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.id)}
-            className={`rounded-md px-3 py-1.5 text-[14px] transition-colors ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
+            className={`rounded-md px-2.5 py-1.5 text-[14px] transition-colors sm:px-3 ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
           >
             {t(option.labelKey)}
           </button>

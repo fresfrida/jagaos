@@ -1,10 +1,7 @@
 import { useEffect } from 'react'
 import { CalendarHub } from '../features/calendar/CalendarHub'
-import { CalendarPreview } from '../features/calendar/CalendarPreview'
 import { useAuth } from '../features/auth/AuthContext'
-import { ProductFrame } from '../features/preview/ProductFrame'
-import { TagsLanding } from '../features/tags/TagsLanding'
-import { TagsPreview } from '../features/tags/TagsPreview'
+import { RequireSession } from '../features/auth/RequireSession'
 import { navigate } from '../router/navigate'
 import { routeHref, type ResolvedRoute } from '../router/routes'
 import { WelcomeHero } from '../sections/WelcomeHero'
@@ -13,7 +10,6 @@ import { StackList } from '../sections/StackList'
 import { CompanyFilesPage } from './CompanyFilesPage'
 import { CompanySettingsPage } from './CompanySettingsPage'
 import { FramePage } from './FramePage'
-import { GetStartedPage } from './GetStartedPage'
 import { LoginPage } from './LoginPage'
 import { NotFoundPage } from './NotFoundPage'
 import { OnlyMePage } from './OnlyMePage'
@@ -46,31 +42,13 @@ export function Page({ route }: { route: ResolvedRoute }) {
         <SignedInHome />
       )
     case 'calendar':
-      // Same URL for everyone (2026-09-23, header/nav restructure) — a
-      // signed-in visitor gets the real Calendar hub (dates/obligations/
-      // gap analysis); everyone else keeps seeing the existing mock-data
-      // marketing preview, unchanged.
+      // A session is required, like every other app page (DECISIONS #106). It used to show a sample-data preview to
+      // everyone else; that preview, and the Tags page, are gone.
       return (
         <FramePage route="calendar">
-          {status === 'signed-in' ? (
+          <RequireSession>
             <CalendarHub />
-          ) : (
-            <ProductFrame>
-              <CalendarPreview />
-            </ProductFrame>
-          )}
-        </FramePage>
-      )
-    case 'tags':
-      return (
-        <FramePage route="tags">
-          {status === 'signed-in' ? (
-            <TagsLanding />
-          ) : (
-            <ProductFrame>
-              <TagsPreview />
-            </ProductFrame>
-          )}
+          </RequireSession>
         </FramePage>
       )
     case 'how-it-works':
@@ -85,8 +63,6 @@ export function Page({ route }: { route: ResolvedRoute }) {
           <StackList />
         </FramePage>
       )
-    case 'get-started':
-      return <GetStartedPage />
     case 'login':
       return <LoginPage />
     case 'ops':

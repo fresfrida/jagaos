@@ -8,7 +8,8 @@
  *
  * Filters (round 21, DECISIONS #101): the bucket buttons (with an "All" that clears the bucket, A6) and a
  * from/to date range over either the upload date or the document's own date (A7, features/ops/documentDates.ts).
- * They combine: a document must match both. The range also arrives on the Tags page's links (`?from=&to=&basis=`). */
+ * They combine: a document must match both. The range also arrives on the Tags page's links (`?from=&to=&basis=`).
+ * A Calendar day-list row links here with `?doc=<id>` (DECISIONS #105): no filter is set, and that document is ringed and scrolled to. */
 
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +19,7 @@ import { roleAtLeast } from '../features/auth/authApi'
 import { DateRangeFilter } from '../features/ops/DateRangeFilter'
 import { DocumentResultsList } from '../features/ops/DocumentResultsList'
 import { filterByDateRange, rangeFromParams, type DateBasis, type DateRange } from '../features/ops/documentDates'
+import { documentIdFromParams } from '../features/ops/documentLinks'
 import { OpsStatusBar } from '../features/ops/OpsStatusBar'
 import { VENDOR_NAMES_DATALIST_ID, bucketLabel } from '../features/ops/opsShared'
 import { BUCKETS, type Bucket } from '../features/ops/opsApi'
@@ -36,6 +38,7 @@ function CompanyFilesContent() {
   const [initialDates] = useState(() => rangeFromParams(new URLSearchParams(window.location.search)))
   const [dateBasis, setDateBasis] = useState<DateBasis>(initialDates.basis)
   const [dateRange, setDateRange] = useState<DateRange>(initialDates.range)
+  const [highlightId] = useState(() => documentIdFromParams(new URLSearchParams(window.location.search)))
   const timezone = company?.timezone ?? 'Asia/Singapore'
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
@@ -103,6 +106,7 @@ function CompanyFilesContent() {
         canEdit={canUpload}
         canArchive={canResolve}
         canRequestPurge={role === 'owner'}
+        highlightId={highlightId}
         onSaved={() => void refresh()}
         emptyMessage={t(documents.length > 0 ? 'ops.documents.filter.noMatch' : 'ops.documents.noneUploaded')}
       />

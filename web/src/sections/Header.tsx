@@ -1,20 +1,19 @@
-/** The site header. Signed out: logo, Calendar, Tags, language, Log In, Get
- * Started from `sm` up (the marketing header); on a phone only the logo, the
- * language select and Log In (round 20, item 8: five things in one row before any
- * call to action crowded each other at 375px, and Tags was pushed out of the row).
- * Signed in (2026-09-24, round 14,
- * DECISIONS #88), desktop:
+/** The site header. Signed out (DECISIONS #106): the logo, the language select and, from `sm` up, one Get Started button that
+ * opens the demo-account picker. There is no Log In and no Calendar / Tags tabs any more (the tabs led to sample-data pages
+ * that are gone); on a phone the header is the logo and the language select, and the landing page carries the call to action.
+ * Signed in, from `xl` (1280px):
  *
- *   [logo] Calendar  Company Files            language  company  (user)  [Upload]
+ *   [logo] Calendar  Search  Company Files  Only me      language  company  (user)  [Upload]
  *
- * Five things beside the logo plus one button, nothing wraps, nothing overlaps
- * at any width from a phone to a wide desktop (measured, not assumed). Tags,
- * Search and Company Settings live in the user menu; the solid black Upload
- * button takes the slot Get Started had, and Get Started is gone once signed in.
- * On a phone the inline nav and the button are hidden: BottomNav carries the
- * destinations and its raised centre button is Upload. */
+ * The four pages a person opens all day are in the header itself; the account menu behind the avatar is who you are,
+ * Company Settings (admin and owner) and Log Out. Which items show is decided by role (sections/headerNav.ts): Only me is for
+ * user and above, Upload is not offered to a viewer. Narrower, in steps, because it does not fit (measured at 640, 768, 900,
+ * 1024, 1280 and 1440px in four languages): from `lg` the same four items but the company switcher and the role chip move into
+ * the account menu; from `sm` to `lg` only Calendar and Company Files stay inline and Search and Only me join the menu. On a phone the inline nav and the Upload button are hidden: BottomNav
+ * carries the destinations and its raised centre button is Upload. */
 
 import { useTranslation } from 'react-i18next'
+import { Button } from '../components/ui/Button'
 import { ButtonLink } from '../components/ui/ButtonLink'
 import { Container } from '../components/ui/Container'
 import { Logo } from '../components/ui/Logo'
@@ -23,9 +22,10 @@ import { CompanySwitcher } from '../features/auth/CompanySwitcher'
 import { useScrolled } from '../hooks/useScrolled'
 import { cn } from '../lib/cn'
 import { SUPPORTED_LANGUAGES, setLanguage, type LanguageCode } from '../i18n'
+import { openDemoPicker } from '../lib/demoPickerTrigger'
 import { Link } from '../router/Link'
-import { NAV_LABEL_KEYS, SIGNED_IN_NAV_ROUTES, TAB_ROUTES, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
-import { canOfferUpload } from './headerNav'
+import { NAV_LABEL_KEYS, routeHref, type ResolvedRoute, type RouteId } from '../router/routes'
+import { LG_ONLY_NAV_ROUTES, canOfferUpload, signedInNavRoutes } from './headerNav'
 import { UserMenu } from './UserMenu'
 
 /** Compact language switcher — a plain <select>, not a custom dropdown
@@ -48,8 +48,7 @@ function LanguageSwitcher() {
   )
 }
 
-/** The inline nav: from `sm` up only. On a phone a signed-in person has the bottom bar, and a
- * signed-out visitor has the two calls to action on the page itself. */
+/** The signed-in inline nav: from `sm` up only. On a phone a signed-in person has the bottom bar. */
 function PrimaryNav({ routes, current }: { routes: readonly RouteId[]; current: ResolvedRoute }) {
   const { t } = useTranslation()
   return (
@@ -58,7 +57,8 @@ function PrimaryNav({ routes, current }: { routes: readonly RouteId[]; current: 
         {routes.map((id) => {
           const active = current === id
           return (
-            <li key={id}>
+            // Search and Only me only fit from `lg`; below it they are in the account menu (headerNav.ts).
+            <li key={id} className={LG_ONLY_NAV_ROUTES.includes(id) ? 'hidden lg:block' : undefined}>
               <Link
                 href={routeHref(id)}
                 aria-current={active ? 'page' : undefined}
@@ -94,16 +94,16 @@ export function Header({ current }: { current: ResolvedRoute }) {
       <Container className="flex h-16 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3 sm:gap-6">
           <Logo />
-          <PrimaryNav routes={signedIn ? SIGNED_IN_NAV_ROUTES : TAB_ROUTES} current={current} />
+          {signedIn && <PrimaryNav routes={signedInNavRoutes(role)} current={current} />}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <LanguageSwitcher />
           {signedIn ? (
             <>
-              {/* Inline from `lg`; narrower, the same control is in the user
-                 menu (an inline select does not fit beside the rest). Renders
-                 nothing for anyone with fewer than two companies. */}
-              <CompanySwitcher className="hidden max-w-[170px] lg:block" />
+              {/* Inline from `xl` (it was `lg` until four nav items needed the room); narrower, the same control is in the
+                 user menu (an inline select does not fit beside the rest). Renders nothing for anyone with fewer than
+                 two companies. */}
+              <CompanySwitcher className="hidden max-w-[170px] xl:block" />
               <UserMenu />
               {/* The single solid button, in the slot Get Started had. Not on
                  a phone (the bottom nav's centre button is Upload) and not for
@@ -125,17 +125,13 @@ export function Header({ current }: { current: ResolvedRoute }) {
               )}
             </>
           ) : (
-            <>
-              <Link href={routeHref('login')} className="whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-medium text-ink sm:px-3">
-                {t('header.logIn')}
-              </Link>
-              {/* Hidden on phones: it duplicates the Calendar tab and the row would not fit. */}
-              <span className="hidden sm:block">
-                <ButtonLink href={routeHref('calendar')} size="sm" className="whitespace-nowrap">
-                  {t('header.getStarted')}
-                </ButtonLink>
-              </span>
-            </>
+            /* Hidden on phones, as before: the landing page's own button is right under the header there, and the
+               row stays the logo and the language select. */
+            <span className="hidden sm:block">
+              <Button size="sm" className="whitespace-nowrap" onClick={openDemoPicker} aria-haspopup="dialog">
+                {t('header.getStarted')}
+              </Button>
+            </span>
           )}
         </div>
       </Container>

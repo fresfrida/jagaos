@@ -1,32 +1,30 @@
 /** Signed-out landing (round 16, item 2; the round 9 version was a centred heading and two buttons that both went to
- * /login; reworked in round 21, Part B, DECISIONS #101 into a quiet commercial page).
+ * /login; reworked in round 21, Part B, DECISIONS #101 into a quiet commercial page; the "How it works" strip was removed in
+ * DECISIONS #106).
  *
  * Register: Apple's. Short sentences, no exclamation marks, no superlatives; the product steps back and the owner's life
  * steps forward. The page, top to bottom: a headline and one supporting sentence with the one call to action (a demo, through
  * the ordinary login: features/auth/useDemoLogin.ts, config/demo.ts, no bypass), a real screenshot of the app in a plain phone
- * frame, three cards (Capture, Review, Remember), a three-beat "How it works" strip (Upload. Read. Confirm.), and a closing
- * line above the same call to action again. There is no second "Sign in" button in the body: the header's Log In is where a
- * returning person signs in.
+ * frame, three cards (Capture, Review, Remember), and a closing line above the same call to action again. Both buttons open
+ * the shared demo picker (features/auth/DemoPickerHost.tsx), the same dialog the header's and the footer's Get Started open.
+ * There is no Log In anywhere on the signed-out chrome any more.
  *
  * Designed for a phone first and stretched for a desktop. A signed-in visitor never renders this: Page.tsx shows the
  * signed-in home at `/` instead. */
 
 import { CalendarClock, ClipboardCheck, ScanLine } from 'lucide-react'
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import appScreenshot from '../assets/landing-calendar.webp'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Container } from '../components/ui/Container'
-import { DemoPicker } from '../features/auth/DemoPicker'
+import { openDemoPicker } from '../lib/demoPickerTrigger'
 
 const FEATURES = [
   { id: 'capture', icon: ScanLine },
   { id: 'review', icon: ClipboardCheck },
   { id: 'remember', icon: CalendarClock },
 ] as const
-
-const BEATS = ['upload', 'read', 'confirm'] as const
 
 /** A real screenshot of the app (the Calendar, signed in as the demo owner) in a plain phone frame: a dark bezel, rounded
  * screen, a small speaker slot. Not a mockup of a screen that does not exist. */
@@ -53,7 +51,6 @@ function PhoneFrame() {
 
 export function WelcomeHero() {
   const { t } = useTranslation()
-  const [pickerOpen, setPickerOpen] = useState(false)
 
   return (
     <section className="pb-16 pt-8 sm:pt-14">
@@ -65,7 +62,7 @@ export function WelcomeHero() {
             </h1>
             <p className="mt-4 max-w-xl text-[17px] leading-7 text-muted sm:text-lg sm:leading-8">{t('home.hero.subhead')}</p>
             <div className="mt-7">
-              <Button size="md" className="w-full sm:w-auto" onClick={() => setPickerOpen(true)} aria-haspopup="dialog">
+              <Button size="md" className="w-full sm:w-auto" onClick={openDemoPicker} aria-haspopup="dialog">
                 {t('home.demo.button')}
               </Button>
               <p className="mt-2 text-[14px] text-muted">{t('home.demo.hint')}</p>
@@ -86,26 +83,13 @@ export function WelcomeHero() {
           ))}
         </ul>
 
-        <section className="mt-16" aria-labelledby="how-it-works-heading" data-testid="how-it-works">
-          <h2 id="how-it-works-heading" className="text-[12px] font-mono uppercase tracking-wide text-muted">{t('home.how.heading')}</h2>
-          <ol className="mt-4 grid gap-4 sm:grid-cols-3 sm:gap-6">
-            {BEATS.map((beat, index) => (
-              <li key={beat} className="flex items-baseline gap-3 border-t border-line pt-4">
-                <span className="font-mono text-[13px] text-muted" aria-hidden="true">{index + 1}</span>
-                <span className="text-[28px] font-semibold leading-none tracking-tight text-ink sm:text-3xl">{t(`home.how.${beat}`)}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="mt-20 text-center" data-testid="closing">
+        <section className="mt-16 text-center" data-testid="closing">
           <p className="mx-auto max-w-md text-[26px] font-semibold leading-tight tracking-tight text-ink sm:text-3xl">{t('home.closing')}</p>
-          <Button size="md" className="mt-6 w-full sm:w-auto" onClick={() => setPickerOpen(true)} aria-haspopup="dialog">
+          <Button size="md" className="mt-6 w-full sm:w-auto" onClick={openDemoPicker} aria-haspopup="dialog">
             {t('home.demo.button')}
           </Button>
         </section>
       </Container>
-      <DemoPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </section>
   )
 }

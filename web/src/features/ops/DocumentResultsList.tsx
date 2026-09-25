@@ -6,7 +6,7 @@
  * (the caller's refresh/re-filter), same shape OpsConsole used to have
  * inline. */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card } from '../../components/ui/Card'
 import { middleEllipsis } from '../../lib/filename'
@@ -19,6 +19,7 @@ export function DocumentResultsList({
   canEdit,
   canArchive,
   canRequestPurge = false,
+  highlightId = null,
   onSaved,
   emptyMessage,
 }: {
@@ -27,10 +28,18 @@ export function DocumentResultsList({
   canArchive: boolean
   /** Show the owner's Purge on each company document (round 21, A5, DECISIONS #101). */
   canRequestPurge?: boolean
+  /** The document a link pointed at (DECISIONS #105): ringed, and scrolled to once it is in the list. */
+  highlightId?: number | null
   onSaved: () => void
   emptyMessage: string
 }) {
   const { t } = useTranslation()
+  const highlightRef = useRef<HTMLDivElement | null>(null)
+  // The list arrives after the page mounts, so scroll when the highlighted document first APPEARS, not on every refetch.
+  const highlightPresent = highlightId !== null && documents.some((d) => d.id === highlightId)
+  useEffect(() => {
+    if (highlightPresent) highlightRef.current?.scrollIntoView({ block: 'center' })
+  }, [highlightPresent])
   const [trace, setTrace] = useState<{ documentId: number; report: TraceReport } | null>(null)
   const [viewingDocument, setViewingDocument] = useState<DocumentRow | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -84,20 +93,29 @@ export function DocumentResultsList({
         <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">{emptyMessage}</p>
       ) : (
         <div className="space-y-2">
-          {documents.map((doc) => (
-            <DocumentCard
-              key={doc.id}
-              doc={doc}
-              canEdit={documentIsEditable(canEdit, doc)}
-              canArchive={canArchive}
-              canRequestPurge={canRequestPurge && doc.visibility !== 'only_me'}
-              onView={() => setViewingDocument(doc)}
-              onTrace={() => void viewTrace(doc.id)}
-              onArchive={() => void archiveDocument(doc)}
-              onRequestPurge={() => void requestPurge(doc)}
-              onSaved={onSaved}
-            />
-          ))}
+          {documents.map((doc) => {
+            const highlighted = doc.id === highlightId
+            return (
+              <div
+                key={doc.id}
+                ref={highlighted ? highlightRef : undefined}
+                aria-current={highlighted || undefined}
+                className={highlighted ? 'rounded-card ring-2 ring-ink' : undefined}
+              >
+                <DocumentCard
+                  doc={doc}
+                  canEdit={documentIsEditable(canEdit, doc)}
+                  canArchive={canArchive}
+                  canRequestPurge={canRequestPurge && doc.visibility !== 'only_me'}
+                  onView={() => setViewingDocument(doc)}
+                  onTrace={() => void viewTrace(doc.id)}
+                  onArchive={() => void archiveDocument(doc)}
+                  onRequestPurge={() => void requestPurge(doc)}
+                  onSaved={onSaved}
+                />
+              </div>
+            )
+          })}
         </div>
       )}
 

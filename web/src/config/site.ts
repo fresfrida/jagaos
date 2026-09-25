@@ -1,9 +1,3 @@
-import { PRODUCT_NAME } from './product'
-
-
-/** Labels of the two hero / Get Started buttons. Each links to its own page (/calendar, /tags). */
-export const CTA_LABELS = { calendar: 'Calendar in Time', tags: 'Relevant Tags' } as const
-
 export const HERO = {
   pill: 'New: AI memory for growing teams',
   headingLead: 'Build a reliable company memory',
@@ -42,9 +36,14 @@ export const STACK_ROWS: StackRow[] = [
   { name: 'Deterministic verification', description: 'Confidence floor and tax arithmetic checks (code, not a model call) flag anything uncertain for human review.', responsibility: 'Validate', highlight: true },
 ]
 
-export const FINAL_CTA = {
-  heading: 'Give your team a memory that stays useful.',
-  copy: 'Start organising your company knowledge without adding another administrative burden.',
-} as const
+/** The legal entity in the footer's copyright line, verbatim (DECISIONS #106): the company, not the product name. */
+export const LEGAL_ENTITY = 'Platform R PCIB Pte Ltd'
+export const COPYRIGHT_YEAR = 2026
 
-export const FOOTER_TAGLINE = `${PRODUCT_NAME} helps small teams keep what they know.`
+/** The footer's bottom row, in order. PLACEHOLDERS: `#` until the real URLs exist (they are needed before the submission,
+ * KANBAN). Each id is a key under `footer.links.*`. */
+export const FOOTER_LINKS = [
+  { id: 'video', href: '#' },
+  { id: 'proposal', href: '#' },
+  { id: 'techWriteUp', href: '#' },
+] as const

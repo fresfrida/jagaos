@@ -1,10 +1,10 @@
 import { MotionConfig, motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
+import { DemoPickerHost } from './features/auth/DemoPickerHost'
 import { MyCompaniesProvider } from './features/auth/MyCompaniesContext'
 import { UploadSheetHost } from './features/upload/UploadSheetHost'
 import { useCompanyScopeKey } from './features/auth/useCompanyScopeKey'
-import { cn } from './lib/cn'
 import { Page } from './pages/Page'
 import type { ResolvedRoute } from './router/routes'
 import { useRoute } from './router/useRoute'
@@ -37,16 +37,10 @@ function AppContent({ route }: { route: ResolvedRoute }) {
         {t('app.skipToContent')}
       </a>
       <Header current={route} />
-      {/* min-h keeps the footer below the fold while a page mounts, so it never jumps.
-         The bottom padding (signed-in, phones only) keeps the fixed BottomNav
-         below from covering the last item on the page — sm:pb-0 since the bar
-         itself is sm:hidden. Round 14: 6.5rem (was 6rem) plus the same
-         env(safe-area-inset-bottom) the bar adds to ITS height, so the two
-         cannot drift apart. Measured beforehand, not assumed: at 375x812 the
-         last of 19 review cards already cleared the raised Upload button by 47px,
-         so this is margin for a larger system font or an inset, not a fix for a
-         defect that reproduced. */}
-      <main id="main" tabIndex={-1} className={cn('min-h-[calc(100svh-65px)] outline-none', showBottomNav && 'pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pb-0')}>
+      {/* min-h keeps the footer below the fold while a page mounts, so it never jumps. The signed-in phone's bottom padding for the
+         fixed BottomNav is on the footer, which is what ends the page (sections/Footer.tsx); it used to be on this element, back
+         when signed-in pages had no footer. */}
+      <main id="main" tabIndex={-1} className="min-h-[calc(100svh-65px)] outline-none">
         {/* Swap instantly and fade the new page in (opacity only). An exit animation would leave a gap and move the layout. */}
         {/* Keyed on the active company too (2026-09-24, round 12, DECISIONS
            #77): switching company remounts the page, so every hook refetches
@@ -56,25 +50,11 @@ function AppContent({ route }: { route: ResolvedRoute }) {
           <Page route={route} />
         </motion.div>
       </main>
-      {/* 2026-09-23 (live regression report): the marketing footer
-         (tagline, Product/Solutions/Resources/Company columns, social
-         icons) was rendering on every signed-in app page too — confirmed
-         live, and it has zero i18n wiring (config/site.ts's
-         FOOTER_COLUMNS/FOOTER_TAGLINE; the columns are gone since round 16), which is what actually surfaced
-         it (untranslated footer text sitting under a fully-translated
-         page). Real product decision, not just a translation gap: this
-         footer's own content (marketing-page links like "Founders"/
-         "Status") doesn't belong on a dashboard page — resolved as
-         "remove from the signed-in app entirely," the same way the
-         landing page (DECISIONS #64) already suppresses it, rather than
-         translating marketing chrome that shouldn't be there. Gated on
-         session status, not the route: was `route !== 'home'` (every
-         non-landing route, including all six signed-in pages); now
-         `status !== 'signed-in'` (every logged-out page, landing
-         included). A signed-in visitor to `home` gets the signed-in home
-         (pages/SignedInHome.tsx, or Only me for a viewer), which is app
-         chrome, not the landing (round 20, item 2). */}
-      {status !== 'signed-in' && <Footer />}
+      {/* On every page, signed in or out (DECISIONS #106). It was signed-out only from 2026-09-23, when it was a marketing footer
+         of untranslated links; it is now three short lines and a link row, translated, so it belongs everywhere. */}
+      <Footer />
+      {/* The one demo picker, opened by every Get Started / Pick a demo role button; only while nobody is signed in. */}
+      {status !== 'signed-in' && <DemoPickerHost />}
       {showBottomNav && <BottomNav current={route} />}
       <UploadSheetHost />
     </MotionConfig>

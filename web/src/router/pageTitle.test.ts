@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HOME_TITLE, pageTitle } from './routes'
+import { HOME_TITLE, pageTitle, parsePath } from './routes'
 
 describe('pageTitle', () => {
   it('is always "JagaOS: PageName", never "PageName - JagaOS"', () => {
@@ -22,8 +22,21 @@ describe('pageTitle', () => {
   })
 
   it('never contains a dash or a hyphen separator', () => {
-    for (const route of ['calendar', 'tags', 'stack', 'how-it-works', 'get-started', 'ops', 'upload'] as const) {
+    for (const route of ['calendar', 'stack', 'how-it-works', 'ops', 'upload'] as const) {
       expect(pageTitle(route)).not.toMatch(/ [-—] /)
+    }
+  })
+})
+
+describe('removed routes (DECISIONS #106)', () => {
+  it('/tags and /get-started no longer exist: the Tags page and the Get Started page are gone', () => {
+    expect(parsePath('/tags')).toBe('not-found')
+    expect(parsePath('/get-started')).toBe('not-found')
+  })
+
+  it('the app pages that remain still resolve', () => {
+    for (const [path, id] of [['/calendar', 'calendar'], ['/company-files', 'company-files'], ['/search', 'search'], ['/only-me', 'only-me'], ['/login', 'login']] as const) {
+      expect(parsePath(path)).toBe(id)
     }
   })
 })

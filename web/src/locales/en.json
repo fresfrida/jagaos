@@ -75,24 +75,16 @@
       "subhead": "Upload a document. JagaOS reads it, finds the dates and obligations, and keeps everything one search away.",
       "imageAlt": "The JagaOS calendar on a phone, showing documents by the day they were uploaded."
     },
-    "how": {
-      "heading": "How it works",
-      "upload": "Upload.",
-      "read": "Read.",
-      "confirm": "Confirm."
-    },
     "closing": "So you can focus on the work that matters."
   },
   "header": {
     "primaryNav": "Primary",
-    "logIn": "Log In",
     "logOut": "Log Out",
     "getStarted": "Get Started",
     "language": "Language",
     "accountMenu": "Account menu",
     "nav": {
       "calendar": "Calendar",
-      "tags": "Tags",
       "search": "Search",
       "companyFiles": "Company Files",
       "upload": "Upload",
@@ -101,8 +93,18 @@
     },
     "switchCompany": "Switch company",
     "navShort": {
-      "tags": "Tags",
-      "companyFiles": "Files"
+      "companyFiles": "Files",
+      "onlyMe": "Only me"
+    }
+  },
+  "footer": {
+    "tagline": "JagaOS keeps your team's memory on record.",
+    "copyright": "© {{year}} {{entity}}. All rights reserved.",
+    "linksLabel": "Footer links",
+    "links": {
+      "video": "Watch our intro video",
+      "proposal": "Proposal (Business, PDF)",
+      "techWriteUp": "Tech Write Up (PDF)"
     }
   },
   "companySettings": {
@@ -211,7 +213,7 @@
     },
     "session": {
       "checking": "Checking your session…",
-      "redirecting": "Redirecting to log in…"
+      "redirecting": "Redirecting…"
     },
     "tabs": {
       "ariaLabel": "Ops sections",
@@ -352,9 +354,6 @@
         "failed": "The word cloud could not be loaded."
       }
     },
-    "tags": {
-      "intro": "Jump straight into Company Files, pre-filtered by category."
-    },
     "documents": {
       "heading": "Documents ({{count}})",
       "searchPlaceholder": "Search documents…",
@@ -414,7 +413,7 @@
       "selectADay": "Tap a day with documents to see them here.",
       "noneOnDay": "No documents on this day.",
       "basis": {
-        "uploaded": "Uploaded",
+        "uploaded": "Uploaded dates",
         "document": "Document dates"
       },
       "prevYear": "Previous year",
@@ -422,7 +421,8 @@
       "prevYears": "Earlier years",
       "nextYears": "Later years",
       "pickMonth": "{{label}}: choose a year and month",
-      "backToDays": "{{label}}: back"
+      "backToDays": "{{label}}: back",
+      "today": "Today"
     },
     "gaps": {
       "heading": "Compliance checklist: {{satisfied}} of {{total}} held",

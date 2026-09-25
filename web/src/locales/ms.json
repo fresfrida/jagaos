@@ -75,12 +75,6 @@
       "subhead": "Muat naik satu dokumen. JagaOS membacanya, mencari tarikh dan kewajipan, dan memastikan semuanya hanya satu carian jauhnya.",
       "imageAlt": "Kalendar JagaOS pada telefon, menunjukkan dokumen mengikut hari ia dimuat naik."
     },
-    "how": {
-      "heading": "Cara ia berfungsi",
-      "upload": "Muat naik.",
-      "read": "Baca.",
-      "confirm": "Sahkan."
-    },
     "closing": "Supaya anda boleh fokus pada kerja yang penting."
   },
   "companySettings": {
@@ -148,14 +142,12 @@
   },
   "header": {
     "primaryNav": "Navigasi Utama",
-    "logIn": "Log Masuk",
     "logOut": "Log Keluar",
     "getStarted": "Mula",
     "language": "Bahasa",
     "accountMenu": "Menu akaun",
     "nav": {
       "calendar": "Kalendar",
-      "tags": "Tag",
       "search": "Carian",
       "companyFiles": "Fail Syarikat",
       "upload": "Muat Naik",
@@ -164,8 +156,18 @@
     },
     "switchCompany": "Tukar syarikat",
     "navShort": {
-      "tags": "Tag",
-      "companyFiles": "Fail"
+      "companyFiles": "Fail",
+      "onlyMe": "Saya"
+    }
+  },
+  "footer": {
+    "tagline": "JagaOS menyimpan ingatan pasukan anda dalam rekod.",
+    "copyright": "© {{year}} {{entity}}. Hak cipta terpelihara.",
+    "linksLabel": "Pautan kaki halaman",
+    "links": {
+      "video": "Tonton video pengenalan kami",
+      "proposal": "Cadangan (Perniagaan, PDF)",
+      "techWriteUp": "Penulisan Teknikal (PDF)"
     }
   },
   "auth": {
@@ -211,7 +213,7 @@
     },
     "session": {
       "checking": "Menyemak sesi anda…",
-      "redirecting": "Mengalihkan ke log masuk…"
+      "redirecting": "Mengalihkan…"
     },
     "tabs": {
       "ariaLabel": "Bahagian aplikasi",
@@ -352,9 +354,6 @@
         "failed": "Awan perkataan tidak dapat dimuatkan."
       }
     },
-    "tags": {
-      "intro": "Terus ke Fail Syarikat, ditapis mengikut kategori."
-    },
     "documents": {
       "heading": "Dokumen ({{count}})",
       "searchPlaceholder": "Cari dokumen…",
@@ -414,7 +413,7 @@
       "selectADay": "Ketik hari yang mempunyai dokumen untuk melihatnya di sini.",
       "noneOnDay": "Tiada dokumen pada hari ini.",
       "basis": {
-        "uploaded": "Dimuat naik",
+        "uploaded": "Tarikh muat naik",
         "document": "Tarikh dokumen"
       },
       "prevYear": "Tahun sebelumnya",
@@ -422,7 +421,8 @@
       "prevYears": "Tahun terdahulu",
       "nextYears": "Tahun lebih lewat",
       "pickMonth": "{{label}}: pilih tahun dan bulan",
-      "backToDays": "{{label}}: kembali"
+      "backToDays": "{{label}}: kembali",
+      "today": "Hari ini"
     },
     "gaps": {
       "heading": "Senarai semak pematuhan: {{satisfied}} daripada {{total}} dipegang",

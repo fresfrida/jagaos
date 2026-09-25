@@ -256,3 +256,55 @@ describe('Company Files: a purge the owner asked for stays visible to them until
     expect(screen.getByText('Documents (5)')).toBeTruthy()
   })
 })
+
+describe('Company Files: arriving from a Calendar day-list row with ?doc= (DECISIONS #105)', () => {
+  // jsdom has no scrollIntoView; a stub that records which element it was called on stands in for the browser's.
+  const scrollIntoView = vi.fn()
+  beforeEach(() => {
+    scrollIntoView.mockReset()
+    Element.prototype.scrollIntoView = scrollIntoView
+  })
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+  })
+
+  const ringed = () => document.querySelector('[aria-current="true"]')
+
+  it('rings that document\'s card and scrolls it to the middle, with no filter set', () => {
+    window.history.replaceState({}, '', '/company-files?doc=3')
+    render(<CompanyFilesPage />)
+
+    expect(shown()).toEqual(['Doc 1', 'Doc 2', 'Doc 3', 'Doc 4']) // nothing filtered out: the target is always in the list
+    expect(ringed()).toBe(screen.getByText('Doc 3').closest('[aria-current]'))
+    expect(ringed()?.className).toContain('ring-2')
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView.mock.contexts[0]).toBe(ringed())
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
+  })
+
+  it('scrolls when the list ARRIVES (it loads after the page mounts), and only once, not on every refetch', () => {
+    window.history.replaceState({}, '', '/company-files?doc=2')
+    ops.documents = []
+    const { rerender } = render(<CompanyFilesPage />)
+    expect(scrollIntoView).not.toHaveBeenCalled()
+
+    ops.documents = DOCS
+    rerender(<CompanyFilesPage />)
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+
+    ops.documents = [...DOCS] // a refresh returns a new array with the same documents
+    rerender(<CompanyFilesPage />)
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+  })
+
+  it('a document that is not in the list (archived meanwhile) or a junk id highlights nothing and does not break the page', () => {
+    for (const href of ['/company-files?doc=99', '/company-files?doc=abc', '/company-files']) {
+      window.history.replaceState({}, '', href)
+      const { unmount } = render(<CompanyFilesPage />)
+      expect(shown()).toHaveLength(4)
+      expect(ringed(), href).toBeNull()
+      unmount()
+    }
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+})

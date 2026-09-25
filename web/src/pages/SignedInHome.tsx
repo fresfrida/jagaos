@@ -7,8 +7,13 @@
  * no green on this page; hierarchy is tone, not a new colour). UPLOAD is the dominant one: a large card
  * in the same near-black as the header's Upload button, linking to /upload, with the number of items
  * waiting for review as a white pill on the card itself (that is where the review list is). ONLY ME is a
- * quieter row under it, a light tint of black with dark text, linking to /only-me. Neither is embedded:
+ * quieter row under it on a phone, a light tint of black with dark text, linking to /only-me. Neither is embedded:
  * no upload rows here, no private files here.
+ *
+ * From `lg` (DECISIONS #106) the two sit SIDE BY SIDE, equal height, in a column about 960px wide, and Only me becomes a
+ * proper outlined card (a real border on white, the same padding and type scale as the Upload card) instead of the tinted
+ * row. Below `lg` nothing changed: one column, the same row. One element per entry, restyled with `lg:` classes, so the
+ * two layouts cannot drift apart in content.
  *
  * Privacy: a private (Only me) file never surfaces outside the Only me section, so the waiting count
  * leaves out the person's own private files (useWaitingReviews).
@@ -38,8 +43,10 @@ export function SignedInHome() {
   return (
     <Container className="py-8 sm:py-12">
       <h1 className="sr-only">{t('home.signedIn.pageTitle')}</h1>
-      {/* About 720px, centred: a full-width slab on a desktop reads as a wall, not a button. */}
-      <div className="mx-auto max-w-[720px]">
+      {/* About 720px on a phone and a tablet, centred: a full-width slab reads as a wall, not a button. A grid, so from `lg` the
+         two cards share a row and are the same height (the default stretch); below it, a single column with the same 1rem gap
+         the Only me row used to get from its own top margin. */}
+      <div className="mx-auto grid max-w-[720px] gap-4 lg:max-w-[960px] lg:grid-cols-2">
         <Link
           href={routeHref('upload')}
           data-testid="home-upload"
@@ -66,14 +73,16 @@ export function SignedInHome() {
         <Link
           href={routeHref('only-me')}
           data-testid="home-only-me"
-          className="mt-4 flex items-center gap-3 rounded-card bg-ink/5 px-4 py-3.5 transition-colors hover:bg-ink/10"
+          className="flex items-center justify-between gap-3 rounded-card bg-ink/5 px-4 py-3.5 transition-colors hover:bg-ink/10 lg:items-start lg:gap-4 lg:border lg:border-line lg:bg-white lg:p-8 lg:hover:border-ink/40 lg:hover:bg-white"
         >
-          <Lock size={18} className="shrink-0 text-ink" aria-hidden="true" />
-          <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-medium text-ink">{t('header.nav.onlyMe')}</span>
-            <span className="block text-[14px] leading-5 text-muted">{t('home.signedIn.onlyMe.hint')}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-3 lg:flex-col lg:items-start lg:gap-4">
+            <Lock size={18} className="shrink-0 text-ink lg:h-8 lg:w-8" aria-hidden="true" />
+            <span className="min-w-0 flex-1 lg:flex-none">
+              <span className="block text-[15px] font-medium text-ink lg:text-3xl lg:font-semibold">{t('header.nav.onlyMe')}</span>
+              <span className="block text-[14px] leading-5 text-muted lg:mt-1.5 lg:text-[16px] lg:leading-6">{t('home.signedIn.onlyMe.hint')}</span>
+            </span>
           </span>
-          <ChevronRight size={16} className="shrink-0 text-muted" aria-hidden="true" />
+          <ChevronRight size={16} className="shrink-0 text-muted lg:mt-1 lg:h-6 lg:w-6" aria-hidden="true" />
         </Link>
       </div>
     </Container>

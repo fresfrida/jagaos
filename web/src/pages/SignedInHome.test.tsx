@@ -53,6 +53,37 @@ describe('SignedInHome', () => {
     expect(container.innerHTML).not.toMatch(/sage|green|emerald|teal/)
   })
 
+  it('DESKTOP (lg): the two cards share a row, equal height, in a column about 960px wide (DECISIONS #106)', () => {
+    render(<SignedInHome />)
+    const grid = screen.getByTestId('home-upload').parentElement!
+    expect(grid).toBe(screen.getByTestId('home-only-me').parentElement) // one grid holds both
+    expect(grid.className).toContain('grid')
+    expect(grid.className).toContain('lg:grid-cols-2')
+    expect(grid.className).toContain('lg:max-w-[960px]')
+    expect(grid.className).not.toContain('items-') // no align override: the default stretch is what makes the heights equal
+  })
+
+  it('DESKTOP: Only me becomes an outlined card, Upload stays the filled near-black one', () => {
+    render(<SignedInHome />)
+    const only = screen.getByTestId('home-only-me').className
+    expect(only).toContain('lg:border')
+    expect(only).toContain('lg:border-line')
+    expect(only).toContain('lg:bg-white')
+    expect(only).toContain('lg:p-8') // the Upload card's padding
+    expect(screen.getByTestId('home-upload').className).toContain('bg-ink')
+    expect(screen.getByTestId('home-upload').className).not.toContain('lg:')
+  })
+
+  it('PHONE: below lg nothing changed, one column and the same tinted Only me row', () => {
+    render(<SignedInHome />)
+    const grid = screen.getByTestId('home-upload').parentElement!
+    expect(grid.className).toContain('max-w-[720px]')
+    expect(grid.className).toContain('gap-4') // the gap the Only me row used to get from its own top margin
+    const only = screen.getByTestId('home-only-me').className
+    for (const cls of ['flex', 'items-center', 'gap-3', 'rounded-card', 'bg-ink/5', 'px-4', 'py-3.5', 'hover:bg-ink/10']) expect(only.split(' ')).toContain(cls)
+    expect(only.split(' ')).not.toContain('mt-4')
+  })
+
   it('is a centred column about 720px wide', () => {
     render(<SignedInHome />)
     const column = screen.getByTestId('home-upload').parentElement!

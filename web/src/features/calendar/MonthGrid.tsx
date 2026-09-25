@@ -37,6 +37,8 @@ interface MonthGridProps {
   selectedDay: string | null
   onSelectDay: (day: string) => void
   onMonthChange: (month: string) => void
+  /** Jump to the company's today (DECISIONS #105): the parent shows today's month and selects today. */
+  onToday: () => void
   // 2026-09-24 (company-local dates, item 2): the company's own IANA
   // timezone (useAuth().company.timezone) — "today" must be the
   // company's today, not the viewing device's, so an admin traveling
@@ -44,7 +46,7 @@ interface MonthGridProps {
   timezone: string
 }
 
-export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onMonthChange, timezone }: MonthGridProps) {
+export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onMonthChange, onToday, timezone }: MonthGridProps) {
   const { i18n, t } = useTranslation()
   const locale = localeFor(i18n.language)
   const monthLabel = parseIsoDate(month).toLocaleDateString(locale, { month: 'long', year: 'numeric' })
@@ -98,7 +100,9 @@ export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onM
 
   return (
     <div className="overflow-hidden rounded-card border border-line bg-white">
-      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
+      {/* Wraps (DECISIONS #105): the month title, Today and the two chevrons need about 330px, and a phone's card is 294px,
+         so there the controls drop to their own line under the title rather than sit on top of it. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b border-line px-3 py-2.5">
         <h3 className="min-w-0 text-sm font-semibold capitalize tracking-tight text-ink">
           <button
             type="button"
@@ -113,7 +117,18 @@ export function MonthGrid({ month, documentsByDay, selectedDay, onSelectDay, onM
             <ChevronDown size={16} aria-hidden="true" className={cn('shrink-0 text-muted transition-transform', picker !== null && 'rotate-180')} />
           </button>
         </h3>
-        <div className="flex gap-1.5">
+        <div className="flex shrink-0 gap-1.5">
+          {/* Closes an open year or month picker too, or the button would seem to do nothing while the picker covers the grid. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setPicker(null)
+              onToday()
+            }}
+          >
+            {t('ops.dates.today')}
+          </Button>
           <Button variant="secondary" size="icon" aria-label={t(stepLabels[0] ?? '')} onClick={() => step(-1)} icon={<ChevronLeft size={18} />} />
           <Button variant="secondary" size="icon" aria-label={t(stepLabels[1] ?? '')} onClick={() => step(1)} icon={<ChevronRight size={18} />} />
         </div>

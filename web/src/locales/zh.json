@@ -75,12 +75,6 @@
       "subhead": "上传一份文件。JagaOS 会读懂它，找出日期和义务，让一切一搜即得。",
       "imageAlt": "手机上的 JagaOS 日历，按上传日期显示文件。"
     },
-    "how": {
-      "heading": "运作方式",
-      "upload": "上传。",
-      "read": "读取。",
-      "confirm": "确认。"
-    },
     "closing": "让你专注于真正重要的事。"
   },
   "companySettings": {
@@ -148,14 +142,12 @@
   },
   "header": {
     "primaryNav": "主导航",
-    "logIn": "登录",
     "logOut": "登出",
     "getStarted": "开始使用",
     "language": "语言",
     "accountMenu": "账户菜单",
     "nav": {
       "calendar": "日历",
-      "tags": "标签",
       "search": "搜索",
       "companyFiles": "公司文件",
       "upload": "上传",
@@ -164,8 +156,18 @@
     },
     "switchCompany": "切换公司",
     "navShort": {
-      "tags": "标签",
-      "companyFiles": "公司文件"
+      "companyFiles": "公司文件",
+      "onlyMe": "仅我可见"
+    }
+  },
+  "footer": {
+    "tagline": "JagaOS 为您的团队留存记忆。",
+    "copyright": "© {{year}} {{entity}}。版权所有。",
+    "linksLabel": "页脚链接",
+    "links": {
+      "video": "观看我们的介绍视频",
+      "proposal": "商业提案（PDF）",
+      "techWriteUp": "技术说明（PDF）"
     }
   },
   "auth": {
@@ -211,7 +213,7 @@
     },
     "session": {
       "checking": "正在检查您的登录状态…",
-      "redirecting": "正在跳转至登录页…"
+      "redirecting": "正在跳转…"
     },
     "tabs": {
       "ariaLabel": "功能分区",
@@ -352,9 +354,6 @@
         "failed": "无法加载词云。"
       }
     },
-    "tags": {
-      "intro": "按分类快速跳转至公司文件。"
-    },
     "documents": {
       "heading": "文件 ({{count}})",
       "searchPlaceholder": "搜索文件…",
@@ -414,7 +413,7 @@
       "selectADay": "点击有文件的日期即可在此查看。",
       "noneOnDay": "这一天没有文件。",
       "basis": {
-        "uploaded": "上传时间",
+        "uploaded": "上传日期",
         "document": "文件日期"
       },
       "prevYear": "上一年",
@@ -422,7 +421,8 @@
       "prevYears": "更早的年份",
       "nextYears": "更晚的年份",
       "pickMonth": "{{label}}：选择年份和月份",
-      "backToDays": "{{label}}：返回"
+      "backToDays": "{{label}}：返回",
+      "today": "今天"
     },
     "gaps": {
       "heading": "合规清单：已持有 {{satisfied}} / {{total}}",

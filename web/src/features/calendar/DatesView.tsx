@@ -34,20 +34,25 @@
  * `DateGroupRow`'s own docstring); the selected-day heading is now
  * locale-aware (`formatShortDate(day, localeFor(i18n.language))`) instead
  * of hardcoded `en-GB`; and the bucket badge is translated
- * (`bucketLabel`). */
+ * (`bucketLabel`).
+ *
+ * **2026-09-25 (DECISIONS #105)**: the rows are links to Company Files (`/company-files?doc=<id>`, that document
+ * ringed and scrolled to) instead of opening the in-place viewer, so the Calendar has no viewer of its own. */
 
 import { ChevronRight } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
 import { FileName } from '../../components/ui/FileName'
-import { dayInTimezone, formatShortDate, localeFor, startOfMonth } from '../../lib/dates'
+import { formatShortDate, localeFor, startOfMonth, todayInTimezone } from '../../lib/dates'
+import { Link } from '../../router/Link'
 import { useAuth } from '../auth/AuthContext'
-import { DocumentViewerModal } from '../ops/DocumentCard'
 import { DateBasisToggle } from '../ops/DateBasisToggle'
-import { documentDay, type DateBasis } from '../ops/documentDates'
+import { documentDay } from '../ops/documentDates'
+import { companyFilesDocumentHref } from '../ops/documentLinks'
 import { DocumentTypeIcon, StatusPill, bucketLabel, formatDocumentLabel } from '../ops/opsShared'
 import type { DocumentRow } from '../ops/opsApi'
+import { useCalendarView } from './calendarView'
 import { MonthGrid } from './MonthGrid'
 
 // The two date bases and the rule for which day a document falls on are shared with the Company Files date-range
@@ -70,12 +75,11 @@ import { MonthGrid } from './MonthGrid'
 // and adds the filename as small muted *secondary* text underneath — my
 // reading of "show filename + vendor... when available" as filename-as-
 // supporting-detail, not filename-as-primary-label again.
-function DateGroupRow({ doc, onView }: { doc: DocumentRow; onView: () => void }) {
+function DateGroupRow({ doc }: { doc: DocumentRow }) {
   const { t, i18n } = useTranslation()
   return (
-    <button
-      type="button"
-      onClick={onView}
+    <Link
+      href={companyFilesDocumentHref(doc.id)}
       className="flex w-full items-center gap-2 rounded-control border border-line bg-white px-3 py-2 text-left text-[14px] transition-colors hover:border-ink/40"
     >
       <DocumentTypeIcon mediaType={doc.media_type} />
@@ -86,7 +90,7 @@ function DateGroupRow({ doc, onView }: { doc: DocumentRow; onView: () => void })
       {doc.bucket && <Badge tone="neutral">{bucketLabel(t, doc.bucket)}</Badge>}
       <StatusPill status={doc.status} />
       <ChevronRight size={14} className="shrink-0 text-muted" aria-hidden="true" />
-    </button>
+    </Link>
   )
 }
 
@@ -98,10 +102,13 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
   // here is just defensive against a not-yet-loaded company on first
   // render, not a real legacy-data case.
   const timezone = company?.timezone ?? 'Asia/Singapore'
-  const [basis, setBasis] = useState<DateBasis>('upload')
-  const [month, setMonth] = useState(() => startOfMonth(dayInTimezone(new Date().toISOString(), timezone)))
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
-  const [viewingDocument, setViewingDocument] = useState<DocumentRow | null>(null)
+  // The view survives leaving the page (DECISIONS #105): it comes from the URL, else the tab's last one, else today.
+  const { view, update } = useCalendarView({ basis: 'upload', month: startOfMonth(todayInTimezone(timezone)), selectedDay: null })
+  const { basis, month, selectedDay } = view
+  const goToToday = () => {
+    const today = todayInTimezone(timezone)
+    update({ month: startOfMonth(today), selectedDay: today })
+  }
 
   const { byDay, noDate } = useMemo(() => {
     const map = new Map<string, DocumentRow[]>()
@@ -121,21 +128,28 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
     return { byDay: map, noDate: withoutDate }
   }, [documents, basis, timezone])
 
-  // Switching basis regroups documents onto different days entirely — a
-  // previously-selected day may no longer mean anything under the new basis.
-  useEffect(() => setSelectedDay(null), [basis])
-
   const selectedDocs = selectedDay ? byDay.get(selectedDay) ?? [] : []
 
   return (
     <div>
-      <DateBasisToggle basis={basis} onChange={setBasis} className="mb-4" />
+      {/* Switching basis regroups documents onto different days entirely, so a previously-selected day may no longer mean
+         anything under the new basis: it is cleared here, in the handler, not in an effect, which would also run on
+         mount and wipe a day restored from the URL. */}
+      <DateBasisToggle basis={basis} onChange={(next) => update({ basis: next, selectedDay: null })} className="mb-4" />
 
       {/* Round 16 (item 7): the month grid is always drawn. With no documents it used to
          be replaced by a text-only "none uploaded" box, so a new company saw no
          calendar at all; now that message is a small hint under the grid. */}
       <div className="space-y-4">
-        <MonthGrid month={month} documentsByDay={byDay} selectedDay={selectedDay} onSelectDay={setSelectedDay} onMonthChange={setMonth} timezone={timezone} />
+        <MonthGrid
+          month={month}
+          documentsByDay={byDay}
+          selectedDay={selectedDay}
+          onSelectDay={(day) => update({ selectedDay: day })}
+          onMonthChange={(next) => update({ month: next })}
+          onToday={goToToday}
+          timezone={timezone}
+        />
 
         {documents.length === 0 ? (
           <p className="text-[14px] text-muted" data-testid="no-documents-hint">{t('ops.dates.noneUploaded')}</p>
@@ -151,7 +165,7 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
                     <p className="rounded-card border border-line bg-white p-4 text-[14px] text-muted">{t('ops.dates.noneOnDay')}</p>
                   ) : (
                     <div className="space-y-1">
-                      {selectedDocs.map((doc) => <DateGroupRow key={doc.id} doc={doc} onView={() => setViewingDocument(doc)} />)}
+                      {selectedDocs.map((doc) => <DateGroupRow key={doc.id} doc={doc} />)}
                     </div>
                   )}
                 </>
@@ -166,17 +180,13 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
                   {t('ops.dates.noDocumentDate', { count: noDate.length })}
                 </h3>
                 <div className="space-y-1">
-                  {noDate.map((doc) => <DateGroupRow key={doc.id} doc={doc} onView={() => setViewingDocument(doc)} />)}
+                  {noDate.map((doc) => <DateGroupRow key={doc.id} doc={doc} />)}
                 </div>
               </section>
             )}
           </>
         )}
       </div>
-
-      {viewingDocument && (
-        <DocumentViewerModal doc={viewingDocument} onClose={() => setViewingDocument(null)} />
-      )}
     </div>
   )
 }

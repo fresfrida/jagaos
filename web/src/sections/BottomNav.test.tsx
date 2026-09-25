@@ -1,4 +1,6 @@
-/** The phone bottom bar (round 21, A4, DECISIONS #101): every label on one line, and the cells the same width. jsdom has no
+/** The phone bottom bar (round 21, A4, DECISIONS #101): every label on one line, and the cells the same width. Since DECISIONS
+ * #106 Only me takes the slot the Tags page left: Calendar, Only me, [Upload], Search, Company Files; a viewer gets Calendar,
+ * Search, Company Files. jsdom has no
  * layout, so what is pinned here is what makes that true (no wrapping, equal-basis cells, the short wording where the full name
  * does not fit a 72px cell); the widths themselves were measured in a browser, in four languages, at 375, 360 and 320px. */
 
@@ -23,8 +25,8 @@ const nav = () => screen.getByRole('navigation')
 describe('BottomNav', () => {
   it('shows five labels, the two that were too wide in their short form, and the rest unchanged', () => {
     render(<BottomNav current="calendar" />)
-    const labels = within(nav()).getAllByText(/^(Calendar|Tags|Upload|Search|Files|Company Files)$/).map((n) => n.textContent)
-    expect(labels).toEqual(['Calendar', 'Tags', 'Upload', 'Search', 'Files'])
+    const labels = within(nav()).getAllByText(/^(Calendar|Only me|Upload|Search|Files|Company Files)$/).map((n) => n.textContent)
+    expect(labels).toEqual(['Calendar', 'Only me', 'Upload', 'Search', 'Files'])
     expect(within(nav()).queryByText('Company Files')).toBeNull()
   })
 
@@ -36,7 +38,7 @@ describe('BottomNav', () => {
 
   it('no label may wrap, and no cell may be sized by its label: they are all equal', () => {
     render(<BottomNav current="calendar" />)
-    for (const label of ['Calendar', 'Tags', 'Upload', 'Search', 'Files']) {
+    for (const label of ['Calendar', 'Only me', 'Upload', 'Search', 'Files']) {
       expect(within(nav()).getByText(label).className, label).toContain('whitespace-nowrap')
     }
     const cells = [...nav().querySelectorAll('a'), within(nav()).getByText('Upload').parentElement!]
@@ -54,9 +56,9 @@ describe('BottomNav', () => {
   })
 
   it.each([
-    ['zh', ['日历', '标签', '上传', '搜索', '公司文件']],
-    ['ms', ['Kalendar', 'Tag', 'Muat Naik', 'Carian', 'Fail']],
-    ['ta', ['நாட்காட்டி', 'குறிச்சொல்', 'பதிவேற்று', 'தேடல்', 'கோப்புகள்']],
+    ['zh', ['日历', '仅我可见', '上传', '搜索', '公司文件']],
+    ['ms', ['Kalendar', 'Saya', 'Muat Naik', 'Carian', 'Fail']],
+    ['ta', ['நாட்காட்டி', 'எனக்கு', 'பதிவேற்று', 'தேடல்', 'கோப்புகள்']],
   ])('uses these five labels in %s', async (language, expected) => {
     await i18n.changeLanguage(language)
     render(<BottomNav current="calendar" />)
@@ -64,12 +66,36 @@ describe('BottomNav', () => {
     expect(labels).toEqual(expected)
   })
 
-  it('a viewer gets four equal cells and no Upload button', () => {
+  it('a viewer gets three equal cells, Calendar, Search and Company Files, no Only me and no Upload button', () => {
     auth.value = { role: 'viewer' }
     render(<BottomNav current="calendar" />)
-    expect(nav().querySelectorAll('a')).toHaveLength(4)
+    expect([...nav().querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['/calendar', '/search', '/company-files'])
     expect(within(nav()).queryByRole('button')).toBeNull()
     for (const cell of nav().querySelectorAll('a')) expect(cell.className).toContain('basis-0')
+  })
+
+  it.each(['owner', 'admin', 'user'])('a %s: Only me on the left with Calendar, Search and Company Files on the sides of a raised Upload button', (role) => {
+    auth.value = { role }
+    render(<BottomNav current="calendar" />)
+    const items = [...nav().querySelectorAll('a, button')].map((n) => n.getAttribute('href') ?? 'upload')
+    expect(items).toEqual(['/calendar', '/only-me', 'upload', '/search', '/company-files']) // two, the button, two: symmetric
+  })
+
+  it.each([
+    ['ms', 'Hanya saya', 'Saya'],
+    ['ta', 'எனக்கு மட்டும்', 'எனக்கு'],
+  ])('Only me\'s bar label is short in %s (too wide for a cell at 375 and 320) but keeps the full name as its accessible name', async (language, full, short) => {
+    await i18n.changeLanguage(language)
+    render(<BottomNav current="calendar" />)
+    const link = within(nav()).getByRole('link', { name: full })
+    expect(link.textContent).toBe(short)
+    expect(link.getAttribute('href')).toBe('/only-me')
+  })
+
+  it('has no Tags item: the Tags page is gone', () => {
+    render(<BottomNav current="calendar" />)
+    expect(within(nav()).queryByText('Tags')).toBeNull()
+    expect(nav().querySelector('a[href="/tags"]')).toBeNull()
   })
 
   it('marks the current page', () => {
