@@ -4,7 +4,7 @@
  * UploadPage so the page just composes. The pure decisions — what a selection
  * means, how pages reorder — are in uploadSelection.ts. */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { normalizeImageForUpload } from '../../lib/imageNormalize'
 import { opsApi, type UploadResult, type Visibility } from '../ops/opsApi'
 import { assertWithinFileLimit } from './fileLimit'
@@ -36,6 +36,26 @@ export interface Uploading {
   pages?: number
 }
 
+/** A personal file that has been chosen and is waiting for its name (round 21, A3, DECISIONS #101). Nothing is sent until the person
+ * gives a name; `files` is one file, or the ordered pages of one document. */
+export interface PersonalDraft {
+  files: File[]
+  isPicture: boolean
+  /** The name offered first: the file's own name without its extension, so saving is one tap. */
+  defaultName: string
+}
+
+/** What the person typed for a personal file: the name is required, the caption is not. */
+export interface PersonalDetails {
+  name: string
+  caption?: string
+}
+
+/** A file's name without its extension, cut to a sensible length. */
+export function defaultPersonalName(filename: string): string {
+  return filename.replace(/\.[^./\\]+$/, '').trim().slice(0, 120) || filename
+}
+
 /** What useUploadFlow returns, for the components that render it (UploadPanel). */
 export type UploadFlow = ReturnType<typeof useUploadFlow>
 
@@ -44,6 +64,11 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
   const [uploading, setUploading] = useState<Uploading | null>(null)
   const [staged, setStaged] = useState<File[] | null>(null)
   const [selectionError, setSelectionError] = useState<SelectionError | null>(null)
+  // Only me (round 21, A3): a chosen file waits here for its name instead of being sent, and whoever asked for the upload
+  // (the picker, the page stager, the scratchpad) is answered when it has been sent, or has been cancelled.
+  const personal = visibility === 'only_me'
+  const [draft, setDraft] = useState<PersonalDraft | null>(null)
+  const settle = useRef<((sent: boolean) => void) | null>(null)
 
   const run = useCallback(
     async (send: () => Promise<UploadResult>, what: Uploading): Promise<boolean> => {
@@ -66,8 +91,8 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
     [onError, onOutcome, refresh],
   )
 
-  const uploadOne = useCallback(
-    (file: File, isPicture: boolean) =>
+  const sendOne = useCallback(
+    (file: File, isPicture: boolean, details?: PersonalDetails) =>
       run(
         async () => {
           // A photo is downscaled first, so a 30 MB phone photo is judged as the small file it becomes.
@@ -76,12 +101,65 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
           return opsApi.uploadDocument(prepared, isPicture, language, {
             docTypeHint: isPicture ? null : docTypeHint,
             visibility,
+            ...details,
           })
         },
-        { name: file.name },
+        { name: details?.name ?? file.name },
       ),
     [docTypeHint, language, run, visibility],
   )
+
+  const sendPages = useCallback(
+    (pages: File[], details?: PersonalDetails) =>
+      run(
+        async () => {
+          const prepared = await Promise.all(pages.map(normalizeImageForUpload))
+          await assertWithinFileLimit(prepared)
+          return opsApi.uploadPages(prepared, language, { docTypeHint, visibility, ...details })
+        },
+        { name: details?.name ?? pages[0]?.name ?? '', pages: pages.length },
+      ),
+    [docTypeHint, language, run, visibility],
+  )
+
+  /** Only me: hold the file (or pages) for its name. Resolves true once it has been sent, false if the person cancelled. */
+  const askForDetails = useCallback(
+    (next: PersonalDraft) =>
+      new Promise<boolean>((resolve) => {
+        settle.current?.(false) // a newer choice replaces one that was never named
+        settle.current = resolve
+        setDraft(next)
+      }),
+    [],
+  )
+
+  const uploadOne = useCallback(
+    (file: File, isPicture: boolean) =>
+      personal
+        ? askForDetails({ files: [file], isPicture, defaultName: defaultPersonalName(file.name) })
+        : sendOne(file, isPicture),
+    [askForDetails, personal, sendOne],
+  )
+
+  /** The person named the held file: close the sheet at once (the page shows the progress) and send it. */
+  const saveDraft = useCallback(
+    async (details: PersonalDetails) => {
+      if (!draft) return
+      const answer = settle.current
+      settle.current = null
+      setDraft(null)
+      const sent = draft.files.length === 1 ? await sendOne(draft.files[0]!, draft.isPicture, details) : await sendPages(draft.files, details)
+      answer?.(sent)
+    },
+    [draft, sendOne, sendPages],
+  )
+
+  const cancelDraft = useCallback(() => {
+    const answer = settle.current
+    settle.current = null
+    setDraft(null)
+    answer?.(false)
+  }, [])
 
   /** PHOTO: exactly one image, marked as a picture. Resolves true when it was sent
    * (the Only me scratchpad clears itself only then). */
@@ -120,19 +198,14 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
     const done =
       staged.length === 1
         ? await uploadOne(only, false) // took pages away until one was left: an ordinary upload
-        : await run(
-            async () => {
-              const pages = await Promise.all(staged.map(normalizeImageForUpload))
-              await assertWithinFileLimit(pages)
-              return opsApi.uploadPages(pages, language, { docTypeHint, visibility })
-            },
-            { name: only.name, pages: staged.length },
-          )
+        : personal
+          ? await askForDetails({ files: staged, isPicture: false, defaultName: defaultPersonalName(only.name) })
+          : await sendPages(staged)
     if (done) cancelStaging()
-  }, [cancelStaging, docTypeHint, language, run, staged, uploadOne, visibility])
+  }, [askForDetails, cancelStaging, personal, sendPages, staged, uploadOne])
 
   return {
-    busy, uploading, staged, selectionError,
-    uploadPhoto, chooseDocumentFiles, addPages, move, remove, cancelStaging, submitPages,
+    busy, uploading, staged, selectionError, draft,
+    uploadPhoto, chooseDocumentFiles, addPages, move, remove, cancelStaging, submitPages, saveDraft, cancelDraft,
   }
 }

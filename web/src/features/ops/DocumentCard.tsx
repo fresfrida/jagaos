@@ -10,7 +10,6 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
-import { TypedConfirmDialog } from '../../components/ui/TypedConfirmDialog'
 import { FileName } from '../../components/ui/FileName'
 import { ApiError } from '../../lib/apiClient'
 import { formatShortDate, localeFor } from '../../lib/dates'
@@ -129,21 +128,23 @@ export function DocumentCard({
   doc,
   canEdit,
   canArchive,
-  permanentDelete = false,
+  canRequestPurge = false,
   onView,
   onTrace,
   onArchive,
+  onRequestPurge,
   onSaved,
 }: {
   doc: DocumentRow
   canEdit: boolean
   canArchive: boolean
-  /** Delete is FOR GOOD (a private file, round 20, DECISIONS #99): the person must type the file's name, and
-   * `onArchive` then means "delete permanently". Default is the soft delete with a plain confirm. */
-  permanentDelete?: boolean
+  /** The owner's Purge (round 21, A5, DECISIONS #101): asks for this company document to be removed permanently. It
+   * deletes nothing; it hides the document and tells the team. Owner only, and never on a personal file. */
+  canRequestPurge?: boolean
   onView: () => void
   onTrace: () => void
   onArchive: () => void
+  onRequestPurge?: () => void
   onSaved: () => void
 }) {
   const { t, i18n } = useTranslation()
@@ -165,6 +166,10 @@ export function DocumentCard({
   const [error, setError] = useState<string | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false)
+  // The owner's purge request, still shown to them until the team removes the row (round 21, DECISIONS #102): read-only,
+  // marked, and with nothing left to ask for (Edit, Delete, Purge and Trace are off; View still opens the file).
+  const purgePending = doc.status === 'purge_requested'
   const isPictureLane = doc.lane === 'memory'
   const isPendingCaption = isPictureLane && doc.description === null
 
@@ -261,6 +266,9 @@ export function DocumentCard({
               {t('ops.dates.documentDate')}: {doc.occurred_on ? formatShortDate(doc.occurred_on, localeFor(i18n.language)) : t('ops.documents.noDocumentDate')}
             </p>
             {doc.vendor_name && <p className="mt-0.5 break-words text-[13px] text-muted">{doc.vendor_name}</p>}
+            {purgePending && (
+              <p className="mt-1 break-words text-[13px] text-red-800" data-testid="purge-pending-note">{t('ops.documents.purgeRequest.pending')}</p>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
@@ -326,7 +334,7 @@ export function DocumentCard({
         <button onClick={onView} className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-ink">
           {t('ops.documents.view')}
         </button>
-        {canEdit && !editing && (
+        {canEdit && !purgePending && !editing && (
           <button
             onClick={() => {
               // Entering edit mode starts from what is on screen right now,
@@ -353,9 +361,14 @@ export function DocumentCard({
            (`archiveDocument`, `status='archived'`) is deliberately
            unchanged — see its own comment in opsApi.ts. Gated behind
            ConfirmDialog below, not a single unconfirmed click. */}
-        {canArchive && (
+        {canArchive && !purgePending && (
           <button onClick={() => setShowDeleteConfirm(true)} className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-red-700">
             {t('ops.documents.delete')}
+          </button>
+        )}
+        {canRequestPurge && !purgePending && onRequestPurge && (
+          <button onClick={() => setShowPurgeConfirm(true)} className="text-[13px] font-mono uppercase tracking-wide text-muted hover:text-red-700">
+            {t('ops.documents.purgeRequest.button')}
           </button>
         )}
         {/* Trace (2026-09-23, live user question "what is trace btw?"):
@@ -363,68 +376,67 @@ export function DocumentCard({
            needs day to day — tucked into this small overflow menu instead
            of sitting equal-weight next to View/Edit/Delete. Still just as
            reachable, one extra click. */}
-        <div className="relative ml-auto">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              setShowMenu((s) => !s)
-            }}
-            aria-label={t('ops.documents.moreActions')}
-            aria-haspopup="menu"
-            aria-expanded={showMenu}
-            className="flex h-6 w-6 items-center justify-center rounded-control text-muted hover:bg-canvas hover:text-ink"
-          >
-            <MoreHorizontal size={16} />
-          </button>
-          {showMenu && (
-            <div
-              role="menu"
-              className="absolute right-0 z-10 mt-1 min-w-[7rem] overflow-hidden rounded-control border border-line bg-white py-1 shadow-md"
+        {!purgePending && (
+          <div className="relative ml-auto">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowMenu((s) => !s)
+              }}
+              aria-label={t('ops.documents.moreActions')}
+              aria-haspopup="menu"
+              aria-expanded={showMenu}
+              className="flex h-6 w-6 items-center justify-center rounded-control text-muted hover:bg-canvas hover:text-ink"
             >
-              <button
-                role="menuitem"
-                onClick={() => {
-                  setShowMenu(false)
-                  onTrace()
-                }}
-                className="block w-full px-3 py-1.5 text-left text-[13px] font-mono uppercase tracking-wide text-muted hover:bg-canvas hover:text-ink"
+              <MoreHorizontal size={16} />
+            </button>
+            {showMenu && (
+              <div
+                role="menu"
+                className="absolute right-0 z-10 mt-1 min-w-[7rem] overflow-hidden rounded-control border border-line bg-white py-1 shadow-md"
               >
-                {t('ops.documents.trace')}
-              </button>
-            </div>
-          )}
-        </div>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMenu(false)
+                    onTrace()
+                  }}
+                  className="block w-full px-3 py-1.5 text-left text-[13px] font-mono uppercase tracking-wide text-muted hover:bg-canvas hover:text-ink"
+                >
+                  {t('ops.documents.trace')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {permanentDelete ? (
-        <TypedConfirmDialog
-          open={showDeleteConfirm}
-          message={t('ops.documents.purge.message')}
-          prompt={t('ops.documents.purge.prompt')}
-          expected={doc.filename}
-          inputLabel={t('ops.documents.purge.inputLabel')}
-          confirmLabel={t('ops.documents.purge.confirm')}
-          cancelLabel={t('common.buttons.cancel')}
-          onConfirm={() => {
-            setShowDeleteConfirm(false)
-            onArchive()
-          }}
-          onCancel={() => setShowDeleteConfirm(false)}
-        />
-      ) : (
+      {canRequestPurge && onRequestPurge && (
         <ConfirmDialog
-          open={showDeleteConfirm}
-          message={t('ops.documents.deleteConfirmMessage', { filename: middleEllipsis(doc.filename, 40) })}
-          confirmLabel={t('common.buttons.delete')}
+          open={showPurgeConfirm}
+          message={t('ops.documents.purgeRequest.message', { filename: middleEllipsis(doc.filename, 40) })}
+          confirmLabel={t('ops.documents.purgeRequest.confirm')}
           cancelLabel={t('common.buttons.cancel')}
           onConfirm={() => {
-            setShowDeleteConfirm(false)
-            onArchive()
+            setShowPurgeConfirm(false)
+            onRequestPurge()
           }}
-          onCancel={() => setShowDeleteConfirm(false)}
+          onCancel={() => setShowPurgeConfirm(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        message={t('ops.documents.deleteConfirmMessage', { filename: middleEllipsis(doc.filename, 40) })}
+        confirmLabel={t('common.buttons.delete')}
+        cancelLabel={t('common.buttons.cancel')}
+        onConfirm={() => {
+          setShowDeleteConfirm(false)
+          onArchive()
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </Card>
   )
 }

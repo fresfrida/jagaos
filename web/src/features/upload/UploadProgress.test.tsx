@@ -62,3 +62,28 @@ describe('UploadProgress', () => {
     expect(screen.getByText('3 pages')).toBeTruthy()
   })
 })
+
+
+describe('UploadProgress for a personal file (round 21, A3, DECISIONS #101)', () => {
+  beforeEach(async () => {
+    vi.useFakeTimers()
+    await i18n.changeLanguage('en')
+  })
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+  })
+
+  it('says it is saving, and never tells the story of reading a document that is not being read', () => {
+    render(<UploadProgress name="Passport" personal />)
+    expect(screen.getByTestId('upload-narration').textContent).toBe('Saving to Only me…')
+    act(() => { vi.advanceTimersByTime(NARRATION_STEP_MS * 5) })
+    expect(screen.getByTestId('upload-narration').textContent).toBe('Saving to Only me…')
+    for (const line of ['Reading your document…', 'Pulling out the details…', 'Almost filed…']) expect(screen.queryByText(line)).toBeNull()
+  })
+
+  it('a company upload still narrates as before', () => {
+    render(<UploadProgress name="invoice.pdf" />)
+    expect(screen.getByTestId('upload-narration').textContent).toBe('Reading your document…')
+  })
+})

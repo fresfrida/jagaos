@@ -1,5 +1,5 @@
 /** The Only me section's own search (round 19, DECISIONS #94): a pure, in-browser
- * filter over the person's private files. */
+ * filter over the person's private files. Round 21 (A3, DECISIONS #101): it searches name and caption only. */
 
 import { describe, expect, it } from 'vitest'
 import type { DocumentRow } from '../ops/opsApi'
@@ -49,10 +49,14 @@ describe('filterPersonalFiles', () => {
     expect(ids(filterPersonalFiles(docs, 'lunch tenancy'))).toEqual([])
   })
 
-  it('matches the bucket by its translated label as well as its stored name', () => {
-    const label = (bucket: string) => (bucket === 'Expenses' ? 'Perbelanjaan' : bucket)
-    expect(ids(filterPersonalFiles(docs, 'perbelanjaan', label))).toEqual([1])
-    expect(ids(filterPersonalFiles(docs, 'expenses', label))).toEqual([1])
+  it('does not match what Only me does not show: a bucket, a document type or a vendor name (an old row may still carry them)', () => {
+    expect(filterPersonalFiles(docs, 'expenses')).toEqual([])
+    expect(filterPersonalFiles(docs, 'receipt lunch')).not.toEqual([]) // "Receipt" is in the NAME "Cafe-Receipt.jpg", so this still finds it
+    expect(filterPersonalFiles(docs, 'statutory')).toEqual([])
+    expect(filterPersonalFiles(docs, 'compliance')).toEqual([])
+    expect(filterPersonalFiles(docs, 'vendor')).toEqual([])
+    const vendorOnly = row(4, { filename: 'plain.pdf', vendor_name: 'Quokka Traders', doc_type: 'invoice', bucket: 'Expenses' })
+    expect(filterPersonalFiles([vendorOnly], 'quokka')).toEqual([])
   })
 
   it('reads a plain-text or malformed description without throwing', () => {

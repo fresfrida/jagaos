@@ -1,5 +1,7 @@
 /** The Only me page (round 19, DECISIONS #94): the person's private files, the same
- * two-row upload area sent as private, and the section's own instant search. */
+ * two-row upload area sent as private, and the section's own instant search.
+ * Round 21 (A3, DECISIONS #101): a chosen file waits for a name (and an optional caption) in a sheet, and is sent when
+ * that is saved; the files are shown as name, caption and upload date only. */
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -43,6 +45,14 @@ const NOTES = 'Loose notes'
 
 const pdf = new File(['%PDF'], 'secret.pdf', { type: 'application/pdf' })
 const searchBox = () => screen.getByRole('searchbox', { name: 'Search your private files' })
+
+// The naming sheet (round 21, A3): every choice of a file opens it, and nothing is sent until it is saved.
+const sheet = () => screen.getByRole('dialog', { name: 'Name this file' })
+const nameField = () => within(sheet()).getByLabelText('Name') as HTMLInputElement
+const captionField = () => within(sheet()).getByLabelText('Caption (optional)') as HTMLTextAreaElement
+const saveSheet = () => fireEvent.click(within(sheet()).getByRole('button', { name: 'Save' }))
+const chooseDocument = async (...files: File[]) => { await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files } }) }) }
+const choosePhoto = async (file: File) => { await act(async () => { fireEvent.change(screen.getByTestId('photo-input'), { target: { files: [file] } }) }) }
 
 beforeEach(async () => {
   vi.resetAllMocks()
@@ -220,11 +230,13 @@ describe('Only me: the files', () => {
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
 
-    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: [pdf] } }) })
+    await chooseDocument(pdf)
+    await act(async () => { saveSheet() })
     expect((await screen.findByRole('alert')).textContent).toBe('That file is larger than the 25 MB limit.')
 
     uploadDocument.mockRejectedValueOnce(new ApiError(409, 'You already have 15 private files.', 'personal_file_limit', { code: 'personal_file_limit', limit: 15 }))
-    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: [pdf] } }) })
+    await chooseDocument(pdf)
+    await act(async () => { saveSheet() })
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('You have reached the limit of 15 private files. Delete one to add another.'))
   })
 
@@ -234,7 +246,8 @@ describe('Only me: the files', () => {
     const huge = new File(['x'], 'huge.pdf', { type: 'application/pdf' })
     Object.defineProperty(huge, 'size', { value: 25 * 1024 * 1024 + 1 })
 
-    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: [huge] } }) })
+    await chooseDocument(huge)
+    await act(async () => { saveSheet() })
 
     expect((await screen.findByRole('alert')).textContent).toBe('That file is larger than the 25 MB limit.')
     expect(uploadDocument).not.toHaveBeenCalled()
@@ -257,15 +270,15 @@ describe('Only me: the scoped search', () => {
     expect(listPersonalFiles).toHaveBeenCalledTimes(1)
   })
 
-  it('matches a vendor, and needs every word', async () => {
+  it('matches a word in the name or the caption, and needs every word', async () => {
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
 
-    fireEvent.change(searchBox(), { target: { value: 'klinik receipt' } })
+    fireEvent.change(searchBox(), { target: { value: 'clinic receipt' } }) // "clinic" is in the caption, "receipt" in the name
     expect(screen.getByText(RECEIPT)).toBeTruthy()
     expect(screen.queryByText(NOTES)).toBeNull()
 
-    fireEvent.change(searchBox(), { target: { value: 'klinik lease' } })
+    fireEvent.change(searchBox(), { target: { value: 'clinic lease' } })
     expect(screen.queryByText(RECEIPT)).toBeNull()
   })
 
@@ -296,78 +309,218 @@ describe('Only me: the scoped search', () => {
     expect(screen.getByText(NOTES)).toBeTruthy()
   })
 
-  it('finds a file by its bucket as the person reads it in their language', async () => {
-    listPersonalFiles.mockResolvedValue([row(1, { filename: 'a.pdf', description: JSON.stringify({ en: 'Alpha doc' }), bucket: 'Expenses' }), row(2, { filename: 'b.pdf', description: JSON.stringify({ en: 'Beta doc' }), bucket: 'Compliance' })])
-    await i18n.changeLanguage('ms')
+  it('does not search what the card does not show: a vendor or a bucket an old row may still carry', async () => {
+    listPersonalFiles.mockResolvedValue([row(1, { filename: 'a.pdf', description: JSON.stringify({ en: 'Alpha doc' }), bucket: 'Expenses', vendor_name: 'Klinik Sihat' })])
     render(<OnlyMePage />)
     await screen.findByText('Alpha doc')
-    const label = i18n.t('ops.bucket.expenses')
 
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: label } })
-
-    expect(screen.getByText('Alpha doc')).toBeTruthy()
-    expect(screen.queryByText('Beta doc')).toBeNull()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'klinik' } })
+    expect(screen.getByText('No private file matches "klinik".')).toBeTruthy()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'expenses' } })
+    expect(screen.getByText('No private file matches "expenses".')).toBeTruthy()
   })
 })
 
 describe('Only me: uploading', () => {
-  it('a document is sent as private, then the list reloads and a toast says only they can see it', async () => {
-    uploadDocument.mockResolvedValue({ document_id: 9, status: 'needs_review' })
+  it('choosing a document sends nothing; a sheet asks for a name, offered from the file itself, and a caption', async () => {
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
 
-    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: [pdf] } }) })
+    await chooseDocument(pdf)
 
-    expect(uploadDocument).toHaveBeenCalledWith(pdf, false, 'en', { docTypeHint: undefined, visibility: 'only_me' })
-    await waitFor(() => expect(listPersonalFiles).toHaveBeenCalledTimes(2))
-    expect(await screen.findByText(/Added to Only me/)).toBeTruthy()
+    expect(uploadDocument).not.toHaveBeenCalled()
+    expect(nameField().value).toBe('secret') // the file's own name without its extension: saving is one tap
+    expect(captionField().value).toBe('')
+    expect(within(sheet()).queryByLabelText(/bucket|vendor|type/i)).toBeNull() // that is the whole form
   })
 
-  it('a photo is sent as private too', async () => {
-    uploadDocument.mockResolvedValue({ document_id: 9, status: 'needs_review' })
+  it('saving sends the file as private with the name and caption typed, then the list reloads and a toast says only they can see it', async () => {
+    uploadDocument.mockResolvedValue({ document_id: 9, status: 'filed' })
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    await chooseDocument(pdf)
+
+    fireEvent.change(nameField(), { target: { value: '  Passport  ' } })
+    fireEvent.change(captionField(), { target: { value: 'Renews in March' } })
+    await act(async () => { saveSheet() })
+
+    expect(uploadDocument).toHaveBeenCalledWith(pdf, false, 'en', { docTypeHint: undefined, visibility: 'only_me', name: 'Passport', caption: 'Renews in March' })
+    await waitFor(() => expect(listPersonalFiles).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('Saved to Only me. Only you can see it.')).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Name this file' })).toBeNull()
+  })
+
+  it('an empty caption is not sent at all', async () => {
+    uploadDocument.mockResolvedValue({ document_id: 9, status: 'filed' })
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    await chooseDocument(pdf)
+    await act(async () => { saveSheet() })
+
+    const options = uploadDocument.mock.calls[0]?.[3] as Record<string, unknown>
+    expect(options).toEqual({ docTypeHint: undefined, visibility: 'only_me', name: 'secret' })
+    expect('caption' in options).toBe(false)
+  })
+
+  it('a name is required: with it blank Save is off, and nothing can be sent', async () => {
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    await chooseDocument(pdf)
+
+    fireEvent.change(nameField(), { target: { value: '   ' } })
+
+    expect((within(sheet()).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => { fireEvent.submit(nameField().form!) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)) }) // sending is asynchronous: give a wrongly-sent one time to happen
+    expect(uploadDocument).not.toHaveBeenCalled()
+    expect(sheet()).toBeTruthy() // and the sheet is still open, waiting for a name
+  })
+
+  it('cancelling sends nothing, and the next file starts from its own name, not the last one typed', async () => {
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    await chooseDocument(pdf)
+    fireEvent.change(nameField(), { target: { value: 'half typed' } })
+
+    fireEvent.click(within(sheet()).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Name this file' })).toBeNull())
+    expect(uploadDocument).not.toHaveBeenCalled()
+
+    await chooseDocument(new File(['%PDF'], 'lease.pdf', { type: 'application/pdf' }))
+    expect(nameField().value).toBe('lease')
+  })
+
+  it('the name and caption cannot be typed past what the server accepts', async () => {
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    await chooseDocument(pdf)
+
+    expect(nameField().maxLength).toBe(120)
+    expect(captionField().maxLength).toBe(500)
+  })
+
+  it('a photo waits for a name as well, and is sent as a picture with it', async () => {
+    uploadDocument.mockResolvedValue({ document_id: 9, status: 'filed' })
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
     const photo = new File(['x'], 'me.jpg', { type: 'image/jpeg' })
 
-    await act(async () => { fireEvent.change(screen.getByTestId('photo-input'), { target: { files: [photo] } }) })
+    await choosePhoto(photo)
+    expect(uploadDocument).not.toHaveBeenCalled()
+    fireEvent.change(captionField(), { target: { value: 'Me at the beach' } })
+    await act(async () => { saveSheet() })
 
-    expect(uploadDocument).toHaveBeenCalledWith(photo, true, 'en', { docTypeHint: null, visibility: 'only_me' })
+    expect(uploadDocument).toHaveBeenCalledWith(photo, true, 'en', { docTypeHint: null, visibility: 'only_me', name: 'me', caption: 'Me at the beach' })
   })
 
-  it('several pages of one document are sent as private together', async () => {
-    uploadPages.mockResolvedValue({ document_id: 9, status: 'needs_review' })
+  it('several pages of one document are staged, then named once and sent as private together', async () => {
+    uploadPages.mockResolvedValue({ document_id: 9, status: 'filed' })
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
     const pages = [new File(['a'], 'p1.jpg', { type: 'image/jpeg' }), new File(['b'], 'p2.jpg', { type: 'image/jpeg' })]
 
-    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: pages } }) })
+    await chooseDocument(...pages)
     fireEvent.click(await screen.findByRole('button', { name: /^upload/i }))
+    expect(uploadPages).not.toHaveBeenCalled()
+    expect(within(sheet()).getByText('2 pages, saved as one file')).toBeTruthy()
+    fireEvent.change(nameField(), { target: { value: 'Lease pages' } })
+    await act(async () => { saveSheet() })
 
     await waitFor(() => expect(uploadPages).toHaveBeenCalledTimes(1))
-    expect(uploadPages.mock.calls[0]?.[2]).toEqual({ docTypeHint: undefined, visibility: 'only_me' })
+    expect(uploadPages.mock.calls[0]?.[2]).toEqual({ docTypeHint: undefined, visibility: 'only_me', name: 'Lease pages' })
+  })
+
+  it('cancelling the name of staged pages leaves them staged, so nothing is lost', async () => {
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    await chooseDocument(new File(['a'], 'p1.jpg', { type: 'image/jpeg' }), new File(['b'], 'p2.jpg', { type: 'image/jpeg' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^upload/i }))
+
+    fireEvent.click(within(sheet()).getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Name this file' })).toBeNull())
+    expect(uploadPages).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /^upload/i })).toBeTruthy() // still staged
   })
 
   it('a duplicate is reported as one, not as a saved private file', async () => {
     uploadDocument.mockResolvedValue({ document_id: 1, status: 'duplicate' })
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
-
-    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: [pdf] } }) })
+    await chooseDocument(pdf)
+    await act(async () => { saveSheet() })
 
     expect(await screen.findByText(i18n.t('ops.upload.toast.duplicate'))).toBeTruthy()
-    expect(screen.queryByText(/Added to Only me/)).toBeNull()
+    expect(screen.queryByText(/Saved to Only me/)).toBeNull()
   })
 
   it('a rejected upload shows its error and leaves the list alone', async () => {
     uploadDocument.mockRejectedValue(new Error('too big'))
     render(<OnlyMePage />)
     await screen.findByText(LEASE)
-
-    await act(async () => { fireEvent.change(screen.getByTestId('document-input'), { target: { files: [pdf] } }) })
+    await chooseDocument(pdf)
+    await act(async () => { saveSheet() })
 
     const alert = await screen.findByRole('alert')
     expect(within(alert).getByText(/too big/)).toBeTruthy()
     expect(screen.getByText(LEASE)).toBeTruthy()
+  })
+
+  it('says, under the upload rows, that nothing is read and nothing waits for review, with no link to the review queue', async () => {
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    expect(screen.getByText('Give each file a name, and a caption if you like. Nothing is read, and nothing waits for review.')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /upload page/i })).toBeNull()
+  })
+})
+
+describe('Only me: a file card', () => {
+  it('shows a file\'s thumbnail, name, caption and upload date, and View, Edit and Delete: nothing else', async () => {
+    listPersonalFiles.mockResolvedValue([
+      row(1, { filename: 'Passport', description: JSON.stringify({ en: 'Renews in March' }), bucket: 'Expenses', vendor_name: 'ACME', doc_type: 'invoice', lane: 'invoice', status: 'needs_review' }),
+    ])
+    render(<OnlyMePage />)
+    const name = await screen.findByTestId('personal-file-name')
+    const card = name.closest('div.p-4') as HTMLElement
+
+    expect(name.textContent).toBe('Passport')
+    expect(within(card).getByTestId('personal-file-caption').textContent).toBe('Renews in March')
+    expect(card.textContent).toContain('Upload date: 25 Sept 2026')
+    for (const action of ['View', 'Edit', 'Delete']) expect(within(card).getByRole('button', { name: new RegExp(`^${action}$`, 'i') })).toBeTruthy()
+    // an old row still carries taxonomy and a status, and none of it is rendered
+    for (const hidden of ['Expenses', 'ACME', 'invoice', 'Needs review', 'needs_review', 'Trace', 'Document date']) {
+      expect(card.textContent).not.toContain(hidden)
+    }
+    expect(within(card).queryByRole('button', { name: /more actions|trace/i })).toBeNull()
+  })
+
+  it('Edit changes the name and the caption only, and sends the caption in the person\'s language', async () => {
+    vi.mocked(opsApi.editDocument).mockResolvedValue({ status: 'updated' })
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]!)
+
+    const form = screen.getByRole('button', { name: 'Save' }).closest('form') as HTMLFormElement
+    expect(within(form).queryByLabelText(/bucket|vendor|type/i)).toBeNull()
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: '  Flat lease  ' } })
+    fireEvent.change(within(form).getByLabelText('Caption (optional)'), { target: { value: 'Signed copy' } })
+    await act(async () => { fireEvent.click(within(form).getByRole('button', { name: 'Save' })) })
+
+    expect(opsApi.editDocument).toHaveBeenCalledWith(1, { filename: 'Flat lease', description: 'Signed copy', language: 'en' })
+    await waitFor(() => expect(listPersonalFiles).toHaveBeenCalledTimes(2))
+  })
+
+  it('a caption can be cleared', async () => {
+    vi.mocked(opsApi.editDocument).mockResolvedValue({ status: 'updated' })
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]!)
+    const form = screen.getByRole('button', { name: 'Save' }).closest('form') as HTMLFormElement
+
+    fireEvent.change(within(form).getByLabelText('Caption (optional)'), { target: { value: '' } })
+    await act(async () => { fireEvent.click(within(form).getByRole('button', { name: 'Save' })) })
+
+    expect(opsApi.editDocument).toHaveBeenCalledWith(1, expect.objectContaining({ description: '' }))
   })
 })
 
@@ -390,16 +543,24 @@ describe('Only me: the scratchpad', () => {
     expect(screen.queryByTestId('scratchpad-canvas')).toBeNull()
   })
 
-  it('saving uploads the drawing as a private photo, then the list reloads', async () => {
-    uploadDocument.mockResolvedValue({ document_id: 9, status: 'needs_review' })
-    render(<OnlyMePage />)
-    await screen.findByText(LEASE)
+  const drawSomething = () => {
     fireEvent.click(screen.getByRole('button', { name: /scratchpad/i }))
     const canvas = screen.getByTestId('scratchpad-canvas')
     fireEvent.pointerDown(canvas, { clientX: 5, clientY: 5, pointerId: 1 })
     fireEvent.pointerUp(canvas, { clientX: 5, clientY: 5, pointerId: 1 })
+  }
+
+  it('saving asks for a name (offered from the note\'s own), and then uploads the drawing as a private photo and reloads the list', async () => {
+    uploadDocument.mockResolvedValue({ document_id: 9, status: 'filed' })
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    drawSomething()
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save as image' })) })
+    expect(uploadDocument).not.toHaveBeenCalled()
+    expect(nameField().value).toMatch(/^scratchpad-\d{8}-\d{6}$/)
+    fireEvent.change(nameField(), { target: { value: 'Shopping sketch' } })
+    await act(async () => { saveSheet() })
 
     await waitFor(() => expect(uploadDocument).toHaveBeenCalledTimes(1))
     const [file, isPicture, language, options] = uploadDocument.mock.calls[0] as unknown as [File, boolean, string, unknown]
@@ -407,7 +568,21 @@ describe('Only me: the scratchpad', () => {
     expect(file.name).toMatch(/^scratchpad-\d{8}-\d{6}\.png$/)
     expect(isPicture).toBe(true)
     expect(language).toBe('en')
-    expect(options).toEqual({ docTypeHint: null, visibility: 'only_me' })
+    expect(options).toEqual({ docTypeHint: null, visibility: 'only_me', name: 'Shopping sketch' })
     await waitFor(() => expect(listPersonalFiles).toHaveBeenCalledTimes(2))
+  })
+
+  it('cancelling the name keeps the drawing, so a slip does not lose the note', async () => {
+    render(<OnlyMePage />)
+    await screen.findByText(LEASE)
+    drawSomething()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save as image' })) })
+
+    fireEvent.click(within(sheet()).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Name this file' })).toBeNull())
+
+    expect(uploadDocument).not.toHaveBeenCalled()
+    expect(screen.getByTestId('scratchpad-canvas')).toBeTruthy()
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Save as image' }) as HTMLButtonElement).disabled).toBe(false)) // still has ink
   })
 })

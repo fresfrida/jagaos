@@ -7,7 +7,10 @@
  * pages (no session there to call this with) — this hits the real
  * GET /api/search. Deliberately doesn't use useOpsData: this page has no
  * need for the bulk documents/expectations/obligations/reviewItems fetch
- * the other ops pages share, only whatever a search actually returns. */
+ * the other ops pages share, only whatever a search actually returns.
+ *
+ * Round 21 (A8, DECISIONS #101): before anything is searched, the page shows a word cloud of what the company's documents
+ * talk about (features/search/WordCloud.tsx); a word is a button that runs that search. */
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -19,6 +22,8 @@ import { DocumentResultsList } from '../features/ops/DocumentResultsList'
 import { OpsStatusBar } from '../features/ops/OpsStatusBar'
 import { VENDOR_NAMES_DATALIST_ID } from '../features/ops/opsShared'
 import { opsApi, type DocumentRow } from '../features/ops/opsApi'
+import { useSearchTerms } from '../features/search/useSearchTerms'
+import { WordCloud } from '../features/search/WordCloud'
 
 function SearchContent() {
   const { t } = useTranslation()
@@ -26,6 +31,7 @@ function SearchContent() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<DocumentRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const cloud = useSearchTerms(true)
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
   const canResolve = role !== null && roleAtLeast(role, 'admin')
@@ -92,12 +98,23 @@ function SearchContent() {
       </form>
 
       {results === null ? (
-        <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">{t('ops.search.prompt')}</p>
+        <>
+          <p className="rounded-card border border-line bg-white p-6 text-sm text-muted">{t('ops.search.prompt')}</p>
+          <WordCloud
+            state={cloud.state}
+            onRetry={cloud.retry}
+            onPick={(term) => {
+              setQuery(term)
+              void runSearch(term)
+            }}
+          />
+        </>
       ) : (
         <DocumentResultsList
           documents={results}
           canEdit={canUpload}
           canArchive={canResolve}
+          canRequestPurge={role === 'owner'}
           onSaved={() => void runSearch(query)}
           emptyMessage={t('ops.documents.noMatch')}
         />

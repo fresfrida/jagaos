@@ -6,11 +6,14 @@
  * longer appear in Company Files, Search or the Calendar at all (they used to be listed
  * inline for their uploader with a lock).
  *
+ * Round 21 (A3, DECISIONS #101): a personal file is NAMED BY ITS OWNER and filed on the spot. Choosing a file (or a
+ * scratchpad note, or several photos) opens one small form, a name (required) and a caption (optional), and saving sends it;
+ * the server files it at once with no pipeline, no model, no review. The person's files are PersonalFileCards (thumbnail,
+ * name, caption, upload date, View / Edit / Delete and nothing else), not Company Files' cards. Delete is FOR GOOD after the
+ * person types the file's name (round 20, DECISIONS #99), so it frees one of the 15 slots.
+ *
  * Composition only: the same Document / Photo upload area as the Upload page
- * (UploadPanel, a flow that sends every upload as only_me), the person's files as the
- * same cards Company Files uses (DocumentResultsList, WITH Delete, which here deletes FOR GOOD
- * after the person types the file's name: round 20, DECISIONS #99; a private file is never
- * soft-archived, so a delete really frees one of the 15 slots), and
+ * (UploadPanel, a flow that sends every upload as only_me), the person's files (PersonalFileList), and
  * this section's own search box and a bare scratchpad (features/personal/Scratchpad.tsx: draw,
  * clear, save; a save is uploaded as a private image like any Photo). The search filters the loaded list in the browser as they
  * type (features/personal/personalSearch.ts): it never touches the company search.
@@ -19,8 +22,8 @@
  * A viewer cannot upload, so for them it is the read-only variant: the same heading, the privacy note and
  * the list (empty unless the person was demoted from a role that could upload), with no upload rows, no
  * scratchpad and no Delete. It is a viewer's signed-in home, rendered at `/` by Page.tsx (and at /only-me),
- * never a redirect. A new private file is confirmed like any upload, in the review
- * queue on the Upload page, and shows here with its status meanwhile. */
+ * never a redirect. An OLD private file still waiting in the review queue (rounds 19 and 20 sent them
+ * through it) is confirmed there as before and shows here like any other. */
 
 import { Lock, PenLine, Search, X } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
@@ -31,9 +34,9 @@ import { Toast, useToast } from '../components/ui/Toast'
 import { useAuth } from '../features/auth/AuthContext'
 import { RequireSession } from '../features/auth/RequireSession'
 import { roleAtLeast } from '../features/auth/authApi'
-import { DocumentResultsList } from '../features/ops/DocumentResultsList'
-import { bucketLabel } from '../features/ops/opsShared'
 import { type UploadResult } from '../features/ops/opsApi'
+import { PersonalDetailsSheet } from '../features/personal/PersonalDetailsSheet'
+import { PersonalFileList } from '../features/personal/PersonalFileList'
 import { filterPersonalFiles } from '../features/personal/personalSearch'
 import { Scratchpad } from '../features/personal/Scratchpad'
 import { usePersonalFiles } from '../features/personal/usePersonalFiles'
@@ -42,8 +45,6 @@ import { UploadPanel } from '../features/upload/UploadPanel'
 import { ChoiceRow } from '../features/upload/UploadChoice'
 import { uploadErrorMessage } from '../features/upload/uploadErrorMessage'
 import { useUploadFlow } from '../features/upload/useUploadFlow'
-import { Link } from '../router/Link'
-import { routeHref } from '../router/routes'
 
 function OnlyMeContent() {
   const { t, i18n } = useTranslation()
@@ -79,7 +80,7 @@ function OnlyMeContent() {
   const atLimit = limits !== null && limits.personal_files_used >= limits.max_personal_files
 
   const files = personal.state.status === 'ready' ? personal.state.files : []
-  const shown = useMemo(() => filterPersonalFiles(files, query, (b) => bucketLabel(t, b)), [files, query, t])
+  const shown = useMemo(() => filterPersonalFiles(files, query), [files, query])
   const searching = query.trim() !== ''
 
   return (
@@ -98,13 +99,8 @@ function OnlyMeContent() {
       {canUpload && (
         <>
         <Card className="p-6" interactive={false}>
-          <UploadPanel flow={flow} disabled={atLimit} />
-          <p className="mt-4 text-[13px] leading-5 text-muted">
-            {t('onlyMe.reviewHint')}{' '}
-            <Link href={routeHref('upload')} className="text-ink underline underline-offset-2 hover:text-muted">
-              {t('onlyMe.reviewLink')}
-            </Link>
-          </p>
+          <UploadPanel flow={flow} disabled={atLimit} personal />
+          <p className="mt-4 text-[13px] leading-5 text-muted">{t('onlyMe.namingHint')}</p>
           {limits !== null && (
             <p
               className={`mt-2 text-[13px] leading-5 ${atLimit ? 'font-medium text-ink' : 'text-muted'}`}
@@ -174,18 +170,17 @@ function OnlyMeContent() {
                 {t('onlyMe.searchCount', { shown: shown.length, total: files.length })}
               </p>
             )}
-            <DocumentResultsList
+            <PersonalFileList
               documents={shown}
               canEdit={canUpload}
-              canArchive={canUpload}
-              permanentDelete
-              onSaved={() => void refreshAll()}
+              onChanged={() => void refreshAll()}
               emptyMessage={searching ? t('onlyMe.noMatches', { query: query.trim() }) : t(canUpload ? 'onlyMe.empty' : 'onlyMe.emptyViewer')}
             />
           </>
         )}
       </section>
 
+      <PersonalDetailsSheet draft={flow.draft} onSave={(details) => void flow.saveDraft(details)} onCancel={flow.cancelDraft} />
       <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )

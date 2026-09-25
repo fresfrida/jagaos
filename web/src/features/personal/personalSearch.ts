@@ -4,9 +4,11 @@
  * has no relation to GET /api/search (which no longer returns personal files at all).
  *
  * A file matches when EVERY word of the query appears somewhere in its searchable
- * text: the filename, its description in every language it has (so a Malay caption is
- * found from English UI too), the vendor, the document type and the bucket. Case and
- * accents are ignored. An empty query matches everything. */
+ * text: its NAME and its CAPTION (in every language the caption has, for an old row that
+ * has several). Round 21 (A3, DECISIONS #101): those are the only two things Only me
+ * shows for a file, so they are the only two it searches; a match on a word the card
+ * does not display would look like a bug. Case and accents are ignored. An empty query
+ * matches everything. */
 
 import type { DocumentRow } from '../ops/opsApi'
 
@@ -28,21 +30,16 @@ function descriptionText(raw: string | null): string {
   return raw
 }
 
-/** The text a file is searched by. `bucketText` is the bucket as the person reads it
- * (translated), passed in so this stays free of i18n. */
-export function searchableText(doc: DocumentRow, bucketText: string = doc.bucket ?? ''): string {
-  return fold([doc.filename, descriptionText(doc.description), doc.vendor_name ?? '', doc.doc_type ?? '', doc.bucket ?? '', bucketText].join(' '))
+/** The text a file is searched by: its name and its caption. */
+export function searchableText(doc: Pick<DocumentRow, 'filename' | 'description'>): string {
+  return fold([doc.filename, descriptionText(doc.description)].join(' '))
 }
 
-export function filterPersonalFiles(
-  docs: DocumentRow[],
-  query: string,
-  bucketLabelOf: (bucket: string) => string = (b) => b,
-): DocumentRow[] {
+export function filterPersonalFiles(docs: DocumentRow[], query: string): DocumentRow[] {
   const words = fold(query).split(/\s+/).filter(Boolean)
   if (words.length === 0) return docs
   return docs.filter((doc) => {
-    const text = searchableText(doc, doc.bucket ? bucketLabelOf(doc.bucket) : '')
+    const text = searchableText(doc)
     return words.every((word) => text.includes(word))
   })
 }

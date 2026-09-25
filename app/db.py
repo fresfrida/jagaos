@@ -304,6 +304,13 @@ _MIGRATIONS = [
     # obligation.evidence_document_id. Nullable: a 'missing' row has none, and a
     # row satisfied before this column existed is filled in at startup.
     "ALTER TABLE expectation ADD COLUMN evidence_document_id INTEGER REFERENCES document(id)",
+    # 2026-09-25 (round 21, A5, DECISIONS #101): an owner's REQUEST that a document be removed permanently. A flag
+    # beside `status`, not a new status: the document is archived, which hides it through the eight queries in
+    # app/main.py that filter `status != 'archived'` (a new status would have been missed by every one of them), and these two
+    # columns say "and the owner asked for it to be purged". Nothing is deleted; whoever runs scripts/purge_document.py
+    # finds the requests here. NULL = never requested.
+    "ALTER TABLE document ADD COLUMN purge_requested_at TEXT",
+    "ALTER TABLE document ADD COLUMN purge_requested_by TEXT",
 ]
 
 

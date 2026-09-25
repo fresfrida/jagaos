@@ -44,20 +44,18 @@ import { FileName } from '../../components/ui/FileName'
 import { dayInTimezone, formatShortDate, localeFor, startOfMonth } from '../../lib/dates'
 import { useAuth } from '../auth/AuthContext'
 import { DocumentViewerModal } from '../ops/DocumentCard'
+import { DateBasisToggle } from '../ops/DateBasisToggle'
+import { documentDay, type DateBasis } from '../ops/documentDates'
 import { DocumentTypeIcon, StatusPill, bucketLabel, formatDocumentLabel } from '../ops/opsShared'
 import type { DocumentRow } from '../ops/opsApi'
 import { MonthGrid } from './MonthGrid'
 
-type DateBasis = 'upload' | 'document'
-
-// Amendment 2 (2026-09-22, DECISIONS #43) fixed the toggle's wording as "Upload
-// date" / "Document date". Round 16 (item 8, DECISIONS #90) renamed the TOGGLE to
-// "When filed" / "Document dates", so it has its own keys; the document card's
-// "Upload date: ..." line keeps the old ones (ops.dates.uploadDate / documentDate).
-const DATE_BASIS_OPTIONS: { id: DateBasis; labelKey: string }[] = [
-  { id: 'upload', labelKey: 'ops.dates.basis.filed' },
-  { id: 'document', labelKey: 'ops.dates.basis.document' },
-]
+// The two date bases and the rule for which day a document falls on are shared with the Company Files date-range
+// filter (features/ops/documentDates.ts, DateBasisToggle.tsx). History: Amendment 2 (2026-09-22, DECISIONS #43) fixed the
+// toggle's wording as "Upload date" / "Document date"; round 16 (item 8, DECISIONS #90) renamed it "When filed" / "Document
+// dates"; round 21 (A1, DECISIONS #101) renamed "When filed" to "Uploaded": the option has always grouped by received_at,
+// and no column records when a review was confirmed, so "filed" over-promised. The document card's "Upload date: ..."
+// line keeps its own keys (ops.dates.uploadDate / documentDate).
 
 // 2026-09-23 (live 375px bug report): two fixes to the row itself.
 // (1) It was a plain, non-interactive <div> — now a real <button> opening
@@ -109,19 +107,13 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
     const map = new Map<string, DocumentRow[]>()
     const withoutDate: DocumentRow[] = []
     for (const doc of documents) {
-      const raw = basis === 'upload' ? doc.received_at : doc.occurred_on
-      if (!raw) {
+      // 2026-09-24 (item 2): received_at is a real UTC timestamp, so it is bucketed through the company's timezone;
+      // occurred_on is a bare date and keeps its own day (documentDay explains both).
+      const day = documentDay(doc, basis, timezone)
+      if (day === null) {
         withoutDate.push(doc)
         continue
       }
-      // 2026-09-24 (item 2): received_at is a real UTC timestamp (time of
-      // day matters — a document uploaded near UTC midnight can fall on
-      // the previous UTC calendar day vs. the company's own), so it's
-      // bucketed through the company's timezone. occurred_on is already a
-      // bare date (an invoice's issued_on, EXIF date) with no time-of-day
-      // to convert — its own calendar day is unambiguous regardless of
-      // timezone, so it keeps the plain prefix slice.
-      const day = basis === 'upload' ? dayInTimezone(raw, timezone) : raw.slice(0, 10)
       const existing = map.get(day)
       if (existing) existing.push(doc)
       else map.set(day, [doc])
@@ -137,20 +129,7 @@ export function DatesView({ documents }: { documents: DocumentRow[] }) {
 
   return (
     <div>
-      <div className="mb-4 flex w-fit gap-0.5 rounded-control border border-line p-0.5">
-        {DATE_BASIS_OPTIONS.map((opt) => {
-          const active = basis === opt.id
-          return (
-            <button
-              key={opt.id}
-              onClick={() => setBasis(opt.id)}
-              className={`rounded-md px-3 py-1.5 text-[14px] transition-colors ${active ? 'bg-ink text-white' : 'text-muted hover:text-ink'}`}
-            >
-              {t(opt.labelKey)}
-            </button>
-          )
-        })}
-      </div>
+      <DateBasisToggle basis={basis} onChange={setBasis} className="mb-4" />
 
       {/* Round 16 (item 7): the month grid is always drawn. With no documents it used to
          be replaced by a text-only "none uploaded" box, so a new company saw no

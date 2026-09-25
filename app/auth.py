@@ -321,6 +321,22 @@ def may_archive_document(membership: CurrentMembership, *, visibility: str) -> b
     return visibility == VISIBILITY_COMPANY and ROLE_ORDER[membership.role] >= ROLE_ORDER["admin"]
 
 
+def may_see_purge_requested(membership: CurrentMembership) -> bool:
+    """The ONE exception to "an archived document is invisible" (round 21, DECISIONS #102): the OWNER keeps seeing a company
+    document that has been asked to be purged (archived, `purge_requested_at` set), marked "Purge requested", until the team
+    removes the row, so the request is an accountability trail and not a disappearance. Every other role, and the owner of any
+    other company, still sees an archived document as nonexistent. The document's own visibility rules still apply on top."""
+    return membership.role == "owner"
+
+
+def may_request_purge(membership: CurrentMembership, *, visibility: str) -> bool:
+    """Who may ASK for a company document to be removed permanently (round 21, A5, DECISIONS #101): the owner, for a
+    company document. Nobody else: an admin keeps Delete (archive) and no Purge, and a personal file is never
+    purge-requested (its uploader deletes it for good, may_purge_document). It only requests: nothing is deleted.
+    Visibility itself is checked first (may_see_document)."""
+    return membership.role == "owner" and visibility == VISIBILITY_COMPANY
+
+
 def may_purge_document(
     membership: CurrentMembership, *, uploaded_by_user_id: int | None, visibility: str,
 ) -> bool:

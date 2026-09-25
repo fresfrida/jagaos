@@ -109,8 +109,19 @@ def test_a_company_document_is_still_listed_and_searchable_and_not_in_the_person
     assert shared not in _ids(team, "user1", "/api/personal-files")
 
 
-def test_a_private_file_pending_review_is_listed_and_still_reaches_only_its_uploaders_queue(team):
-    mine = _upload(team, "user1", "pendingprivate", visibility="only_me")
+def test_a_new_private_file_is_listed_at_once_and_waits_in_nobodys_review_queue(team):
+    mine = _upload(team, "user1", "filedprivate", visibility="only_me")
+
+    assert mine in _ids(team, "user1", "/api/personal-files")
+    for actor in ("user1", "owner", "admin", "user2"):
+        queue = {i["document_id"] for i in client.get("/api/review", headers=_headers(team["tokens"][actor])).json()}
+        assert mine not in queue, actor       # round 21 (A3, DECISIONS #101): filed on the spot, nothing to review
+
+
+def test_an_old_private_file_still_pending_review_is_listed_and_still_reaches_only_its_uploaders_queue(team):
+    mine = _upload(team, "user1", "pendingprivate")                     # a company upload the pipeline reviews ...
+    with get_conn() as conn:
+        conn.execute("UPDATE document SET visibility = 'only_me' WHERE id = ?", (mine,))   # ... marked personal, as rounds 19 and 20 left them
 
     assert mine in _ids(team, "user1", "/api/personal-files")
     queue = {i["document_id"] for i in client.get("/api/review", headers=_headers(team["tokens"]["user1"])).json()}

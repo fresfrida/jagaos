@@ -59,6 +59,7 @@ export function UploadChoice({
   onDocumentFiles,
   onPhotoFile,
   showHeading = true,
+  hints,
   ref,
 }: {
   disabled: boolean
@@ -67,6 +68,9 @@ export function UploadChoice({
   // False inside the universal Upload sheet (round 16), whose own title is the
   // heading; the group is then named by that title's text instead.
   showHeading?: boolean
+  // Other one-line descriptions for the two rows (Only me says nothing is read and nothing is captioned, round 21, A3,
+  // DECISIONS #101). Omitted means the company Upload page's own.
+  hints?: { document: string; photo: string }
   ref?: Ref<HTMLDivElement>
 }) {
   const { t } = useTranslation()
@@ -91,14 +95,14 @@ export function UploadChoice({
         <ChoiceRow
           icon={FileText}
           title={t('ops.upload.choice.document.title')}
-          hint={t('ops.upload.choice.document.hint')}
+          hint={hints?.document ?? t('ops.upload.choice.document.hint')}
           disabled={disabled}
           onClick={() => documentInput.current?.click()}
         />
         <ChoiceRow
           icon={Camera}
           title={t('ops.upload.choice.photo.title')}
-          hint={t('ops.upload.choice.photo.hint')}
+          hint={hints?.photo ?? t('ops.upload.choice.photo.hint')}
           disabled={disabled}
           onClick={() => photoInput.current?.click()}
         />

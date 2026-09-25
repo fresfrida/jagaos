@@ -23,6 +23,10 @@ import sqlite3
 
 MAX_FILE_BYTES = 25 * 1024 * 1024
 MAX_PERSONAL_FILES = 15
+# What a person types when they put a file into Only me (round 21, A3, DECISIONS #101): a name (required) and a caption (optional).
+# The server is the authority; the web form mirrors these numbers as input limits.
+MAX_NAME_CHARS = 120
+MAX_CAPTION_CHARS = 500
 
 # The whole request body an upload endpoint will read: the files' own bound plus multipart framing.
 _FRAMING = 1024 * 1024

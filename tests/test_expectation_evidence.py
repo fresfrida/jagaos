@@ -234,7 +234,9 @@ def test_a_personal_file_never_satisfies_or_evidences_a_row(team, model):
     model["event"], model["doc_type"] = None, "Company Constitution"
     resp = client.post("/api/documents?visibility=only_me", headers=_headers(team["owner"]),
                        files={"file": ("private.pdf", _pdf("private"), "application/pdf")})
-    _confirm(team["owner"], resp.json()["document_id"])
+    # Round 21 (A3, DECISIONS #101): a personal file is filed on the spot, with no doc type and no review, so it has nothing to
+    # confirm and nothing to match an expectation by; it is filed, and the row must still be missing.
+    assert resp.json()["status"] == "filed"
 
     row = _checklist(team["owner"])["constitution"]
 

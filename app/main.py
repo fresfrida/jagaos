@@ -36,7 +36,9 @@ from app.auth import (  # noqa: E402
     may_archive_document,
     may_edit_document,
     may_purge_document,
+    may_request_purge,
     may_resolve_review_item,
+    may_see_purge_requested,
     may_see_document,
     may_see_review_item,
     ROLE_ORDER,
@@ -63,10 +65,12 @@ from app.rules.company_profile import (  # noqa: E402
     may_prefill_company_from,
 )
 from app.rules.expectations import LABEL_BY_DOC_TYPE  # noqa: E402
-from app.rules.transitions import InvalidTransition, transition_document  # noqa: E402
+from app.rules.transitions import InvalidTransition, file_personal_document, transition_document  # noqa: E402
 from app.limits import (  # noqa: E402
     BodySizeLimit,
+    MAX_CAPTION_CHARS,
     MAX_FILE_BYTES,
+    MAX_NAME_CHARS,
     MAX_PERSONAL_FILES,
     file_too_large_detail,
     personal_file_count,
@@ -74,6 +78,7 @@ from app.limits import (  # noqa: E402
 )
 from app.purge import PurgeRefused, purge_now  # noqa: E402
 from app.thumbnails import get_pdf_thumbnail  # noqa: E402
+from app.wordcloud import MAX_DOCUMENTS_SCANNED, top_terms  # noqa: E402
 from app.models import (  # noqa: E402
     PurgeRequest,
     AddMemberRequest,
@@ -486,17 +491,18 @@ def _caption_document_background(document_id: int, stored_path: str) -> None:
 def _process_upload(
     membership: CurrentMembership, background_tasks: BackgroundTasks, tmp_path: str, filename: str,
     source_channel: str, is_picture: bool, language: str, visibility: str,
-    doc_type_hint: str | None = None,
+    doc_type_hint: str | None = None, name: str = "", caption: str | None = None,
 ) -> dict:
     """Run one already-written temp file through ingest and the pipeline and
-    build the upload response. Shared by the single-file upload and the
+    build the upload response. A PERSONAL file (visibility other than 'company') does not take the pipeline at all: it is
+    stored, named by its owner (`name`, `caption`) and filed on the spot (round 21, A3, DECISIONS #101). Shared by the single-file upload and the
     multi-page upload below (2026-09-24, round 12, DECISIONS #78), so a merged
     scan takes exactly the path any other document takes. Does not delete
     tmp_path — the caller owns its lifetime (see the try/finally in each)."""
     ingest_state = ingest(
         company_id=membership.company_id, source_path=tmp_path, filename=filename,
         source_channel=source_channel, uploaded_by_user_id=membership.user_id,
-        visibility=visibility,
+        visibility=visibility, read_content=visibility == "company",
     )
     if ingest_state.get("text_source") == "duplicate":
         # The duplicate check is on the file's hash across the whole database,
@@ -511,6 +517,9 @@ def _process_upload(
             ).fetchone()
         seen = not _hidden_or_missing(membership, existing)
         return {"document_id": ingest_state["document_id"] if seen else None, "status": "duplicate"}
+
+    if visibility != "company":
+        return _file_personal_upload(membership, ingest_state["document_id"], filename, name, caption)
 
     # 2026-09-23 (DECISIONS #52): the upload-time "is this a picture?"
     # toggle (web/src/features/ops/OpsConsole.tsx) — set on the state dict
@@ -592,6 +601,43 @@ def _process_upload(
     }
 
 
+def _clean_personal_details(name: str | None, caption: str | None) -> tuple[str, str | None]:
+    """What a person typed for a file going into Only me (round 21, A3, DECISIONS #101): the name with its whitespace collapsed
+    (blank if none was given, the caller then keeps the file's own name) and the caption trimmed (None if empty). Over the
+    limits it is a 422 naming which one, before anything is stored, and never silently cut short."""
+    clean_name = " ".join((name or "").split())
+    clean_caption = (caption or "").strip()
+    if len(clean_name) > MAX_NAME_CHARS:
+        raise HTTPException(422, detail={
+            "code": "name_too_long", "limit": MAX_NAME_CHARS,
+            "message": f"A file's name can be at most {MAX_NAME_CHARS} characters.",
+        })
+    if len(clean_caption) > MAX_CAPTION_CHARS:
+        raise HTTPException(422, detail={
+            "code": "caption_too_long", "limit": MAX_CAPTION_CHARS,
+            "message": f"A caption can be at most {MAX_CAPTION_CHARS} characters.",
+        })
+    return clean_name, clean_caption or None
+
+
+def _file_personal_upload(
+    membership: CurrentMembership, document_id: int, original_name: str, name: str, caption: str | None,
+) -> dict:
+    """The whole "pipeline" of a personal file (round 21, A3, DECISIONS #101). It is already stored (ingest, no content read).
+    Give it the name and caption its owner typed (their own words replace anything a model would have written: a personal
+    photo gets no AI caption, by decision), then file it through the one rule that allows that without review
+    (rules.transitions.file_personal_document, personal files only). No classify, no extract, no verify, no review item, no
+    model call, no captioning. Company documents never reach this function: _process_upload sends only non-company ones."""
+    description = json.dumps({"en": caption}) if caption else None
+    with get_conn(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE document SET filename = ?, description = ? WHERE id = ?", (name or original_name, description, document_id),
+        )
+    file_personal_document(document_id, actor=membership.email, db_path=DB_PATH)
+    reindex_document_search(document_id, DB_PATH)
+    return {"document_id": document_id, "status": "filed"}
+
+
 def _refuse_a_full_personal_space(membership: CurrentMembership, visibility: str, sha256: str | None) -> None:
     """The per-person cap on private files (app/limits.py): a 409 when this person already holds
     MAX_PERSONAL_FILES in this company. Company uploads are never limited by it. A file the database already
@@ -638,7 +684,12 @@ async def upload_document(
     # (rules/expectations.LABEL_BY_DOC_TYPE); it only adds a hint to classify's
     # prompt and never decides the classification.
     doc_type_hint: str | None = None,
+    # Round 21 (A3, DECISIONS #101): what the person typed when putting a file into Only me. Used ONLY for a personal file
+    # (visibility=only_me), whose name and caption they are; ignored for a company document, which is named in review.
+    name: str | None = None,
+    caption: str | None = None,
 ) -> dict:
+    personal_name, personal_caption = _clean_personal_details(name, caption) if visibility != "company" else ("", None)
     data = _read_within_the_file_limit(await file.read())
     _refuse_a_full_personal_space(membership, visibility, hashlib.sha256(data).hexdigest())
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
@@ -659,7 +710,7 @@ async def upload_document(
     try:
         return _process_upload(
             membership, background_tasks, tmp_path, file.filename, source_channel, is_picture, language,
-            visibility, doc_type_hint,
+            visibility, doc_type_hint, personal_name, personal_caption,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -670,7 +721,7 @@ async def upload_document_pages(
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
     background_tasks: BackgroundTasks,
     files: list[UploadFile], language: str = "en", visibility: Visibility = "company",
-    doc_type_hint: str | None = None,
+    doc_type_hint: str | None = None, name: str | None = None, caption: str | None = None,
 ) -> dict:
     """Several photos of one document, in page order -> ONE document
     (2026-09-24, round 12, DECISIONS #78). The pages are merged into a single
@@ -690,6 +741,7 @@ async def upload_document_pages(
         raise HTTPException(400, "Send at least 2 pages. A single file is an ordinary upload.")
     if len(files) > MAX_PDF_OCR_PAGES:
         raise HTTPException(400, f"At most {MAX_PDF_OCR_PAGES} pages per document, got {len(files)}")
+    personal_name, personal_caption = _clean_personal_details(name, caption) if visibility != "company" else ("", None)
     # One document, however many pages: it counts as one private file. The merged file's hash is not
     # known yet, so a duplicate set of pages at the cap is told "full" rather than "duplicate".
     _refuse_a_full_personal_space(membership, visibility, None)
@@ -709,7 +761,7 @@ async def upload_document_pages(
         stem = Path(files[0].filename or "scan").stem
         return _process_upload(
             membership, background_tasks, merged.name, f"{stem}-{len(files)}-pages.pdf", "web", False, language,
-            visibility, doc_type_hint,
+            visibility, doc_type_hint, personal_name, personal_caption,
         )
     finally:
         for path in temp_paths:
@@ -964,7 +1016,24 @@ def _document_row_for(membership: CurrentMembership, row: sqlite3.Row) -> dict:
     doc = dict(row)
     uploader = doc.pop("uploaded_by_user_id")
     doc["can_edit"] = may_edit_document(membership, uploader)
+    requested = doc.pop("purge_requested_at", None)  # internal: the row keeps the same shape for everyone
+    if doc.get("status") == "archived" and requested:
+        # Only the owner is ever sent an archived row (_LIVE_OR_PURGE_REQUESTED): it is one they asked to have purged,
+        # shown as such and read-only until the team removes it (round 21, DECISIONS #102).
+        doc["status"] = "purge_requested"
+        doc["can_edit"] = False
     return doc
+
+
+# The one exception to "an archived document is invisible" (round 21, DECISIONS #102): a WHERE fragment that lets a row
+# through when it is live, or when it is archived with a purge request AND the caller is the owner (auth.
+# may_see_purge_requested). Its single `?` is 1 or 0; pass `_owner_flag(membership)`. Used by the four places the owner
+# reads a document by list, search, file and thumbnail; every other `status != 'archived'` filter is unchanged.
+_LIVE_OR_PURGE_REQUESTED = "(status != 'archived' OR (? = 1 AND purge_requested_at IS NOT NULL))"
+
+
+def _owner_flag(membership: CurrentMembership) -> int:
+    return 1 if may_see_purge_requested(membership) else 0
 
 
 @app.get("/api/documents")
@@ -985,10 +1054,10 @@ def list_documents(
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility "
-            "FROM document WHERE company_id = ? AND status != 'archived' "
+            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility, purge_requested_at "
+            f"FROM document WHERE company_id = ? AND {_LIVE_OR_PURGE_REQUESTED} "
             "ORDER BY received_at DESC",
-            (membership.company_id,),
+            (membership.company_id, _owner_flag(membership)),
         ).fetchall()
         # Round 13 (DECISIONS #83/#85): a document this caller may not see —
         # pending review and not theirs to see, or someone else's personal
@@ -1033,6 +1102,27 @@ def get_limits(membership: Annotated[CurrentMembership, Depends(get_current_memb
     return {"max_file_bytes": MAX_FILE_BYTES, "max_personal_files": MAX_PERSONAL_FILES, "personal_files_used": used}
 
 
+@app.get("/api/search/terms")
+def search_terms(membership: Annotated[CurrentMembership, Depends(get_current_membership)]) -> list[dict]:
+    """The most telling words across the caller's company's documents, for the word cloud on Search (round 21, A8,
+    DECISIONS #101): about 40 `{term, count}`, count being how many documents contain the word (app/wordcloud.py says how
+    words are chosen and what is left out). Read-only: nothing is written, no schema, no index.
+
+    Who sees which text is the rule everything else already uses, not a new one: THIS company only (`company_id` comes from
+    the session), company documents only (a personal file's text never enters, whoever asks), only documents this caller
+    may see (auth.may_see_document: a colleague's upload still waiting for review stays out), never a business profile,
+    and never an archived, quarantined or rejected document. So no company sees another's words, and no caller sees a word
+    that only a document they cannot open contains. The newest MAX_DOCUMENTS_SCANNED documents are read."""
+    with get_conn(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT status, uploaded_by_user_id, visibility, doc_type, extracted_text FROM document "
+            "WHERE company_id = ? AND visibility = 'company' AND status NOT IN ('archived', 'quarantined', 'rejected') "
+            "AND extracted_text IS NOT NULL AND extracted_text != '' ORDER BY id DESC LIMIT ?",
+            (membership.company_id, MAX_DOCUMENTS_SCANNED),
+        ).fetchall()
+    return top_terms(row["extracted_text"] for row in rows if _can_see(membership, row) and _in_company_files(row))
+
+
 @app.get("/api/search")
 def search_documents(
     q: str,
@@ -1070,9 +1160,9 @@ def search_documents(
         # list_documents's exclusion just below it in this file.
         docs = conn.execute(
             f"SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            f"description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility FROM document "
-            f"WHERE id IN ({placeholders}) AND status != 'archived'",
-            ordered_ids,
+            f"description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility, purge_requested_at FROM document "
+            f"WHERE id IN ({placeholders}) AND {_LIVE_OR_PURGE_REQUESTED}",
+            [*ordered_ids, _owner_flag(membership)],
         ).fetchall()
         # Same visibility rule as list_documents (round 13): the FTS5 row has
         # no status or visibility of its own, so a hidden document still
@@ -1132,7 +1222,13 @@ def edit_document(
         raise HTTPException(403, "You can only edit documents you uploaded yourself")
 
     updates: dict[str, object] = {}
-    if body.description is not None:
+    personal = doc["visibility"] != "company"
+    if personal and body.description is not None:
+        # A personal file's caption is the owner's own words, not a translatable description (round 21, A3, DECISIONS
+        # #101): it REPLACES whatever was there, in every language, instead of being merged in under the viewing language.
+        _, caption = _clean_personal_details(None, body.description)
+        updates["description"] = json.dumps({"en": caption}) if caption else None
+    elif body.description is not None:
         # 2026-09-24 (items 5/6): document.description is JSON-encoded
         # {"en": "...", "<language>": "..."} — a human correcting it edits
         # in whatever language they're currently viewing the app in
@@ -1158,15 +1254,23 @@ def edit_document(
         # as any other language, by editing while viewing in English.
         by_language.setdefault("en", body.description)
         updates["description"] = json.dumps(by_language)
-    if body.bucket is not None:
+    # A personal file has a name and a caption and nothing else (round 21, A3, DECISIONS #101): bucket, vendor and doc type are
+    # company-paperwork fields, so an edit that sends them for a personal file has them ignored, not stored.
+    if body.bucket is not None and not personal:
         updates["bucket"] = body.bucket
-    if body.vendor_name is not None:
+    if body.vendor_name is not None and not personal:
         updates["vendor_name"] = body.vendor_name
-    if body.doc_type is not None:
+    if body.doc_type is not None and not personal:
         updates["doc_type"] = body.doc_type
     if body.filename is not None:
-        updates["filename"] = body.filename
-    if body.is_picture:
+        if personal:
+            new_name, _ = _clean_personal_details(body.filename, None)
+            if not new_name:
+                raise HTTPException(422, detail={"code": "name_required", "message": "A file needs a name."})
+            updates["filename"] = new_name
+        else:
+            updates["filename"] = body.filename
+    if body.is_picture and not personal:
         updates["lane"] = "memory"
         updates["doc_type"] = "photo"
         updates["bucket"] = "Memory Lane"
@@ -1213,8 +1317,8 @@ def get_document_file(
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
             "SELECT company_id, stored_path, media_type, filename, status, uploaded_by_user_id, visibility "
-            "FROM document WHERE id = ? AND status != 'archived'",
-            (document_id,),
+            f"FROM document WHERE id = ? AND {_LIVE_OR_PURGE_REQUESTED}",
+            (document_id, _owner_flag(membership)),
         ).fetchone()
     # Round 13 (DECISIONS #83/#85): a document the caller may not see — pending
     # review and not theirs, or someone else's personal file — is the same 404
@@ -1247,8 +1351,8 @@ def get_document_thumbnail(
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
             "SELECT company_id, stored_path, media_type, sha256, status, uploaded_by_user_id, visibility "
-            "FROM document WHERE id = ? AND status != 'archived'",
-            (document_id,),
+            f"FROM document WHERE id = ? AND {_LIVE_OR_PURGE_REQUESTED}",
+            (document_id, _owner_flag(membership)),
         ).fetchone()
     if _hidden_or_missing(membership, doc):
         raise HTTPException(404, "document not found")
@@ -1394,6 +1498,61 @@ def _purge_a_rejected_private_file(document_id: int, actor: str) -> None:
     _audit.info("AUDIT purge: %s rejected private document %s, deleted for good", actor, document_id)
     if failed_files:
         _audit.error("AUDIT purge: rows of document %s deleted but the stored file was not removed: %s", document_id, failed_files)
+
+
+@app.post("/api/documents/{document_id}/request-purge")
+def request_document_purge(
+    document_id: int,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> dict:
+    """The OWNER asks for a company document to be removed permanently (round 21, A5, DECISIONS #101 and #102). Nothing is
+    deleted here: the document is archived exactly as Delete archives it (hidden from every other role, file and row kept,
+    open review items dismissed) and flagged (`purge_requested_at`, `purge_requested_by`), so the team can find it and
+    remove it with scripts/purge_document.py. The OWNER keeps seeing it, marked "purge_requested" and read-only, in the
+    list, in search and by file, until that row is gone (`_LIVE_OR_PURGE_REQUESTED`, auth.may_see_purge_requested).
+    The real in-app purge stays a separate, dedicated round (KANBAN).
+
+    Who: the owner only, for a COMPANY document (auth.may_request_purge); an admin keeps Delete and has no Purge.
+    Order: a document the caller may not see is a 404, then 403 if the rule refuses, then the archive (409 when it is
+    already archived, which also covers a second request)."""
+    with get_conn(DB_PATH) as conn:
+        doc = conn.execute(
+            "SELECT company_id, filename, status, uploaded_by_user_id, visibility FROM document WHERE id = ?",
+            (document_id,),
+        ).fetchone()
+    if _hidden_or_missing(membership, doc):
+        raise HTTPException(404, "document not found")
+    if not may_request_purge(membership, visibility=doc["visibility"]):
+        raise HTTPException(403, "Only the owner can request that a company document be purged")
+    try:
+        transition_document(document_id, "archived", actor=membership.email, db_path=DB_PATH)
+    except InvalidTransition:
+        raise HTTPException(409, "document is already archived") from None
+    with get_conn(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE document SET purge_requested_at = datetime('now'), purge_requested_by = ? WHERE id = ?",
+            (membership.email, document_id),
+        )
+        conn.execute(
+            "UPDATE review_item SET status = 'dismissed' WHERE document_id = ? AND status = 'open'", (document_id,),
+        )
+    _audit.info("AUDIT purge-request: %s asked for document %s (%r) to be removed permanently", membership.email, document_id, doc["filename"])
+    return {"status": "purge_requested"}
+
+
+@app.get("/api/purge-requests")
+def list_purge_requests(membership: Annotated[CurrentMembership, Depends(require_role("owner"))]) -> list[dict]:
+    """The company's pending purge requests, newest first (round 21, A5, DECISIONS #101): what the owner asked to have
+    removed and the team has not yet purged. Owner only, this company only (`company_id` comes from the session). A
+    request stays here until scripts/purge_document.py deletes the row, which is when it stops existing."""
+    with get_conn(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT id, filename, purge_requested_at AS requested_at, purge_requested_by AS requested_by "
+            "FROM document WHERE company_id = ? AND purge_requested_at IS NOT NULL "
+            "ORDER BY purge_requested_at DESC, id DESC",
+            (membership.company_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 @app.post("/api/documents/{document_id}/purge")

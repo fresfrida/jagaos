@@ -15,7 +15,10 @@ row.
 
 | Action | viewer | user | admin | owner |
 |---|---|---|---|---|
-| View documents, search, calendar, obligations, compliance checklist (called gap analysis until round 16) | ✅ | ✅ | ✅ | ✅ |
+| View documents, search, calendar, obligations | ✅ | ✅ | ✅ | ✅ |
+| See how many compliance-checklist items are held (the Calendar's one-line count) — round 21 (DECISIONS #101) | ✅ | ✅ | ✅ | ✅ |
+| See the checklist's ROWS (which items are missing, the evidence links, Upload for a missing one): since round 21 a section of Company Settings, which redirects everyone below admin | ❌ | ❌ | ✅ | ✅ |
+| See the search word cloud (`GET /api/search/terms`): words from THIS company's company documents the caller may see, never a personal file's — round 21 | ✅ | ✅ | ✅ | ✅ |
 | Upload a document | ❌ | ✅ | ✅ | ✅ |
 | Edit a document's description/bucket/vendor/doc_type/filename | ❌ | ✅ own uploads only | ✅ any | ✅ any |
 | See the review queue (open review items) — round 12 | ❌ none | ✅ only items on their own uploads | ✅ all | ✅ all |
@@ -23,7 +26,8 @@ row.
 | See a document once it is filed | ✅ | ✅ | ✅ | ✅ |
 | See a **personal file** (`Only me`) — round 13; since round 19 (DECISIONS #94) it is listed only in the uploader's Only me section (`GET /api/personal-files`), no longer in Company Files, Search or the Calendar | ❌ (has no personal files; cannot upload) | ✅ only their own | ✅ only their own — **not** others' | ✅ only their own — **not** others' |
 | Open the **Only me page** (`/only-me`) — round 19; a viewer's home since round 20 (DECISIONS #98) | ✅ read-only: the list only, no upload rows, no scratchpad, no Delete or Edit; it is the page rendered at `/`; no menu entry | ✅ | ✅ | ✅ |
-| Upload into Only me (files and the scratchpad) — round 19 | ❌ | ✅ | ✅ | ✅ |
+| Upload into Only me (files and the scratchpad) — round 19; since round 21 (DECISIONS #101) it takes a name (required) and a caption (optional), is filed at once, and skips the pipeline, every model call and review | ❌ | ✅ | ✅ | ✅ |
+| Edit a **personal file**: its name and caption only (bucket, vendor, doc type and the picture flag are ignored for it) — round 21 | ❌ | ✅ own | ✅ own | ✅ own |
 | Upload limits — round 20 (DECISIONS #99): one file over 25 MB is refused (413) and a person who already holds 15 private files in the company cannot add a 16th (409); company uploads are not counted, an exact duplicate is left to the duplicate check, and a multi-page document counts as one file | n/a (cannot upload) | ✅ | ✅ | ✅ |
 | See a PDF's first-page thumbnail — round 20 (DECISIONS #97) | ✅ the same documents as the file itself | ✅ | ✅ | ✅ |
 | Change who can see a file after upload (the round 14 lock toggle) — **removed in round 19 (DECISIONS #94/#95): the toggle, `PATCH visibility` and `may_change_visibility` are gone; nobody can change a file's visibility, it is set once at upload** | — | — | — | — |
@@ -33,6 +37,9 @@ row.
 | Archive a **personal file** — **does not exist since round 20 (DECISIONS #99)**: `POST .../archive` answers 403 for a personal file, whoever asks (round 19 had let its uploader archive it) | ❌ | ❌ | ❌ | ❌ |
 | **Delete a personal file for good** (`POST /api/documents/{id}/purge`, typed filename) — round 20 (DECISIONS #99; this is what Only me's Delete does) | ❌ (has none) | ✅ only their own | ✅ only their own — **not** others' (a 404, they cannot see it) | ✅ only their own — **not** others' |
 | Delete a **company** document for good from the app | ❌ | ❌ | ❌ | ❌ (403; parked as its own round, KANBAN; the operator's `scripts/purge_document.py` is the only way) |
+| **Ask for** a company document to be purged (`POST /api/documents/{id}/request-purge`): nothing is deleted, the document is archived and flagged for the team — round 21 (DECISIONS #101) | ❌ | ❌ | ❌ (Delete only) | ✅ |
+| See the pending purge requests (`GET /api/purge-requests`, Company Settings) — round 21 | ❌ | ❌ | ❌ | ✅ |
+| Keep seeing a document once it is purge-requested (archived, `purge_requested_at` set), marked "Purge requested" and read-only, in Company Files, Search, the Calendar and by its file and thumbnail, until the team removes the row — round 21 follow-up (DECISIONS #102; `auth.may_see_purge_requested`). Any other archived document stays invisible to everyone | ❌ (gone) | ❌ (gone) | ❌ (gone) | ✅ (marked, read-only) |
 | Add a team member | ❌ | ❌ | ✅ | ✅ |
 | See the Company Settings page | ❌ | ❌ | ✅ read-only | ✅ editable |
 | Edit company settings (name, FYE, UEN, GST status, registered address) | ❌ | ❌ | ❌ | ✅ |
@@ -61,6 +68,11 @@ UI affordances):
   not extended** to let a `user` resolve their own upload's review item —
   see "Flagged decision 1" below.
 - `POST /api/documents/{id}/archive` — `get_current_membership` plus `auth.may_archive_document`, which since round 20 (DECISIONS #99) is COMPANY documents only, admin and owner (round 19's uploader-archives-own-private-file rule is gone). Order: a document the caller cannot see is a 404, then 403 for a personal file ("deleted for good, not archived", even for its uploader) or for a `user`/viewer on a company document, then the soft archive.
+- `POST /api/documents/{id}/request-purge` — round 21 (DECISIONS #101), `get_current_membership` plus `auth.may_request_purge`: the OWNER, for a COMPANY document, nobody else (an admin keeps Delete and has no Purge; a personal file is never purge-requested). Order: a document the caller cannot see is a 404, then 403 if the rule refuses, then the archive (409 if it is already archived, which also covers asking twice) and the flag `purge_requested_at` / `purge_requested_by`, open review items dismissed, an `AUDIT purge-request:` log line. Nothing is deleted.
+- **Purge-requested documents (round 21 follow-up, DECISIONS #102):** `GET /api/documents`, the join-back of `GET /api/search`, `GET /api/documents/{id}/file` and `GET /api/documents/{id}/thumbnail` let an archived row through only when it carries `purge_requested_at` AND the caller is the owner (`auth.may_see_purge_requested`); the row is then sent with `status: "purge_requested"` and `can_edit: false`. Everywhere else, and for everyone else, an archived document is still a 404 or absent (the personal-files list, the business profile, the prefill and the trace are unchanged).
+- `GET /api/purge-requests` — round 21, `require_role("owner")`: this company's documents that carry the flag and have not been purged yet (`id`, `filename`, `requested_at`, `requested_by`; no content). `company_id` comes from the session.
+- `GET /api/search/terms` — round 21, any authenticated member (a viewer included, like `/api/search`): about 40 `{term, count}` over the extracted text of THIS company's documents that `_can_see` and `_in_company_files` allow, newest 500, never archived, quarantined or rejected ones. A personal file's text and another company's never enter, and the words of a colleague's upload still pending review are left out for anyone who cannot open it.
+- `POST /api/documents` and `/api/documents/pages` with `visibility=only_me` — round 21: `name` and `caption` are the owner's own words for the file (`name` falls back to the file's own name when blank; over 120 / 500 characters is a 422 `name_too_long` / `caption_too_long`); a company upload ignores both. The upload never reaches the pipeline and answers `{status: "filed"}`.
 - `POST /api/documents/{id}/purge` — round 20 (DECISIONS #99), `get_current_membership` plus `auth.may_purge_document`: the uploader of their OWN personal file, nobody else (admin and owner included; a company document is never purgeable from the app). Order: a document the caller cannot see is a 404, then 403 if the rule refuses, then 400 `confirmation_mismatch` unless the body's `confirm` equals the file's exact filename, then the purge (`app/purge.py`) with an audit log line. An archived private file left over from before round 20 is reachable by id only, since it is not listed.
 - `POST /api/companies/{id}/members` — `require_role("admin")`, unchanged;
   a second `owner` is a 409 regardless of caller role.

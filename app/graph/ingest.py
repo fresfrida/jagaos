@@ -52,10 +52,15 @@ def ingest(
     uploaded_by_user_id: int | None = None,
     db_path: str = DB_PATH,
     visibility: str = "company",
+    read_content: bool = True,
 ) -> PipelineState:
     """Not a LangGraph node itself (it runs before we have a document_id to
     key state on) — called from app/main.py to create the document row,
-    then the graph starts at `classify`."""
+    then the graph starts at `classify`.
+
+    `read_content=False` (round 21, A3, DECISIONS #101) stores the file and records the row but reads nothing out of it: no
+    text extraction, no OCR, no EXIF. A personal file is named by its owner and goes nowhere near the pipeline, so there is
+    no reason to spend an OCR pass (or hold the PDF renderer's lock) on it, or to keep text a person never asked to have read."""
     src = Path(source_path)
     sha = _sha256(src)
     media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
@@ -77,8 +82,11 @@ def ingest(
         # extraction failure (an image-only PDF crashed here) left a stored
         # file with no document row — confirmed live, 67 to 68 files in
         # data/docs. Nothing below needs the stored copy to exist yet.
-        text, text_source = _local_text(src, media_type)
-        exif_data = exif.read_exif(str(src)) if media_type.startswith("image/") else {}
+        if read_content:
+            text, text_source = _local_text(src, media_type)
+            exif_data = exif.read_exif(str(src)) if media_type.startswith("image/") else {}
+        else:
+            text, text_source, exif_data = "", "none", {}
 
         DOCS_PATH.mkdir(parents=True, exist_ok=True)
         stored_path = DOCS_PATH / f"{sha}{src.suffix}"

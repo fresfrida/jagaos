@@ -13,7 +13,7 @@ vi.mock('../ops/opsApi', async (importActual) => ({
 }))
 
 import type { DocumentRow, Expectation, Obligation } from '../ops/opsApi'
-import { ComplianceChecklist } from './ComplianceChecklist'
+import { ComplianceChecklist } from '../company/ComplianceChecklist'
 import { DatesView } from './DatesView'
 import { MonthGrid } from './MonthGrid'
 import { ObligationRow } from './ObligationRow'
@@ -37,8 +37,9 @@ describe('DatesView with nothing uploaded (item 7)', () => {
 
   it('uses the renamed toggle labels', () => {
     render(<DatesView documents={[]} />)
-    expect(screen.getByRole('button', { name: 'When filed' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Uploaded' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Document dates' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'When filed' })).toBeNull() // renamed in round 21: it always meant the upload date
     expect(screen.queryByRole('button', { name: 'Upload date' })).toBeNull()
   })
 
@@ -180,5 +181,33 @@ describe('ComplianceChecklist (item 9)', () => {
   it('says so when there is nothing on the checklist yet', () => {
     render(<ComplianceChecklist expectations={[]} documents={[]} canUpload />)
     expect(screen.getByText(/nothing on the checklist yet/i)).toBeTruthy()
+  })
+})
+
+describe('DatesView: tapping a day lists that day\'s documents (the ruling of round 21)', () => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const dayCell = () => {
+    const number = String(Number(today.slice(8, 10)))
+    const cell = screen.getAllByRole('button', { pressed: false }).find((b) => b.firstElementChild?.textContent === number && b.hasAttribute('aria-current'))
+    if (!cell) throw new Error(`no day cell for ${number}`)
+    return cell
+  }
+
+  it('lists every document of that day, held checklist evidence included, each opening its file', () => {
+    const docs = [
+      doc({ id: 1, filename: 'evidence.pdf', doc_type: 'Certificate of Incorporation', received_at: `${today} 03:00:00`, description: JSON.stringify({ en: 'Certificate of Incorporation' }) }),
+      doc({ id: 2, filename: 'lease.pdf', status: 'purge_requested', received_at: `${today} 04:00:00`, description: JSON.stringify({ en: 'Old lease' }) }),
+    ]
+    render(<DatesView documents={docs} />)
+
+    fireEvent.click(dayCell())
+
+    expect(screen.getByText('Certificate of Incorporation')).toBeTruthy()
+    expect(screen.getByText('Old lease')).toBeTruthy()
+    const rows = screen.getAllByRole('button').filter((b) => /evidence\.pdf|lease\.pdf/.test(b.textContent ?? ''))
+    expect(rows).toHaveLength(2)
+    expect(within(rows[1]!).getByText('Purge requested')).toBeTruthy() // the owner's own request is marked on the day list too
+    fireEvent.click(rows[0]!)
+    expect(screen.getByRole('dialog')).toBeTruthy() // the file opens in the viewer
   })
 })

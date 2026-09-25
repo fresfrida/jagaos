@@ -15,7 +15,7 @@ import { useAuth } from '../auth/AuthContext'
 import { roleAtLeast } from '../auth/authApi'
 import { OpsStatusBar } from '../ops/OpsStatusBar'
 import { useOpsData } from '../ops/useOpsData'
-import { ComplianceChecklist } from './ComplianceChecklist'
+import { ChecklistSummary } from './ChecklistSummary'
 import { DatesView } from './DatesView'
 import { ObligationRow } from './ObligationRow'
 
@@ -55,11 +55,8 @@ export function CalendarHub() {
           </Card>
         </section>
 
-        <ComplianceChecklist
-          expectations={expectations}
-          documents={documents}
-          canUpload={role !== null && roleAtLeast(role, 'user')}
-        />
+        {/* Round 21 (A2, DECISIONS #101): the full checklist moved to Company Settings; the Calendar keeps the count. */}
+        <ChecklistSummary expectations={expectations} canOpen={role !== null && roleAtLeast(role, 'admin')} />
       </div>
     </div>
   )

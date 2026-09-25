@@ -86,6 +86,17 @@ def _upload(team: dict, actor: str, tag: str, visibility: str | None = None) -> 
     return resp.json()["document_id"]
 
 
+def _legacy_pending_private(team: dict, actor: str, tag: str) -> int:
+    """A personal file the way rounds 19 and 20 left them: it ran the whole pipeline, so it is `needs_review` with an open
+    review item that only its uploader can resolve. Since round 21 (A3, DECISIONS #101) a NEW personal file is filed on the
+    spot and has no review item, so this state exists only for old rows; it is built the honest way, a company upload that
+    the pipeline reviews, then marked personal. The rules for resolving and hiding such a row must keep working."""
+    doc = _upload(team, actor, tag)
+    with get_conn() as conn:
+        conn.execute("UPDATE document SET visibility = 'only_me' WHERE id = ?", (doc,))
+    return doc
+
+
 def _resolve(team: dict, actor: str, document_id: int, action: str = "confirm"):
     """Resolve the review item of `document_id` as `actor` (which must be able to
     see it); returns the raw response."""
@@ -188,24 +199,33 @@ def test_the_calendar_reads_the_same_list_so_a_hidden_document_is_not_on_it(team
 # --- rule 2: a personal file ---------------------------------------------------------
 
 
-def test_a_personal_file_reaches_only_its_uploader_on_every_path_while_pending(team):
+def test_a_new_personal_file_is_filed_on_the_spot_and_reaches_only_its_uploader(team):
     doc = _upload(team, "user1", "prva", visibility="only_me")
+    with get_conn() as conn:
+        assert conn.execute("SELECT status FROM document WHERE id = ?", (doc,)).fetchone()["status"] == "filed"
     _assert_reach(team, doc, "prva", {"user1": PERSONAL_READS})
-    assert _reach(team, "user1", doc, "prva")["queue"] is True
+    for actor in ROLES:
+        assert _reach(team, actor, doc, "prva")["queue"] is False, f"{actor}: nothing waits for review"
+
+
+def test_an_old_pending_personal_file_reaches_only_its_uploader_on_every_path_and_only_their_queue(team):
+    doc = _legacy_pending_private(team, "user1", "prvg")
+    _assert_reach(team, doc, "prvg", {"user1": PERSONAL_READS})
+    assert _reach(team, "user1", doc, "prvg")["queue"] is True
     for actor in ("owner", "admin", "user2", "viewer"):
-        assert _reach(team, actor, doc, "prva")["queue"] is False, actor
+        assert _reach(team, actor, doc, "prvg")["queue"] is False, actor
 
 
-def test_a_personal_file_stays_invisible_to_admin_and_owner_after_it_is_filed(team):
-    doc = _upload(team, "user1", "prvb", visibility="only_me")
+def test_an_old_personal_file_stays_invisible_to_admin_and_owner_after_it_is_filed(team):
+    doc = _legacy_pending_private(team, "user1", "prvb")
     assert _resolve(team, "user1", doc).status_code == 200  # the uploader resolves their own
 
     _assert_reach(team, doc, "prvb", {"user1": PERSONAL_READS})
 
 
 @pytest.mark.parametrize("actor", ["owner", "admin"])
-def test_neither_admin_nor_owner_can_edit_delete_or_resolve_a_personal_file(team, actor):
-    doc = _upload(team, "user1", "prvc", visibility="only_me")
+def test_neither_admin_nor_owner_can_edit_delete_or_resolve_an_old_pending_personal_file(team, actor):
+    doc = _legacy_pending_private(team, "user1", "prvc")
     h = _headers(team["tokens"][actor])
 
     assert client.patch(f"/api/documents/{doc}", json={"vendor_name": "x"}, headers=h).status_code == 404
@@ -216,6 +236,20 @@ def test_neither_admin_nor_owner_can_edit_delete_or_resolve_a_personal_file(team
     with get_conn() as conn:
         row = conn.execute("SELECT status, vendor_name FROM document WHERE id = ?", (doc,)).fetchone()
     assert row["status"] == "needs_review" and row["vendor_name"] is None, "a refused action must change nothing"
+
+
+@pytest.mark.parametrize("actor", ["owner", "admin"])
+def test_neither_admin_nor_owner_can_edit_or_delete_a_filed_personal_file(team, actor):
+    doc = _upload(team, "user1", "prvh", visibility="only_me")
+    h = _headers(team["tokens"][actor])
+
+    assert client.patch(f"/api/documents/{doc}", json={"description": "x", "filename": "renamed"}, headers=h).status_code == 404
+    assert client.post(f"/api/documents/{doc}/archive", headers=h).status_code == 404
+    assert client.post(f"/api/documents/{doc}/request-purge", headers=h).status_code == 404
+    assert client.post(f"/api/documents/{doc}/purge", json={"confirm": "x"}, headers=h).status_code == 404
+    with get_conn() as conn:
+        row = conn.execute("SELECT status, filename, description FROM document WHERE id = ?", (doc,)).fetchone()
+    assert row["status"] == "filed" and row["filename"] == "user1-prvh.jpg" and row["description"] is None
 
 
 def _item_id(document_id: int) -> int:
@@ -282,14 +316,14 @@ def test_several_photos_merged_into_one_document_can_be_personal_too(team):
 # --- who may resolve, and the thread binding ---------------------------------------------
 
 
-def test_a_user_may_resolve_their_own_personal_file_but_not_their_own_company_upload(team):
-    private, shared = _upload(team, "user1", "rsva", visibility="only_me"), _upload(team, "user1", "rsvb")
+def test_a_user_may_resolve_their_own_old_personal_file_but_not_their_own_company_upload(team):
+    private, shared = _legacy_pending_private(team, "user1", "rsva"), _upload(team, "user1", "rsvb")
     assert _resolve(team, "user1", private).status_code == 200
     assert _resolve(team, "user1", shared).status_code == 403  # admin+ only, exactly as before
 
 
-def test_another_user_cannot_resolve_someone_elses_personal_file(team):
-    doc = _upload(team, "user1", "rsvc", visibility="only_me")
+def test_another_user_cannot_resolve_someone_elses_old_personal_file(team):
+    doc = _legacy_pending_private(team, "user1", "rsvc")
     resp = client.post(
         f"/api/review/{_item_id(doc)}/resolve?thread_id={_thread(doc)}",
         json={"action": "confirm", "corrected_fields": {}}, headers=_headers(team["tokens"]["user2"]),
@@ -298,7 +332,7 @@ def test_another_user_cannot_resolve_someone_elses_personal_file(team):
 
 
 def test_the_review_queue_tells_each_caller_whether_they_can_resolve_an_item(team):
-    private, shared = _upload(team, "user1", "qeua", visibility="only_me"), _upload(team, "user1", "qeub")
+    private, shared = _legacy_pending_private(team, "user1", "qeua"), _upload(team, "user1", "qeub")
     rows = {i["document_id"]: i for i in client.get("/api/review", headers=_headers(team["tokens"]["user1"])).json()}
     assert rows[private]["can_resolve"] is True and rows[shared]["can_resolve"] is False
     admin_rows = {i["document_id"]: i for i in client.get("/api/review", headers=_headers(team["tokens"]["admin"])).json()}
@@ -306,7 +340,7 @@ def test_the_review_queue_tells_each_caller_whether_they_can_resolve_an_item(tea
 
 
 def test_a_thread_id_that_is_not_this_items_is_refused_so_one_item_cannot_resume_another_run(team):
-    mine, victim = _upload(team, "user1", "thra", visibility="only_me"), _upload(team, "user2", "thrb")
+    mine, victim = _legacy_pending_private(team, "user1", "thra"), _upload(team, "user2", "thrb")
     resp = client.post(
         f"/api/review/{_item_id(mine)}/resolve?thread_id={_thread(victim)}",
         json={"action": "confirm", "corrected_fields": {}}, headers=_headers(team["tokens"]["user1"]),
@@ -411,7 +445,8 @@ def test_the_rows_no_longer_carry_a_toggle_flag(team):
     assert doc in {r["id"] for r in company_rows} and private in {r["id"] for r in personal_rows}  # both lists really are checked
     assert not any("can_change_visibility" in r for r in company_rows + personal_rows)
     queue = client.get("/api/review", headers=h).json()
-    assert {i["document_id"] for i in queue} >= {doc, private}
+    assert {i["document_id"] for i in queue} >= {doc}
+    assert private not in {i["document_id"] for i in queue}  # a new personal file is filed on the spot: nothing to review
     assert not any("can_change_visibility" in i for i in queue)
 
 @pytest.mark.parametrize("role,visibility,expected", [

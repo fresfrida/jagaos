@@ -174,21 +174,33 @@ def test_a_document_that_is_not_statutory_is_skipped_by_design_without_a_model_c
     assert _events() == [] and model["calls"] == []
 
 
-def test_a_personal_file_never_feeds_company_events_and_the_skip_is_recorded(team, model):
+def _forbid_every_model_call(monkeypatch) -> None:
+    def boom(*args, **kwargs):
+        raise AssertionError("a personal file must not reach any model call")
+
+    for module in (classify_module, extract_module, derive_events_module):
+        monkeypatch.setattr(module, "call", boom)
+
+
+def test_a_personal_file_never_feeds_company_events_because_it_never_reaches_the_pipeline(team, model, monkeypatch):
+    # Round 21 (A3, DECISIONS #101): a personal file is filed on the spot, named by its owner. It used to run the whole
+    # pipeline and be skipped at derive_events ("skipped_personal_file"); now it never gets that far.
+    _forbid_every_model_call(monkeypatch)
+
     doc = _upload(team["user"], "private-notice", visibility="only_me")
-    assert _resolve(team["user"], doc).status_code == 200  # the uploader resolves their own
 
     assert _events() == [] and model["calls"] == [], "a document nobody else can see must not create a company record"
-    assert _trace(doc, "derive_events") == ["skipped_personal_file"], "a skipped statutory document must say so"
+    assert _trace(doc, "derive_events") == [], "the pipeline never ran for it, so no node has a row"
+    with get_conn() as conn:
+        assert conn.execute("SELECT status FROM document WHERE id = ?", (doc,)).fetchone()["status"] == "filed"
+        assert conn.execute("SELECT COUNT(*) FROM review_item WHERE document_id = ?", (doc,)).fetchone()[0] == 0
 
 
-def test_a_personal_file_does_not_satisfy_a_company_expectation(team, model):
+def test_a_personal_file_does_not_satisfy_a_company_expectation(team, model, monkeypatch):
     # A company document that proposes an incorporation event creates the expected-document
     # set (certificate, constitution, ...). A colleague's PERSONAL certificate must not
     # count as the company holding one.
-    model["doc_type"] = "ACRA Certificate of Incorporation"
-    private = _upload(team["user"], "private-certificate", visibility="only_me")
-    assert _resolve(team["user"], private).status_code == 200
+    private = _upload(team["user"], "private-certificate", visibility="only_me")  # filed on the spot, no doc type at all
 
     model["event"] = {"kind": "incorporation", "occurred_on": "2023-01-15", "title": "Incorporated", "confidence": 0.9}
     model["doc_type"] = "Notice of Incorporation Details"  # a company document that is NOT the certificate
@@ -196,6 +208,8 @@ def test_a_personal_file_does_not_satisfy_a_company_expectation(team, model):
     assert _resolve(team["owner"], shared).status_code == 200
 
     with get_conn() as conn:
-        status = conn.execute("SELECT status FROM expectation WHERE doc_type = 'certificate_of_incorporation'").fetchone()
+        status = conn.execute(
+            "SELECT status, evidence_document_id FROM expectation WHERE doc_type = 'certificate_of_incorporation'"
+        ).fetchone()
     assert status is not None, "the incorporation event should have created the expected set"
-    assert status["status"] == "missing"
+    assert status["status"] == "missing" and status["evidence_document_id"] != private

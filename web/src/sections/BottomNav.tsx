@@ -27,7 +27,14 @@
  * sheet with the DOCUMENT / PHOTO choice. It used to navigate to /upload, and only
  * when already there scroll to and focus the page's own choice (2026-09-23, item 5,
  * where it had been a dead tap next to the page's dropzone). Choosing in the sheet
- * hands the file to the Upload page, which uploads it. */
+ * hands the file to the Upload page, which uploads it.
+ *
+ * **Round 21 (A4, DECISIONS #101): every label is one line, and the five cells are the same width.** At 375px a
+ * cell is 72px and "Company Files" (84px at 12px) wrapped to two lines, Tamil "Tags" was 77px and made its cell
+ * wider than the others. Type stays at 12px (round 20's accessibility floor); instead the two labels that do not
+ * fit have a SHORT form for this bar only (`header.navShort.*`: "Files", and Tamil's singular "Tags"), every label is
+ * `whitespace-nowrap`, and the cells are `basis-0 min-w-0` so a long label can never resize its neighbours. The
+ * desktop header keeps the full names. */
 
 import { CalendarDays, FileText, Search, Tag, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -40,6 +47,13 @@ import { NAV_LABEL_KEYS, routeHref, type ResolvedRoute, type RouteId } from '../
 const LEFT_ROUTES: RouteId[] = ['calendar', 'tags']
 const RIGHT_ROUTES: RouteId[] = ['search', 'company-files']
 const CENTER_ROUTE: RouteId = 'upload'
+
+// The bar's own wording where the full nav name is too wide for a 72px cell (see the docstring); every other item
+// uses its full name. A visible short label keeps the full name as its accessible name when it contains it.
+const SHORT_LABEL_KEYS: Partial<Record<RouteId, string>> = {
+  tags: 'header.navShort.tags',
+  'company-files': 'header.navShort.companyFiles',
+}
 
 // Reuses icons already imported elsewhere in this app (2026-09-23 ask:
 // don't introduce a new icon set) — CalendarDays/Tag from
@@ -72,20 +86,23 @@ const ICONS: Record<RouteId, typeof CalendarDays> = {
 function NavItem({ id, active }: { id: RouteId; active: boolean }) {
   const { t } = useTranslation()
   const Icon = ICONS[id]
+  const full = t(NAV_LABEL_KEYS[id] ?? '')
+  const label = SHORT_LABEL_KEYS[id] ? t(SHORT_LABEL_KEYS[id]) : full
   return (
     <Link
       href={routeHref(id)}
       aria-current={active ? 'page' : undefined}
+      aria-label={full !== label && full.includes(label) ? full : undefined}
       // 2026-09-23 (live regression report, item 9): more vertical room —
       // py-1.5 -> py-2.5, icon 20 -> 22 — the bar felt cramped on a real
       // phone. The raised center button below grows proportionally too.
       className={cn(
-        'flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[12px] leading-none transition-colors',
+        'flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-1 py-2.5 text-[12px] leading-none transition-colors',
         active ? 'text-ink' : 'text-muted',
       )}
     >
       <Icon size={22} strokeWidth={active ? 2.25 : 2} aria-hidden="true" />
-      <span>{t(NAV_LABEL_KEYS[id] ?? '')}</span>
+      <span className="whitespace-nowrap">{label}</span>
     </Link>
   )
 }
@@ -127,7 +144,7 @@ export function BottomNav({ current }: { current: ResolvedRoute }) {
       <div className="mx-auto flex max-w-[520px] items-stretch">
         {LEFT_ROUTES.map((id) => <NavItem key={id} id={id} active={current === id} />)}
 
-        <div className="flex flex-1 flex-col items-center justify-center">
+        <div className="flex min-w-0 flex-1 basis-0 flex-col items-center justify-center">
           {/* Round 16 (item 10c): always opens the Upload sheet, on every page. It used
              to navigate to /upload, and only when already there scrolled to and
              focused the page's own choice (2026-09-23, item 5: it had been a dead tap
@@ -147,7 +164,7 @@ export function BottomNav({ current }: { current: ResolvedRoute }) {
           >
             <Upload size={22} aria-hidden="true" />
           </button>
-          <span className={cn('mt-1 text-[12px] leading-none', uploadActive ? 'text-ink' : 'text-muted')}>
+          <span className={cn('mt-1 whitespace-nowrap text-[12px] leading-none', uploadActive ? 'text-ink' : 'text-muted')}>
             {t(NAV_LABEL_KEYS[CENTER_ROUTE] ?? '')}
           </span>
         </div>

@@ -86,7 +86,8 @@ export interface UploadResult {
   // 'processed' (auto-filed, no human touch) is no longer possible as of
   // 2026-09-22 (DECISIONS #40) — every non-quarantined upload now needs
   // review, even a clean one.
-  status: 'needs_review' | 'quarantined' | 'duplicate'
+  // 'filed' (round 21, A3, DECISIONS #101): a personal file, named by its owner, is filed on the spot: no review.
+  status: 'needs_review' | 'quarantined' | 'duplicate' | 'filed'
   classify?: ClassifyResult
   extract?: Record<string, ProvenanceValue | boolean> | null
   verify?: VerifyResult
@@ -129,12 +130,28 @@ export interface DocumentRow {
   // frontend deploys on push, the Lightsail backend only when someone
   // redeploys it) sends nothing — see opsShared.tsx's documentIsEditable.
   can_edit?: boolean
+  // Round 21 (DECISIONS #102): a row the OWNER asked to have purged and the team has not yet removed has `status`
+  // 'purge_requested' (shown as a pill) and `can_edit` false. Only the owner is ever sent one.
   // 2026-09-24 (round 13, DECISIONS #85): 'only_me' for a personal file — only
   // its uploader ever receives such a row. Round 19 (DECISIONS #94): the company
   // list no longer carries personal files at all; they come from
   // GET /api/personal-files (the "Only me" section) and every row there says
   // 'only_me'. Absent from an older backend, which has no personal files.
   visibility?: Visibility
+}
+
+/** One word of the Search page's word cloud (round 21, A8, DECISIONS #101): `count` is how many documents contain it. */
+export interface SearchTerm {
+  term: string
+  count: number
+}
+
+/** One pending purge request (round 21, A5, DECISIONS #101): what the owner asked to have removed permanently. */
+export interface PurgeRequest {
+  id: number
+  filename: string
+  requested_at: string
+  requested_by: string | null
 }
 
 /** GET /api/limits (round 20, DECISIONS #99). */
@@ -224,11 +241,19 @@ export interface UploadOptions {
   docTypeHint?: string | null
   /** 'only_me' for a personal file (the "Only me" section); omitted means the company's. */
   visibility?: Visibility
+  /** A personal file's name and caption, as the person typed them (round 21, A3, DECISIONS #101). The server uses them for
+   * an Only me upload and ignores them for a company one. */
+  name?: string
+  caption?: string
 }
 
-function applyUploadOptions(params: URLSearchParams, { docTypeHint, visibility }: UploadOptions): void {
+function applyUploadOptions(params: URLSearchParams, { docTypeHint, visibility, name, caption }: UploadOptions): void {
   if (docTypeHint) params.set('doc_type_hint', docTypeHint)
-  if (visibility && visibility !== 'company') params.set('visibility', visibility)
+  if (visibility && visibility !== 'company') {
+    params.set('visibility', visibility)
+    if (name) params.set('name', name)
+    if (caption) params.set('caption', caption)
+  }
 }
 
 /** Every ops call carries the session automatically — callers never pass
@@ -291,6 +316,16 @@ export const opsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ confirm }),
     }),
+
+  // The OWNER asks for a company document to be removed permanently (round 21, A5, DECISIONS #101). Nothing is
+  // deleted: the document is archived, flagged, and the team purges it. The list is owner-only.
+  requestPurge: (documentId: number) =>
+    request<{ status: string }>(`/api/documents/${documentId}/request-purge`, { method: 'POST' }),
+  listPurgeRequests: () => request<PurgeRequest[]>('/api/purge-requests'),
+
+  // The word cloud on Search (round 21, A8, DECISIONS #101): the most telling words across the company's documents the caller
+  // may see, with the number of documents each is in. A backend older than this answers 404.
+  searchTerms: () => request<SearchTerm[]>('/api/search/terms'),
 
   listExpectations: () => request<Expectation[]>('/api/expectations'),
 

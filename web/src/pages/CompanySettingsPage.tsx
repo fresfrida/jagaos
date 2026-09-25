@@ -24,7 +24,13 @@
  * the review queue, "Fill in the form" shows every change (field, now, from the
  * profile) in a bottom sheet first; applying fills the FORM and marks what changed,
  * and nothing is saved until the owner presses Save. (Round 12's Company Files
- * card link and its ?prefill= address are gone.) */
+ * card link and its ?prefill= address are gone.)
+ *
+ * Compliance checklist (round 21, A2, DECISIONS #101): the full checklist is a section under the form; the Calendar
+ * keeps only a one-line count that links here for admin and owner.
+ *
+ * Purge requests (round 21, A5, DECISIONS #101): the owner sees, under the checklist, the documents they asked to have
+ * purged and the team has not yet removed. */
 
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -34,10 +40,12 @@ import { useAuth } from '../features/auth/AuthContext'
 import { RequireSession } from '../features/auth/RequireSession'
 import { authApi, roleAtLeast } from '../features/auth/authApi'
 import { BusinessProfileSection } from '../features/company/BusinessProfileSection'
+import { ComplianceChecklistSection } from '../features/company/ComplianceChecklistSection'
 import {
   applyPrefill, backendHasIdentityFields, formFromCompany, prefillChanges, toUpdate, type CompanyForm, type CompanyFormField,
 } from '../features/company/companyForm'
 import { PrefillConfirmSheet } from '../features/company/PrefillConfirmSheet'
+import { PurgeRequestsSection } from '../features/company/PurgeRequestsSection'
 import { useBusinessProfile } from '../features/company/useBusinessProfile'
 import { useCompanyProfilePrefill } from '../features/company/useCompanyProfilePrefill'
 import { FIELD_CLASS } from '../features/ops/opsShared'
@@ -137,6 +145,7 @@ function CompanySettingsContent() {
   }
 
   return (
+    <>
     <Card className="max-w-md p-6" interactive={false}>
       {canEdit && (
         <BusinessProfileSection
@@ -256,6 +265,14 @@ function CompanySettingsContent() {
         </Button>
       )}
     </Card>
+
+    {/* The checklist draws its own heading ("Compliance checklist: 2 of 6 held"), so this section is only named, not headed twice. */}
+    <section className="mt-10 max-w-2xl" aria-label={t('companySettings.checklist.heading')}>
+      <ComplianceChecklistSection enabled={canView} />
+    </section>
+
+    {canEdit && <PurgeRequestsSection enabled />}
+    </>
   )
 }
 

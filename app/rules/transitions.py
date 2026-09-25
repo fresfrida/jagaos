@@ -124,6 +124,30 @@ def transition_document(
         )
 
 
+def file_personal_document(document_id: int, actor: str, db_path: str = DB_PATH) -> None:
+    """received -> filed, for ONE kind of document only: a PERSONAL file (visibility other than 'company'), named by the
+    person who put it in Only me (round 21, A3, DECISIONS #101). It is the one place a document reaches `filed` without
+    passing classify, extract, verify and a human confirmation; that reversal of DECISIONS #40 is scoped to personal files
+    and enforced HERE, from the row itself: a company document (or an unknown visibility, which fails closed as company)
+    is refused, so no caller can use this to skip review. The person's own act of naming the file is the confirmation.
+
+    Deliberately not an edge in _DOCUMENT_TRANSITIONS: `received -> filed` stays impossible for every other document."""
+    with get_conn(db_path) as conn:
+        row = conn.execute("SELECT status, visibility FROM document WHERE id = ?", (document_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"document {document_id} not found")
+        if row["visibility"] in (None, "company"):
+            raise InvalidTransition("only a personal file may be filed without review")
+        if row["status"] != "received":
+            raise InvalidTransition(f"document {row['status']} cannot be filed as a personal file, only a received one")
+        conn.execute("UPDATE document SET status = 'filed' WHERE id = ?", (document_id,))
+        conn.execute(
+            "INSERT INTO trace (run_id, document_id, node, decision, at) "
+            "VALUES ('transition', ?, 'rules.file_personal_document', ?, datetime('now'))",
+            (document_id, f"received->filed by {actor} (personal file, no review)"),
+        )
+
+
 def reopen_expectation(
     expectation_id: int,
     actor: str,

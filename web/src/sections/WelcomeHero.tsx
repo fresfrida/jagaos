@@ -1,64 +1,109 @@
-/** Signed-out landing (round 16, item 2; the round 9 version was a centred
- * heading and two buttons that both went to /login). Designed for a phone first
- * and only stretched for a desktop: one pitch line that names the pain, one warm
- * button that opens the demo company, and three small cards saying what the
- * product does. Compact, not a full-screen hero: the page starts under the header
- * and the cards are on screen at 375px without scrolling past a wall of text.
+/** Signed-out landing (round 16, item 2; the round 9 version was a centred heading and two buttons that both went to
+ * /login; reworked in round 21, Part B, DECISIONS #101 into a quiet commercial page).
  *
- * The button signs in as the seeded demo owner through the ordinary login flow
- * (features/auth/useDemoLogin.ts, config/demo.ts): no bypass. "Sign in" stays as a
- * quiet link for someone with a real account. A signed-in visitor never renders
- * this: Page.tsx redirects `home` into the Calendar. */
+ * Register: Apple's. Short sentences, no exclamation marks, no superlatives; the product steps back and the owner's life
+ * steps forward. The page, top to bottom: a headline and one supporting sentence with the one call to action (a demo, through
+ * the ordinary login: features/auth/useDemoLogin.ts, config/demo.ts, no bypass), a real screenshot of the app in a plain phone
+ * frame, three cards (Capture, Review, Remember), a three-beat "How it works" strip (Upload. Read. Confirm.), and a closing
+ * line above the same call to action again. There is no second "Sign in" button in the body: the header's Log In is where a
+ * returning person signs in.
+ *
+ * Designed for a phone first and stretched for a desktop. A signed-in visitor never renders this: Page.tsx shows the
+ * signed-in home at `/` instead. */
 
 import { CalendarClock, ClipboardCheck, ScanLine } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import appScreenshot from '../assets/landing-calendar.webp'
 import { Button } from '../components/ui/Button'
-import { ButtonLink } from '../components/ui/ButtonLink'
 import { Card } from '../components/ui/Card'
 import { Container } from '../components/ui/Container'
 import { DemoPicker } from '../features/auth/DemoPicker'
-import { routeHref } from '../router/routes'
 
 const FEATURES = [
   { id: 'capture', icon: ScanLine },
   { id: 'review', icon: ClipboardCheck },
-  { id: 'obligations', icon: CalendarClock },
+  { id: 'remember', icon: CalendarClock },
 ] as const
+
+const BEATS = ['upload', 'read', 'confirm'] as const
+
+/** A real screenshot of the app (the Calendar, signed in as the demo owner) in a plain phone frame: a dark bezel, rounded
+ * screen, a small speaker slot. Not a mockup of a screen that does not exist. */
+function PhoneFrame() {
+  const { t } = useTranslation()
+  return (
+    <figure className="mx-auto w-[236px] sm:w-[264px] lg:mx-0 lg:justify-self-center" data-testid="hero-phone">
+      <div className="relative rounded-[2rem] bg-ink p-[7px] shadow-[0_24px_60px_-20px_rgba(20,20,20,0.45)]">
+        <span className="absolute left-1/2 top-[13px] z-10 h-[5px] w-14 -translate-x-1/2 rounded-full bg-black/70" aria-hidden="true" />
+        <div className="overflow-hidden rounded-[1.4rem] bg-white">
+          <img
+            src={appScreenshot}
+            alt={t('home.hero.imageAlt')}
+            width={600}
+            height={1299}
+            fetchPriority="high"
+            className="block h-auto w-full"
+          />
+        </div>
+      </div>
+    </figure>
+  )
+}
 
 export function WelcomeHero() {
   const { t } = useTranslation()
   const [pickerOpen, setPickerOpen] = useState(false)
 
   return (
-    <section className="py-8 sm:py-14">
+    <section className="pb-16 pt-8 sm:pt-14">
       <Container>
-        <div className="mx-auto max-w-3xl">
-          <h1 className="max-w-xl text-[28px] font-semibold leading-[1.15] text-ink sm:text-4xl">{t('home.pitch')}</h1>
-
-          <div className="mt-6">
-            <Button size="md" className="w-full sm:w-auto" onClick={() => setPickerOpen(true)} aria-haspopup="dialog">
-              {t('home.demo.button')}
-            </Button>
-            <p className="mt-2 text-[14px] text-muted">{t('home.demo.hint')}</p>
-            <ButtonLink href={routeHref('login')} variant="secondary" size="md" className="mt-5 w-full sm:w-auto">
-              {t('home.signIn')}
-            </ButtonLink>
-            <p className="mt-2 text-[14px] text-muted">{t('home.signInHint')}</p>
+        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-16">
+          <div>
+            <h1 className="max-w-xl text-[34px] font-semibold leading-[1.1] tracking-tight text-ink sm:text-5xl">
+              {t('home.hero.headline')}
+            </h1>
+            <p className="mt-4 max-w-xl text-[17px] leading-7 text-muted sm:text-lg sm:leading-8">{t('home.hero.subhead')}</p>
+            <div className="mt-7">
+              <Button size="md" className="w-full sm:w-auto" onClick={() => setPickerOpen(true)} aria-haspopup="dialog">
+                {t('home.demo.button')}
+              </Button>
+              <p className="mt-2 text-[14px] text-muted">{t('home.demo.hint')}</p>
+            </div>
           </div>
+          <PhoneFrame />
+        </div>
 
-          <ul className="mt-8 grid gap-3 sm:grid-cols-3">
-            {FEATURES.map(({ id, icon: Icon }) => (
-              <li key={id}>
-                <Card className="h-full p-4" interactive={false}>
-                  <Icon size={20} strokeWidth={1.75} className="text-sage-ink" aria-hidden="true" />
-                  <h2 className="mt-3 text-[16px] font-semibold text-ink">{t(`home.features.${id}.title`)}</h2>
-                  <p className="mt-1 text-[14px] leading-5 text-muted">{t(`home.features.${id}.text`)}</p>
-                </Card>
+        <ul className="mt-14 grid gap-3 sm:grid-cols-3">
+          {FEATURES.map(({ id, icon: Icon }) => (
+            <li key={id}>
+              <Card className="h-full p-5" interactive={false}>
+                <Icon size={22} strokeWidth={1.75} className="text-sage-ink" aria-hidden="true" />
+                <h2 className="mt-3 text-[16px] font-semibold text-ink">{t(`home.features.${id}.title`)}</h2>
+                <p className="mt-1 text-[15px] leading-6 text-muted">{t(`home.features.${id}.text`)}</p>
+              </Card>
+            </li>
+          ))}
+        </ul>
+
+        <section className="mt-16" aria-labelledby="how-it-works-heading" data-testid="how-it-works">
+          <h2 id="how-it-works-heading" className="text-[12px] font-mono uppercase tracking-wide text-muted">{t('home.how.heading')}</h2>
+          <ol className="mt-4 grid gap-4 sm:grid-cols-3 sm:gap-6">
+            {BEATS.map((beat, index) => (
+              <li key={beat} className="flex items-baseline gap-3 border-t border-line pt-4">
+                <span className="font-mono text-[13px] text-muted" aria-hidden="true">{index + 1}</span>
+                <span className="text-[28px] font-semibold leading-none tracking-tight text-ink sm:text-3xl">{t(`home.how.${beat}`)}</span>
               </li>
             ))}
-          </ul>
-        </div>
+          </ol>
+        </section>
+
+        <section className="mt-20 text-center" data-testid="closing">
+          <p className="mx-auto max-w-md text-[26px] font-semibold leading-tight tracking-tight text-ink sm:text-3xl">{t('home.closing')}</p>
+          <Button size="md" className="mt-6 w-full sm:w-auto" onClick={() => setPickerOpen(true)} aria-haspopup="dialog">
+            {t('home.demo.button')}
+          </Button>
+        </section>
       </Container>
       <DemoPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </section>

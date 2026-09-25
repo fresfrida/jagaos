@@ -1,5 +1,6 @@
-/** The compliance checklist on the Calendar page (2026-09-24, round 16, item 9;
- * called "gap analysis" until then). One row per document a company event says it
+/** The compliance checklist, in Company Settings since round 21 (A2, DECISIONS #101; it was a section of the
+ * Calendar page from 2026-09-24, round 16, item 9, and called "gap analysis" until then; the Calendar now shows
+ * only a one-line count, ChecklistSummary). One row per document a company event says it
  * should hold, with whether it does.
  *
  * A SATISFIED row links to the document that satisfied it and opens it in the same

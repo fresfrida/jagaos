@@ -8,8 +8,6 @@
     }
   },
   "home": {
-    "signIn": "Log masuk",
-    "pitch": "Berhenti mencari dokumen dan terlepas tarikh akhir.",
     "demo": {
       "button": "Pilih peranan demo",
       "hint": "Lihat aplikasi sebagai pemilik, pentadbir, pengguna atau pelihat. Tidak perlu mendaftar.",
@@ -47,15 +45,15 @@
     "features": {
       "capture": {
         "title": "Tangkap",
-        "text": "Ambil gambar atau muat naik invois, kontrak atau notis. Kami membacanya untuk anda."
+        "text": "Sekeping foto menjadi dokumen yang difailkan."
       },
       "review": {
         "title": "Semakan",
-        "text": "Anda mengesahkan apa yang kami baca. Tiada apa difailkan sehingga seseorang menyemaknya."
+        "text": "Ia membaca. Anda mengesahkan."
       },
-      "obligations": {
-        "title": "Kewajipan",
-        "text": "Tarikh akhir dan pemfailan yang diperlukan muncul dalam kalendar anda, lengkap dengan peraturan di sebaliknya."
+      "remember": {
+        "title": "Ingat",
+        "text": "Tarikh akhir muncul sebelum ia merugikan anda."
       }
     },
     "signedIn": {
@@ -72,7 +70,18 @@
         "hint": "Fail peribadi yang hanya anda boleh lihat"
       }
     },
-    "signInHint": "Gunakan e-mel anda sendiri, atau sediakan syarikat baharu."
+    "hero": {
+      "headline": "JagaOS mengingatkan, supaya anda tidak perlu.",
+      "subhead": "Muat naik satu dokumen. JagaOS membacanya, mencari tarikh dan kewajipan, dan memastikan semuanya hanya satu carian jauhnya.",
+      "imageAlt": "Kalendar JagaOS pada telefon, menunjukkan dokumen mengikut hari ia dimuat naik."
+    },
+    "how": {
+      "heading": "Cara ia berfungsi",
+      "upload": "Muat naik.",
+      "read": "Baca.",
+      "confirm": "Sahkan."
+    },
+    "closing": "Supaya anda boleh fokus pada kerja yang penting."
   },
   "companySettings": {
     "heading": "Tetapan Syarikat",
@@ -122,6 +131,19 @@
         "quarantined": "Fail itu disekat untuk semakan keselamatan. Lihat baris gilir semakan.",
         "failed": "Itu tidak berjaya. Sila cuba lagi."
       }
+    },
+    "checklist": {
+      "heading": "Senarai semak pematuhan",
+      "loading": "Memuatkan senarai semak…",
+      "loadFailed": "Senarai semak tidak dapat dimuatkan."
+    },
+    "purgeRequests": {
+      "heading": "Permintaan hapus kekal ({{count}})",
+      "empty": "Tiada permintaan hapus kekal.",
+      "status": "Hapus kekal diminta: pasukan akan menghapuskannya secara kekal.",
+      "by": "Diminta pada {{date}} oleh {{who}}",
+      "loading": "Memuatkan permintaan hapus kekal…",
+      "loadFailed": "Permintaan hapus kekal tidak dapat dimuatkan."
     }
   },
   "header": {
@@ -140,7 +162,11 @@
       "companySettings": "Tetapan Syarikat",
       "onlyMe": "Hanya saya"
     },
-    "switchCompany": "Tukar syarikat"
+    "switchCompany": "Tukar syarikat",
+    "navShort": {
+      "tags": "Tag",
+      "companyFiles": "Fail"
+    }
   },
   "auth": {
     "login": {
@@ -162,7 +188,8 @@
       "clear": "Kosongkan",
       "close": "Tutup",
       "delete": "Padam",
-      "dismiss": "Tutup"
+      "dismiss": "Tutup",
+      "retry": "Cuba lagi"
     }
   },
   "ops": {
@@ -174,7 +201,8 @@
       "missing": "hilang",
       "satisfied": "dipenuhi",
       "open": "terbuka",
-      "archived": "dipadam"
+      "archived": "dipadam",
+      "purgeRequested": "Hapus kekal diminta"
     },
     "backend": {
       "checking": "Menyemak pelayan…",
@@ -316,7 +344,13 @@
     },
     "search": {
       "heading": "Carian",
-      "prompt": "Taip sesuatu di atas untuk mencari dokumen anda."
+      "prompt": "Taip sesuatu di atas untuk mencari dokumen anda.",
+      "cloud": {
+        "heading": "Perkara yang sering disebut dalam dokumen anda",
+        "hint": "Ketik satu perkataan untuk mencarinya.",
+        "loading": "Memuatkan awan perkataan…",
+        "failed": "Awan perkataan tidak dapat dimuatkan."
+      }
     },
     "tags": {
       "intro": "Terus ke Fail Syarikat, ditapis mengikut kategori."
@@ -352,6 +386,22 @@
         "prompt": "Taip nama fail di bawah untuk mengesahkan.",
         "inputLabel": "Nama fail",
         "confirm": "Padam secara kekal"
+      },
+      "filter": {
+        "all": "Semua",
+        "dateRange": "Julat tarikh",
+        "dateFrom": "Dari",
+        "dateTo": "Hingga",
+        "dateClear": "Kosongkan tarikh",
+        "dateBackwards": "Tarikh mula selepas tarikh akhir.",
+        "noMatch": "Tiada dokumen sepadan dengan penapis ini."
+      },
+      "purgeRequest": {
+        "button": "Hapus kekal",
+        "message": "Minta \"{{filename}}\" dihapuskan secara kekal? Orang lain tidak lagi melihatnya sekarang. Anda masih melihatnya, ditandai \"Hapus kekal diminta\", sehingga pasukan menghapuskannya secara kekal. Tindakan ini tidak boleh dibuat asal.",
+        "confirm": "Hapus kekal",
+        "done": "Hapus kekal diminta untuk \"{{filename}}\". Orang lain tidak lagi melihatnya. Ia kekal di sini, bertanda, sehingga pasukan menghapuskannya secara kekal.",
+        "pending": "Hapus kekal diminta: pasukan akan menghapuskannya secara kekal."
       }
     },
     "dates": {
@@ -364,7 +414,7 @@
       "selectADay": "Ketik hari yang mempunyai dokumen untuk melihatnya di sini.",
       "noneOnDay": "Tiada dokumen pada hari ini.",
       "basis": {
-        "filed": "Bila difailkan",
+        "uploaded": "Dimuat naik",
         "document": "Tarikh dokumen"
       },
       "prevYear": "Tahun sebelumnya",
@@ -378,7 +428,8 @@
       "heading": "Senarai semak pematuhan: {{satisfied}} daripada {{total}} dipegang",
       "empty": "Belum ada apa-apa dalam senarai semak. Muat naik dokumen berkanun yang menunjukkan peristiwa syarikat (penubuhan, pertukaran setiausaha syarikat) dan keperluannya akan dipaparkan di sini.",
       "viewDocument": "Lihat dokumen",
-      "upload": "Muat naik"
+      "upload": "Muat naik",
+      "openInSettings": "Buka senarai semak penuh dalam Tetapan Syarikat"
     },
     "obligations": {
       "heading": "Kewajipan ({{count}})",
@@ -446,8 +497,6 @@
     "heading": "Hanya saya",
     "description": "Ruang peribadi. Hanya anda boleh melihat apa yang anda tambah di sini.",
     "intro": "Fail yang anda tambah di sini adalah peribadi. Hanya anda boleh melihatnya: bukan rakan sepasukan, bukan pentadbir, bukan pemilik. Ia tidak muncul dalam Fail Syarikat, Carian atau Kalendar.",
-    "reviewHint": "Fail baharu menunggu anda mengesahkan apa yang kami baca.",
-    "reviewLink": "Buka halaman Muat naik",
     "filesHeading": "Fail peribadi anda ({{count}})",
     "loading": "Memuatkan fail peribadi anda…",
     "loadFailed": "Tidak dapat memuatkan fail peribadi anda.",
@@ -459,7 +508,7 @@
     "searchClear": "Kosongkan carian",
     "searchCount": "{{shown}} daripada {{total}} sepadan",
     "toast": {
-      "saved": "Ditambah ke Hanya saya. Hanya anda boleh melihatnya. Sahkan di halaman Muat naik.",
+      "saved": "Disimpan ke Hanya saya. Hanya anda boleh melihatnya.",
       "quarantined": "Muat naik disekat untuk semakan keselamatan."
     },
     "scratchpad": {
@@ -481,6 +530,24 @@
     "limits": "Sehingga {{max}} fail peribadi, setiap satu {{mb}} MB. Anda ada {{used}}.",
     "limit": {
       "reached": "Anda telah mencapai had {{limit}} fail peribadi. Padam satu untuk menambah yang lain."
+    },
+    "namingHint": "Beri setiap fail nama, dan kapsyen jika mahu. Tiada apa yang dibaca dan tiada apa yang menunggu semakan.",
+    "saving": "Menyimpan ke Hanya saya…",
+    "choice": {
+      "document": {
+        "hint": "PDF, atau foto setiap halamannya. Anda namakannya; tiada apa yang dibaca."
+      },
+      "photo": {
+        "hint": "Gambar yang ingin anda simpan. Anda namakannya dan tulis kapsyen sendiri."
+      }
+    },
+    "details": {
+      "title": "Namakan fail ini",
+      "nameLabel": "Nama",
+      "captionLabel": "Kapsyen (pilihan)",
+      "captionPlaceholder": "Beberapa patah perkataan untuk mengingatinya",
+      "save": "Simpan",
+      "pages": "{{count}} halaman, disimpan sebagai satu fail"
     }
   }
 }

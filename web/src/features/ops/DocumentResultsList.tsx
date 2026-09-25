@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card } from '../../components/ui/Card'
+import { middleEllipsis } from '../../lib/filename'
 import { DocumentCard, DocumentViewerModal } from './DocumentCard'
 import { opsApi, type DocumentRow, type TraceReport } from './opsApi'
 import { documentIsEditable } from './opsShared'
@@ -17,15 +18,15 @@ export function DocumentResultsList({
   documents,
   canEdit,
   canArchive,
-  permanentDelete = false,
+  canRequestPurge = false,
   onSaved,
   emptyMessage,
 }: {
   documents: DocumentRow[]
   canEdit: boolean
   canArchive: boolean
-  /** Delete means delete FOR GOOD: the Only me list (a private file), with a typed confirmation (DECISIONS #99). */
-  permanentDelete?: boolean
+  /** Show the owner's Purge on each company document (round 21, A5, DECISIONS #101). */
+  canRequestPurge?: boolean
   onSaved: () => void
   emptyMessage: string
 }) {
@@ -33,6 +34,7 @@ export function DocumentResultsList({
   const [trace, setTrace] = useState<{ documentId: number; report: TraceReport } | null>(null)
   const [viewingDocument, setViewingDocument] = useState<DocumentRow | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const viewTrace = async (documentId: number) => {
     try {
@@ -45,8 +47,20 @@ export function DocumentResultsList({
 
   const archiveDocument = async (doc: DocumentRow) => {
     try {
-      if (permanentDelete) await opsApi.purgeDocument(doc.id, doc.filename)
-      else await opsApi.archiveDocument(doc.id)
+      await opsApi.archiveDocument(doc.id)
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  // The owner's Purge: nothing is deleted, the document is hidden and the team is told. The document leaves this list,
+  // so the request is confirmed here, by name, or the click would look like it did nothing.
+  const requestPurge = async (doc: DocumentRow) => {
+    try {
+      await opsApi.requestPurge(doc.id)
+      setError(null)
+      setNotice(t('ops.documents.purgeRequest.done', { filename: middleEllipsis(doc.filename, 40) }))
       onSaved()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -55,6 +69,11 @@ export function DocumentResultsList({
 
   return (
     <div className="space-y-8">
+      {notice && (
+        <div className="rounded-card border border-line bg-white px-4 py-3 text-sm text-ink" role="status">
+          {notice}
+        </div>
+      )}
       {error && (
         <div className="rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
           {error}
@@ -71,10 +90,11 @@ export function DocumentResultsList({
               doc={doc}
               canEdit={documentIsEditable(canEdit, doc)}
               canArchive={canArchive}
-              permanentDelete={permanentDelete}
+              canRequestPurge={canRequestPurge && doc.visibility !== 'only_me'}
               onView={() => setViewingDocument(doc)}
               onTrace={() => void viewTrace(doc.id)}
               onArchive={() => void archiveDocument(doc)}
+              onRequestPurge={() => void requestPurge(doc)}
               onSaved={onSaved}
             />
           ))}

@@ -12,14 +12,23 @@ import { UploadProgress } from './UploadProgress'
 import { MAX_PAGES } from './uploadSelection'
 import type { UploadFlow } from './useUploadFlow'
 
-export function UploadPanel({ flow, disabled = false }: { flow: UploadFlow; /** Off for a reason that is not an upload in progress (the private-file limit is reached, DECISIONS #99). */ disabled?: boolean }) {
+export function UploadPanel({
+  flow, disabled = false, personal = false,
+}: {
+  flow: UploadFlow
+  /** Off for a reason that is not an upload in progress (the private-file limit is reached, DECISIONS #99). */
+  disabled?: boolean
+  /** The Only me variant (round 21, A3, DECISIONS #101): nothing is read or captioned, so the rows and the progress say so. */
+  personal?: boolean
+}) {
   const { t } = useTranslation()
+  const hints = personal ? { document: t('onlyMe.choice.document.hint'), photo: t('onlyMe.choice.photo.hint') } : undefined
   return (
     <>
       {flow.busy && flow.uploading ? (
-        <UploadProgress name={flow.uploading.name} pages={flow.uploading.pages} />
+        <UploadProgress name={flow.uploading.name} pages={flow.uploading.pages} personal={personal} />
       ) : (
-        <UploadChoice disabled={flow.busy || disabled} onDocumentFiles={flow.chooseDocumentFiles} onPhotoFile={flow.uploadPhoto} />
+        <UploadChoice disabled={flow.busy || disabled} hints={hints} onDocumentFiles={flow.chooseDocumentFiles} onPhotoFile={flow.uploadPhoto} />
       )}
 
       {flow.selectionError && !flow.staged && (

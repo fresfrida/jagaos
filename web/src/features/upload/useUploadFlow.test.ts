@@ -13,7 +13,7 @@ vi.mock('../ops/opsApi', async (importActual) => ({
 import { ApiError } from '../../lib/apiClient'
 import { opsApi } from '../ops/opsApi'
 import { resetFileLimitCache } from './fileLimit'
-import { useUploadFlow } from './useUploadFlow'
+import { defaultPersonalName, useUploadFlow } from './useUploadFlow'
 
 const uploadDocument = vi.mocked(opsApi.uploadDocument)
 const uploadPages = vi.mocked(opsApi.uploadPages)
@@ -81,19 +81,129 @@ describe('useUploadFlow', () => {
     expect(uploadDocument).toHaveBeenCalledWith(pdf, false, 'en', { docTypeHint: undefined, visibility: undefined })
   })
 
-  it('a flow made for the Only me section sends every upload as a personal file: a document, a photo and merged pages', async () => {
-    uploadDocument.mockResolvedValue({ document_id: 1, status: 'needs_review' })
-    uploadPages.mockResolvedValue({ document_id: 2, status: 'needs_review' })
-    const { result } = hook(null, 'only_me')
+  describe('an Only me flow holds every choice for a name (round 21, A3)', () => {
+    const only = () => hook(null, 'only_me')
 
-    await act(async () => { result.current.chooseDocumentFiles([pdf]) })
-    await act(async () => { result.current.uploadPhoto(jpg('private.jpg')) })
-    act(() => result.current.chooseDocumentFiles([jpg('p1.jpg'), jpg('p2.jpg')]))
-    await act(async () => { await result.current.submitPages() })
+    it('a document is held, not sent; saving sends it as a personal file with the name and caption', async () => {
+      uploadDocument.mockResolvedValue({ document_id: 1, status: 'filed' })
+      const { result } = only()
 
-    expect(uploadDocument).toHaveBeenNthCalledWith(1, pdf, false, 'en', { docTypeHint: null, visibility: 'only_me' })
-    expect(uploadDocument).toHaveBeenNthCalledWith(2, expect.any(File), true, 'en', { docTypeHint: null, visibility: 'only_me' })
-    expect(uploadPages).toHaveBeenCalledWith(expect.any(Array), 'en', { docTypeHint: null, visibility: 'only_me' })
+      act(() => result.current.chooseDocumentFiles([pdf]))
+
+      expect(uploadDocument).not.toHaveBeenCalled()
+      expect(result.current.draft).toEqual({ files: [pdf], isPicture: false, defaultName: 'invoice' })
+      await act(async () => { await result.current.saveDraft({ name: 'Lease', caption: 'Signed copy' }) })
+      expect(uploadDocument).toHaveBeenCalledWith(pdf, false, 'en', { docTypeHint: null, visibility: 'only_me', name: 'Lease', caption: 'Signed copy' })
+      expect(result.current.draft).toBeNull()
+    })
+
+    it('a photo is held the same way, and the promise its caller waits on resolves true once it was sent', async () => {
+      uploadDocument.mockResolvedValue({ document_id: 1, status: 'filed' })
+      const { result } = only()
+      let answer: Promise<boolean> = Promise.resolve(false)
+
+      act(() => { answer = result.current.uploadPhoto(jpg('private.jpg')) })
+      expect(uploadDocument).not.toHaveBeenCalled()
+      expect(result.current.draft).toMatchObject({ isPicture: true, defaultName: 'private' })
+      await act(async () => { await result.current.saveDraft({ name: 'Me' }) })
+
+      await expect(answer).resolves.toBe(true)
+      expect(uploadDocument).toHaveBeenCalledWith(expect.any(File), true, 'en', { docTypeHint: null, visibility: 'only_me', name: 'Me' })
+    })
+
+    it('cancelling sends nothing and answers false, so a scratchpad keeps its drawing', async () => {
+      const { result } = only()
+      let answer: Promise<boolean> = Promise.resolve(true)
+      act(() => { answer = result.current.uploadPhoto(jpg('note.png')) })
+
+      act(() => result.current.cancelDraft())
+
+      await expect(answer).resolves.toBe(false)
+      expect(uploadDocument).not.toHaveBeenCalled()
+      expect(result.current.draft).toBeNull()
+    })
+
+    it('a newer choice replaces one that was never named, and the older one is answered false', async () => {
+      const { result } = only()
+      let first: Promise<boolean> = Promise.resolve(true)
+      act(() => { first = result.current.uploadPhoto(jpg('one.jpg')) })
+
+      act(() => { void result.current.uploadPhoto(jpg('two.jpg')) })
+
+      await expect(first).resolves.toBe(false)
+      expect(result.current.draft).toMatchObject({ defaultName: 'two' })
+    })
+
+    it('several photos are staged, then held for one name, then sent together as pages, and the staging clears', async () => {
+      uploadPages.mockResolvedValue({ document_id: 2, status: 'filed' })
+      const { result } = only()
+      act(() => result.current.chooseDocumentFiles([jpg('p1.jpg'), jpg('p2.jpg')]))
+      expect(result.current.staged).toHaveLength(2)
+      let submitted: Promise<void> = Promise.resolve()
+
+      act(() => { submitted = result.current.submitPages() })
+      expect(uploadPages).not.toHaveBeenCalled()
+      expect(result.current.draft?.files).toHaveLength(2)
+      await act(async () => { await result.current.saveDraft({ name: 'Pages', caption: 'All four' }); await submitted })
+
+      expect(uploadPages).toHaveBeenCalledWith(expect.any(Array), 'en', { docTypeHint: null, visibility: 'only_me', name: 'Pages', caption: 'All four' })
+      expect(result.current.staged).toBeNull()
+    })
+
+    it('cancelling the name of staged pages keeps them staged', async () => {
+      const { result } = only()
+      act(() => result.current.chooseDocumentFiles([jpg('p1.jpg'), jpg('p2.jpg')]))
+      let submitted: Promise<void> = Promise.resolve()
+      act(() => { submitted = result.current.submitPages() })
+
+      await act(async () => { result.current.cancelDraft(); await submitted })
+
+      expect(uploadPages).not.toHaveBeenCalled()
+      expect(result.current.staged).toHaveLength(2)
+    })
+
+    it('a failed send closes the sheet, reports the error and answers false; the file is not sent twice', async () => {
+      uploadDocument.mockRejectedValue(new Error('boom'))
+      const onError = vi.fn()
+      const { result } = renderHook(() => useUploadFlow({ language: 'en', refresh: vi.fn(async () => undefined), onOutcome: vi.fn(), onError, visibility: 'only_me' }))
+      let answer: Promise<boolean> = Promise.resolve(true)
+      act(() => { answer = result.current.uploadPhoto(jpg('a.jpg')) })
+
+      await act(async () => { await result.current.saveDraft({ name: 'A' }) })
+
+      await expect(answer).resolves.toBe(false)
+      expect(result.current.draft).toBeNull()
+      expect(onError.mock.calls.at(-1)![0]).toBe('boom')
+      expect(uploadDocument).toHaveBeenCalledTimes(1)
+    })
+
+    it('saving with nothing held does nothing', async () => {
+      const { result } = only()
+      await act(async () => { await result.current.saveDraft({ name: 'x' }) })
+      expect(uploadDocument).not.toHaveBeenCalled()
+    })
+
+    it('a COMPANY flow never holds anything: it sends at once, exactly as before', async () => {
+      uploadDocument.mockResolvedValue({ document_id: 1, status: 'needs_review' })
+      const { result } = hook(null, 'company')
+      await act(async () => { result.current.chooseDocumentFiles([pdf]) })
+      expect(result.current.draft).toBeNull()
+      expect(uploadDocument).toHaveBeenCalledWith(pdf, false, 'en', { docTypeHint: null, visibility: 'company' })
+    })
+  })
+
+  describe('defaultPersonalName', () => {
+    it('is the file name without its last extension, trimmed and cut to 120 characters', () => {
+      expect(defaultPersonalName('IMG_0042.jpg')).toBe('IMG_0042')
+      expect(defaultPersonalName('lease.final.pdf')).toBe('lease.final')
+      expect(defaultPersonalName('no-extension')).toBe('no-extension')
+      expect(defaultPersonalName('  spaced  .png')).toBe('spaced')
+      expect(defaultPersonalName('x'.repeat(200) + '.pdf')).toHaveLength(120)
+    })
+
+    it('never returns an empty name: a file that is all extension keeps its whole name', () => {
+      expect(defaultPersonalName('.hidden')).toBe('.hidden')
+    })
   })
 
   describe('the file-size limit (round 20, item 6)', () => {

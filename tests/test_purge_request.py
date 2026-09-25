@@ -1,0 +1,370 @@
+"""The owner asks for a company document to be purged (2026-09-25, round 21, A5, DECISIONS #101 and #102).
+
+The smallest honest version of an owner "Purge": nothing is deleted. POST /api/documents/{id}/request-purge archives the document
+exactly as Delete does (hidden from every other role, file and row kept) and flags it (`purge_requested_at`, `purge_requested_by`).
+The OWNER, and only the owner, keeps seeing it, marked "purge_requested" and read-only, until the team removes the row (#102), so the
+request is an accountability trail and not a disappearance; the owner-only GET /api/purge-requests lists what is pending too.
+An admin keeps Delete and has no Purge; a personal file is never purge-requested; an ordinary Delete stays invisible to everyone.
+
+Real logins and real uploads; noise JPEGs take classify's no-text branch, so nothing here calls the gateway.
+"""
+
+import io
+import logging
+import random
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from PIL import Image
+
+from app.auth import CurrentMembership, may_request_purge, may_see_purge_requested
+from app.db import get_conn
+from app.main import app
+from app.purge import purge_now
+
+client = TestClient(app)
+_seed = iter(range(1, 100_000))
+
+
+def _headers(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _jpeg() -> bytes:
+    rng = random.Random(next(_seed) + 900_000)
+    buf = io.BytesIO()
+    Image.frombytes("RGB", (32, 32), rng.randbytes(32 * 32 * 3)).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+@pytest.fixture
+def team() -> dict:
+    owner = client.post(
+        "/api/auth/dev-login",
+        json={"email": "owner@preq.test", "company_name": "Purge Request Co", "fye_month": 12, "fye_day": 31},
+    ).json()
+    tokens, ids = {"owner": owner["token"]}, {"owner": owner["user"]["id"]}
+    for name, role in [("admin", "admin"), ("user1", "user"), ("user2", "user"), ("viewer", "viewer")]:
+        email = f"{name}@preq.test"
+        assert client.post(
+            f"/api/companies/{owner['company']['id']}/members",
+            json={"email": email, "role": role}, headers=_headers(owner["token"]),
+        ).status_code == 200
+        login = client.post("/api/auth/dev-login", json={"email": email}).json()
+        tokens[name], ids[name] = login["token"], login["user"]["id"]
+    return {"tokens": tokens, "ids": ids, "company_id": owner["company"]["id"]}
+
+
+@pytest.fixture
+def other_company() -> dict:
+    """A second, unrelated company with its own owner: the tenant-isolation witness."""
+    owner = client.post(
+        "/api/auth/dev-login",
+        json={"email": "owner@preq-other.test", "company_name": "Other Purge Co", "fye_month": 6, "fye_day": 30},
+    ).json()
+    return {"token": owner["token"], "company_id": owner["company"]["id"]}
+
+
+def _upload(team: dict, actor: str, *, private: bool = False, tag: str = "f") -> int:
+    suffix = "?visibility=only_me" if private else ""
+    resp = client.post(
+        f"/api/documents{suffix}", headers=_headers(team["tokens"][actor]),
+        files={"file": (f"{actor}-{tag}.jpg", _jpeg(), "image/jpeg")},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["document_id"]
+
+
+def _confirm_review(team: dict, doc: int) -> None:
+    owner = _headers(team["tokens"]["owner"])
+    item = next(i for i in client.get("/api/review", headers=owner).json() if i["document_id"] == doc)
+    resp = client.post(
+        f"/api/review/{item['id']}/resolve?thread_id={item['thread_id']}",
+        json={"action": "confirm", "corrected_fields": {}}, headers=owner,
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def _filed_company_doc(team: dict, tag: str = "f") -> int:
+    doc = _upload(team, "user1", tag=tag)
+    _confirm_review(team, doc)
+    return doc
+
+
+def _row(doc: int):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT id, filename, status, stored_path, purge_requested_at, purge_requested_by FROM document WHERE id = ?", (doc,),
+        ).fetchone()
+
+
+def _ask(team: dict, actor: str, doc: int):
+    return client.post(f"/api/documents/{doc}/request-purge", headers=_headers(team["tokens"][actor]))
+
+
+def _requests(token: str):
+    return client.get("/api/purge-requests", headers=_headers(token))
+
+
+# --- the owner asks; nothing is deleted -------------------------------------------------------------------
+
+
+def _ids(token: str, path: str = "/api/documents") -> set[int]:
+    return {d["id"] for d in client.get(path, headers=_headers(token)).json()}
+
+
+def test_the_owner_can_ask_for_a_filed_company_document_to_be_purged_and_nothing_is_deleted(team):
+    doc = _filed_company_doc(team)
+    stored = Path(_row(doc)["stored_path"])
+
+    resp = _ask(team, "owner", doc)
+
+    assert resp.status_code == 200 and resp.json() == {"status": "purge_requested"}
+    row = _row(doc)
+    assert row["status"] == "archived"                      # archived exactly as Delete archives it
+    assert row["purge_requested_at"] is not None
+    assert row["purge_requested_by"] == "owner@preq.test"
+    assert stored.exists()                                  # nothing is deleted: the file is still on disk
+
+
+def test_the_owner_still_sees_it_marked_purge_requested_and_read_only_and_can_still_open_the_file(team):
+    doc = _filed_company_doc(team)
+    _ask(team, "owner", doc)
+
+    listed = next(d for d in client.get("/api/documents", headers=_headers(team["tokens"]["owner"])).json() if d["id"] == doc)
+
+    assert listed["status"] == "purge_requested"            # what the pill reads
+    assert listed["can_edit"] is False                       # read-only
+    assert "purge_requested_at" not in listed                # the row has the same shape as every other
+    assert client.get(f"/api/documents/{doc}/file", headers=_headers(team["tokens"]["owner"])).status_code == 200
+
+
+@pytest.mark.parametrize("actor", ["admin", "user1", "user2", "viewer"])
+def test_every_other_role_sees_it_as_gone_exactly_as_a_delete(team, actor):
+    doc = _filed_company_doc(team, tag="gone")
+    assert doc in _ids(team["tokens"][actor])
+    _ask(team, "owner", doc)
+
+    assert doc not in _ids(team["tokens"][actor])
+    assert client.get(f"/api/documents/{doc}/file", headers=_headers(team["tokens"][actor])).status_code == 404
+    assert doc not in _ids(team["tokens"][actor], "/api/search?q=user1-gone")
+
+
+def test_the_owner_finds_it_in_search_too_and_nobody_else_does(team):
+    doc = _filed_company_doc(team, tag="findable")
+    _ask(team, "owner", doc)
+
+    found = client.get("/api/search?q=findable", headers=_headers(team["tokens"]["owner"])).json()
+    assert [d["id"] for d in found] == [doc] and found[0]["status"] == "purge_requested"
+    for actor in ("admin", "user1", "viewer"):
+        assert client.get("/api/search?q=findable", headers=_headers(team["tokens"][actor])).json() == [], actor
+
+
+def test_the_owners_thumbnail_of_a_purge_requested_pdf_still_works_and_others_get_404(team):
+    from reportlab.pdfgen import canvas
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf)
+    c.drawString(72, 760, f"Thumbnail check {next(_seed)}")
+    c.save()
+    doc = client.post("/api/documents", headers=_headers(team["tokens"]["user1"]),
+                      files={"file": ("pq-thumb.pdf", buf.getvalue(), "application/pdf")}).json()["document_id"]
+    _confirm_review(team, doc)
+    assert client.get(f"/api/documents/{doc}/thumbnail", headers=_headers(team["tokens"]["owner"])).status_code == 200
+    _ask(team, "owner", doc)
+
+    assert client.get(f"/api/documents/{doc}/thumbnail", headers=_headers(team["tokens"]["owner"])).status_code == 200
+    assert client.get(f"/api/documents/{doc}/thumbnail", headers=_headers(team["tokens"]["admin"])).status_code == 404
+
+
+def test_an_ordinary_delete_is_still_invisible_to_the_owner_only_a_purge_request_earns_the_exception(team):
+    deleted = _filed_company_doc(team, tag="plaindelete")
+    requested = _filed_company_doc(team, tag="reqpurge")
+    assert client.post(f"/api/documents/{deleted}/archive", headers=_headers(team["tokens"]["admin"])).status_code == 200
+    _ask(team, "owner", requested)
+
+    owner_sees = _ids(team["tokens"]["owner"])
+    assert deleted not in owner_sees and requested in owner_sees
+    assert client.get(f"/api/documents/{deleted}/file", headers=_headers(team["tokens"]["owner"])).status_code == 404
+    assert deleted not in _ids(team["tokens"]["owner"], "/api/search?q=plaindelete")
+
+
+def test_another_companys_owner_never_sees_it(team, other_company):
+    doc = _filed_company_doc(team, tag="crosstenant")
+    _ask(team, "owner", doc)
+    assert doc not in _ids(other_company["token"])
+    assert client.get(f"/api/documents/{doc}/file", headers=_headers(other_company["token"])).status_code == 404
+
+
+def test_a_purge_requested_document_cannot_be_deleted_or_asked_for_again_and_the_pill_clears_only_when_the_row_is_gone(team):
+    doc = _filed_company_doc(team, tag="untilremoved")
+    _ask(team, "owner", doc)
+
+    assert client.post(f"/api/documents/{doc}/archive", headers=_headers(team["tokens"]["owner"])).status_code == 409
+    assert _ask(team, "owner", doc).status_code == 409
+    assert doc in _ids(team["tokens"]["owner"])                # still there, still marked
+
+    purge_now(doc)                                             # the team removes the row
+
+    assert doc not in _ids(team["tokens"]["owner"])
+    assert client.get(f"/api/documents/{doc}/file", headers=_headers(team["tokens"]["owner"])).status_code == 404
+
+
+def test_the_row_survives_with_its_history_so_the_team_can_purge_it_later(team):
+    doc = _filed_company_doc(team)
+    _ask(team, "owner", doc)
+    with get_conn() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM document WHERE id = ?", (doc,)).fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM trace WHERE document_id = ?", (doc,)).fetchone()[0] > 0
+
+
+def test_a_pending_document_can_be_asked_for_and_its_review_item_is_dismissed(team):
+    doc = _upload(team, "user1", tag="pending")            # still waiting for review; the owner sees it
+    assert any(i["document_id"] == doc for i in client.get("/api/review", headers=_headers(team["tokens"]["owner"])).json())
+
+    assert _ask(team, "owner", doc).status_code == 200
+
+    assert not any(i["document_id"] == doc for i in client.get("/api/review", headers=_headers(team["tokens"]["owner"])).json())
+    assert _row(doc)["purge_requested_at"] is not None
+
+
+@pytest.mark.parametrize("actor", ["admin", "user1", "user2", "viewer"])
+def test_nobody_below_the_owner_can_ask_an_admin_keeps_delete_only(team, actor):
+    doc = _filed_company_doc(team)
+
+    resp = _ask(team, actor, doc)
+
+    assert resp.status_code == 403
+    assert _row(doc)["status"] == "filed" and _row(doc)["purge_requested_at"] is None
+
+
+def test_an_admin_can_still_delete_the_ordinary_way_and_that_is_not_a_purge_request(team):
+    doc = _filed_company_doc(team)
+    assert client.post(f"/api/documents/{doc}/archive", headers=_headers(team["tokens"]["admin"])).status_code == 200
+    assert _row(doc)["status"] == "archived" and _row(doc)["purge_requested_at"] is None
+    assert _requests(team["tokens"]["owner"]).json() == []
+
+
+def test_a_personal_file_is_never_purge_requested_even_by_its_own_owner_uploader(team):
+    mine = _upload(team, "owner", private=True, tag="mine")
+    theirs = _upload(team, "user1", private=True, tag="theirs")
+
+    assert _ask(team, "owner", mine).status_code == 403      # visible to them, but the rule refuses: it is theirs to delete for good
+    assert _ask(team, "owner", theirs).status_code == 404    # not visible to the owner: not even confirmed to exist
+    assert _ask(team, "admin", theirs).status_code == 404
+    assert _row(mine)["purge_requested_at"] is None and _row(theirs)["purge_requested_at"] is None
+
+
+def test_another_companys_owner_gets_a_404_and_changes_nothing(team, other_company):
+    doc = _filed_company_doc(team)
+
+    resp = client.post(f"/api/documents/{doc}/request-purge", headers=_headers(other_company["token"]))
+
+    assert resp.status_code == 404
+    assert _row(doc)["status"] == "filed" and _row(doc)["purge_requested_at"] is None
+
+
+def test_a_request_needs_a_session(team):
+    doc = _filed_company_doc(team)
+    assert client.post(f"/api/documents/{doc}/request-purge").status_code == 401
+
+
+def test_asking_twice_or_for_an_already_deleted_document_is_a_409_and_a_missing_one_a_404(team):
+    doc = _filed_company_doc(team)
+    assert _ask(team, "owner", doc).status_code == 200
+    first_at = _row(doc)["purge_requested_at"]
+
+    assert _ask(team, "owner", doc).status_code == 409
+    assert _row(doc)["purge_requested_at"] == first_at        # the first request's time is not overwritten
+
+    deleted = _filed_company_doc(team, tag="deleted")
+    client.post(f"/api/documents/{deleted}/archive", headers=_headers(team["tokens"]["admin"]))
+    assert _ask(team, "owner", deleted).status_code == 409
+
+    assert _ask(team, "owner", 987_654).status_code == 404
+
+
+def test_a_request_leaves_an_audit_line_naming_who_and_what_but_no_content(team, caplog):
+    doc = _filed_company_doc(team, tag="audited")
+    name = _row(doc)["filename"]
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        _ask(team, "owner", doc)
+    lines = [r.getMessage() for r in caplog.records if "AUDIT purge-request" in r.getMessage()]
+    assert len(lines) == 1
+    assert "owner@preq.test" in lines[0] and str(doc) in lines[0] and name in lines[0]
+
+
+# --- the list of requests ---------------------------------------------------------------------------------
+
+
+def test_the_owner_sees_their_companys_pending_requests_newest_first(team):
+    first, second = _filed_company_doc(team, tag="a"), _filed_company_doc(team, tag="b")
+    _ask(team, "owner", first)
+    _ask(team, "owner", second)
+
+    listed = _requests(team["tokens"]["owner"])
+
+    assert listed.status_code == 200
+    body = listed.json()
+    assert [r["id"] for r in body] == [second, first]
+    assert set(body[0]) == {"id", "filename", "requested_at", "requested_by"}   # no content, no extracted text
+    assert body[0]["requested_by"] == "owner@preq.test" and body[0]["filename"] == _row(second)["filename"]
+
+
+@pytest.mark.parametrize("actor", ["admin", "user1", "viewer"])
+def test_only_the_owner_can_read_the_list(team, actor):
+    assert client.get("/api/purge-requests", headers=_headers(team["tokens"][actor])).status_code == 403
+
+
+def test_the_list_needs_a_session(team):
+    assert client.get("/api/purge-requests").status_code == 401
+
+
+def test_one_company_never_sees_anothers_requests(team, other_company):
+    doc = _filed_company_doc(team)
+    _ask(team, "owner", doc)
+
+    assert [r["id"] for r in _requests(team["tokens"]["owner"]).json()] == [doc]
+    assert _requests(other_company["token"]).json() == []          # the other company's owner sees none of it
+
+
+def test_a_request_stops_being_listed_once_the_team_has_purged_the_document(team):
+    doc = _filed_company_doc(team)
+    _ask(team, "owner", doc)
+    assert [r["id"] for r in _requests(team["tokens"]["owner"]).json()] == [doc]
+
+    purge_now(doc)                                               # what scripts/purge_document.py does
+
+    assert _requests(team["tokens"]["owner"]).json() == []
+
+
+# --- the rule and the schema ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "role,visibility,allowed",
+    [
+        ("owner", "company", True),
+        ("owner", "only_me", False),
+        ("admin", "company", False),
+        ("user", "company", False),
+        ("viewer", "company", False),
+        ("owner", "anything-else", False),
+    ],
+)
+def test_may_request_purge_matrix(role, visibility, allowed):
+    membership = CurrentMembership(user_id=1, email="x@y.z", name=None, company_id=1, role=role)
+    assert may_request_purge(membership, visibility=visibility) is allowed
+
+
+@pytest.mark.parametrize("role,allowed", [("owner", True), ("admin", False), ("user", False), ("viewer", False)])
+def test_may_see_purge_requested_matrix(role, allowed):
+    membership = CurrentMembership(user_id=1, email="x@y.z", name=None, company_id=1, role=role)
+    assert may_see_purge_requested(membership) is allowed
+
+
+def test_the_two_columns_exist_and_default_to_null():
+    with get_conn() as conn:
+        columns = {r["name"]: r for r in conn.execute("PRAGMA table_info(document)")}
+    for name in ("purge_requested_at", "purge_requested_by"):
+        assert name in columns and columns[name]["notnull"] == 0 and columns[name]["dflt_value"] is None

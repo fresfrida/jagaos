@@ -43,9 +43,12 @@ function useNarrationIndex(): number {
   return index
 }
 
-export function UploadProgress({ name, pages }: { name: string; pages?: number }) {
+/** `personal` (round 21, A3, DECISIONS #101): a file going into Only me is saved, not read, so there is no "Reading your
+ * document" story to tell; it shows one honest line. */
+export function UploadProgress({ name, pages, personal = false }: { name: string; pages?: number; personal?: boolean }) {
   const { t } = useTranslation()
-  const line = NARRATION_KEYS[useNarrationIndex()] ?? NARRATION_KEYS[0]
+  const narrated = NARRATION_KEYS[useNarrationIndex()] ?? NARRATION_KEYS[0]
+  const line = personal ? 'onlyMe.saving' : narrated
 
   return (
     <div className="flex flex-col items-center px-4 py-8 text-center" role="status" data-testid="upload-progress">

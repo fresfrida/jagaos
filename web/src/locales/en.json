@@ -8,8 +8,6 @@
     }
   },
   "home": {
-    "signIn": "Sign in",
-    "pitch": "Stop hunting for paperwork and missing deadlines.",
     "demo": {
       "button": "Pick a demo role",
       "hint": "See the app as an owner, admin, user or viewer. No sign-up needed.",
@@ -47,15 +45,15 @@
     "features": {
       "capture": {
         "title": "Capture",
-        "text": "Snap or upload an invoice, contract or notice. We read it for you."
+        "text": "A photo becomes a filed document."
       },
       "review": {
         "title": "Review",
-        "text": "You confirm what we read. Nothing is filed until a person has checked it."
+        "text": "It reads. You confirm."
       },
-      "obligations": {
-        "title": "Obligations",
-        "text": "Deadlines and required filings land on your calendar, each with the rule behind it."
+      "remember": {
+        "title": "Remember",
+        "text": "Deadlines surface before they cost you."
       }
     },
     "signedIn": {
@@ -72,7 +70,18 @@
         "hint": "Private files that only you can see"
       }
     },
-    "signInHint": "Use your own email, or set up a new company."
+    "hero": {
+      "headline": "JagaOS remembers, so you don't need to.",
+      "subhead": "Upload a document. JagaOS reads it, finds the dates and obligations, and keeps everything one search away.",
+      "imageAlt": "The JagaOS calendar on a phone, showing documents by the day they were uploaded."
+    },
+    "how": {
+      "heading": "How it works",
+      "upload": "Upload.",
+      "read": "Read.",
+      "confirm": "Confirm."
+    },
+    "closing": "So you can focus on the work that matters."
   },
   "header": {
     "primaryNav": "Primary",
@@ -90,7 +99,11 @@
       "companySettings": "Company Settings",
       "onlyMe": "Only me"
     },
-    "switchCompany": "Switch company"
+    "switchCompany": "Switch company",
+    "navShort": {
+      "tags": "Tags",
+      "companyFiles": "Files"
+    }
   },
   "companySettings": {
     "heading": "Company Settings",
@@ -140,6 +153,19 @@
         "quarantined": "That file was blocked for a safety check. See the review queue.",
         "failed": "That didn't work. Please try again."
       }
+    },
+    "checklist": {
+      "heading": "Compliance checklist",
+      "loading": "Loading the checklist…",
+      "loadFailed": "The checklist could not be loaded."
+    },
+    "purgeRequests": {
+      "heading": "Purge requests ({{count}})",
+      "empty": "No purge requests.",
+      "status": "Purge requested: the team removes it permanently.",
+      "by": "Requested {{date}} by {{who}}",
+      "loading": "Loading purge requests…",
+      "loadFailed": "The purge requests could not be loaded."
     }
   },
   "auth": {
@@ -162,7 +188,8 @@
       "clear": "Clear",
       "close": "Close",
       "delete": "Delete",
-      "dismiss": "Dismiss"
+      "dismiss": "Dismiss",
+      "retry": "Try again"
     }
   },
   "ops": {
@@ -174,7 +201,8 @@
       "missing": "missing",
       "satisfied": "satisfied",
       "open": "open",
-      "archived": "archived"
+      "archived": "archived",
+      "purgeRequested": "Purge requested"
     },
     "backend": {
       "checking": "Checking backend…",
@@ -316,7 +344,13 @@
     },
     "search": {
       "heading": "Search",
-      "prompt": "Type something above to search your documents."
+      "prompt": "Type something above to search your documents.",
+      "cloud": {
+        "heading": "What your documents talk about",
+        "hint": "Tap a word to search for it.",
+        "loading": "Loading the word cloud…",
+        "failed": "The word cloud could not be loaded."
+      }
     },
     "tags": {
       "intro": "Jump straight into Company Files, pre-filtered by category."
@@ -352,6 +386,22 @@
         "prompt": "Type the file name below to confirm.",
         "inputLabel": "File name",
         "confirm": "Delete for good"
+      },
+      "filter": {
+        "all": "All",
+        "dateRange": "Date range",
+        "dateFrom": "From",
+        "dateTo": "To",
+        "dateClear": "Clear dates",
+        "dateBackwards": "The start date is after the end date.",
+        "noMatch": "No documents match these filters."
+      },
+      "purgeRequest": {
+        "button": "Purge",
+        "message": "Ask for \"{{filename}}\" to be permanently removed? Everyone else stops seeing it now. You keep seeing it, marked \"Purge requested\", until the team removes it permanently. You can't undo this.",
+        "confirm": "Purge",
+        "done": "Purge requested for \"{{filename}}\". Everyone else no longer sees it. It stays here, marked, until the team removes it permanently.",
+        "pending": "Purge requested: the team removes it permanently."
       }
     },
     "dates": {
@@ -364,7 +414,7 @@
       "selectADay": "Tap a day with documents to see them here.",
       "noneOnDay": "No documents on this day.",
       "basis": {
-        "filed": "When filed",
+        "uploaded": "Uploaded",
         "document": "Document dates"
       },
       "prevYear": "Previous year",
@@ -378,7 +428,8 @@
       "heading": "Compliance checklist: {{satisfied}} of {{total}} held",
       "empty": "Nothing on the checklist yet. Upload a statutory document that reads as a company event (incorporation, corp sec change) and what it needs appears here.",
       "viewDocument": "View document",
-      "upload": "Upload"
+      "upload": "Upload",
+      "openInSettings": "Open the full checklist in Company Settings"
     },
     "obligations": {
       "heading": "Obligations ({{count}})",
@@ -446,8 +497,6 @@
     "heading": "Only me",
     "description": "A private space. Only you can see what you add here.",
     "intro": "Files you add here are private. Only you can see them: not your teammates, not an admin, not the owner. They never appear in Company Files, Search or the Calendar.",
-    "reviewHint": "New files wait for you to confirm what we read.",
-    "reviewLink": "Open the Upload page",
     "filesHeading": "Your private files ({{count}})",
     "loading": "Loading your private files…",
     "loadFailed": "Couldn't load your private files.",
@@ -459,7 +508,7 @@
     "searchClear": "Clear the search",
     "searchCount": "{{shown}} of {{total}} match",
     "toast": {
-      "saved": "Added to Only me. Only you can see it. Confirm it on the Upload page.",
+      "saved": "Saved to Only me. Only you can see it.",
       "quarantined": "Upload blocked for safety review."
     },
     "scratchpad": {
@@ -481,6 +530,24 @@
     "limits": "Up to {{max}} private files, {{mb}} MB each. You have {{used}}.",
     "limit": {
       "reached": "You have reached the limit of {{limit}} private files. Delete one to add another."
+    },
+    "namingHint": "Give each file a name, and a caption if you like. Nothing is read, and nothing waits for review.",
+    "saving": "Saving to Only me…",
+    "choice": {
+      "document": {
+        "hint": "A PDF, or photos of its pages. You name it; nothing is read."
+      },
+      "photo": {
+        "hint": "A picture you want to keep. You name it and add your own caption."
+      }
+    },
+    "details": {
+      "title": "Name this file",
+      "nameLabel": "Name",
+      "captionLabel": "Caption (optional)",
+      "captionPlaceholder": "A few words to remember it by",
+      "save": "Save",
+      "pages": "{{count}} pages, saved as one file"
     }
   }
 }

@@ -63,6 +63,16 @@ def _upload(team: dict, actor: str, *, private: bool, tag: str = "f", data: byte
     return resp.json()["document_id"]
 
 
+def _legacy_pending_private(team: dict, actor: str, tag: str = "legacy") -> int:
+    """A private file the way rounds 19 and 20 left them: reviewed by the pipeline, so `needs_review` with an open review item.
+    Since round 21 (A3, DECISIONS #101) a new private file is filed on the spot; an old row is built as a company upload the
+    pipeline reviews, then marked personal. Deleting and rejecting such a row must keep working."""
+    doc = _upload(team, actor, private=False, tag=tag)
+    with get_conn() as conn:
+        conn.execute("UPDATE document SET visibility = 'only_me' WHERE id = ?", (doc,))
+    return doc
+
+
 def _confirm_review(team: dict, actor: str, doc: int) -> None:
     item = next(i for i in client.get("/api/review", headers=_headers(team["tokens"][actor])).json() if i["document_id"] == doc)
     resp = client.post(
@@ -102,8 +112,7 @@ def _rows_for(table: str, doc: int) -> int:
 
 @pytest.mark.parametrize("actor", ["user1", "admin", "owner"])
 def test_the_uploader_can_purge_their_own_filed_private_file_whatever_their_role(team, actor):
-    doc = _upload(team, actor, private=True)
-    _confirm_review(team, actor, doc)
+    doc = _upload(team, actor, private=True)          # filed on the spot since round 21: there is no review to confirm
     stored = Path(_row(doc)["stored_path"])
     assert stored.exists() and _used(team, actor) == 1
 
@@ -121,8 +130,8 @@ def test_the_uploader_can_purge_their_own_filed_private_file_whatever_their_role
     assert client.get(f"/api/documents/{doc}/file", headers=_headers(team["tokens"][actor])).status_code == 404
 
 
-def test_a_pending_private_file_can_be_purged_and_its_review_item_goes_with_it(team):
-    doc = _upload(team, "user1", private=True)
+def test_an_old_pending_private_file_can_be_purged_and_its_review_item_goes_with_it(team):
+    doc = _legacy_pending_private(team, "user1")
     assert doc in {i["document_id"] for i in client.get("/api/review", headers=_headers(team["tokens"]["user1"])).json()}
 
     assert _purge(team, "user1", doc, None).status_code == 200
@@ -230,7 +239,6 @@ def test_a_body_with_no_confirmation_is_refused_and_deletes_nothing(team):
 @pytest.mark.parametrize("actor", ["owner", "admin", "user2", "viewer"])
 def test_nobody_else_can_purge_someones_private_file_and_it_is_a_404(team, actor):
     doc = _upload(team, "user1", private=True)
-    _confirm_review(team, "user1", doc)
 
     assert _purge(team, actor, doc, _name(doc)).status_code == 404
 
@@ -320,8 +328,8 @@ def _reject(team: dict, actor: str, doc: int):
     )
 
 
-def test_rejecting_a_private_file_deletes_it_for_good_and_frees_the_slot(team):
-    doc = _upload(team, "user1", private=True)
+def test_rejecting_an_old_pending_private_file_deletes_it_for_good_and_frees_the_slot(team):
+    doc = _legacy_pending_private(team, "user1", "rej")
     stored = Path(_row(doc)["stored_path"])
 
     response = _reject(team, "user1", doc)

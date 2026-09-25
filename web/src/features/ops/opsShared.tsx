@@ -635,6 +635,8 @@ const STATUS_TONE: Record<string, string> = {
   satisfied: 'text-sage-ink bg-sage/15',
   open: 'text-amber-800 bg-amber-100',
   archived: 'text-muted bg-canvas',
+  // The owner's own purge request, still shown to them until the team removes the row (round 21, DECISIONS #102).
+  purge_requested: 'text-red-800 bg-red-50 ring-1 ring-red-200',
 }
 
 // Maps a raw status code (as returned by the backend, e.g. "needs_review")
@@ -650,6 +652,7 @@ const STATUS_LABEL_KEY: Record<string, string> = {
   satisfied: 'ops.status.satisfied',
   open: 'ops.status.open',
   archived: 'ops.status.archived',
+  purge_requested: 'ops.status.purgeRequested',
 }
 
 // 2026-09-23, live user question ("unsure what is 'Filed' status shown
