@@ -51,7 +51,9 @@ def _client() -> OpenAI:
         raise RuntimeError(
             "LLM_GATEWAY_API_KEY is not set — copy .env.example to .env and fill it in"
         )
-    return OpenAI(base_url=BASE_URL, api_key=API_KEY)
+    # max_retries=0: the SDK otherwise silently retries a timeout/429/5xx up to 2
+    # more times, tripling the cost of a single call with no visibility into it.
+    return OpenAI(base_url=BASE_URL, api_key=API_KEY, max_retries=0)
 
 
 def _cost(model: str, input_tokens: int, output_tokens: int) -> float:

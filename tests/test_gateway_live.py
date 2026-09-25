@@ -1,9 +1,11 @@
-"""Live-gateway smoke test. Skips automatically if LLM_GATEWAY_API_KEY is
-not set (e.g. in CI or a teammate's machine without .env) — this is the
-one test in the suite that spends real tokens and touches the network, so
-it stays separate from tests/test_rules_smoke.py's offline checks.
+"""Live-gateway smoke test. Opt-in only: skips unless RUN_LIVE_GATEWAY_TESTS=1 is
+set, on top of needing LLM_GATEWAY_API_KEY — this is the one test file in the
+suite that spends real tokens and touches the network, so it stays separate
+from tests/test_rules_smoke.py's offline checks and out of the default
+`pytest tests/` run (a full run with .env present used to fire all of these
+every time, which is real gateway budget spent just from running the suite).
 
-Run: pytest tests/test_gateway_live.py -v -s
+Run: RUN_LIVE_GATEWAY_TESTS=1 pytest tests/test_gateway_live.py -v -s
 """
 
 import os
@@ -15,8 +17,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("LLM_GATEWAY_API_KEY"),
-    reason="LLM_GATEWAY_API_KEY not set — copy .env.example to .env to run this test",
+    not (os.environ.get("LLM_GATEWAY_API_KEY") and os.environ.get("RUN_LIVE_GATEWAY_TESTS") == "1"),
+    reason="set RUN_LIVE_GATEWAY_TESTS=1 (and LLM_GATEWAY_API_KEY) to run this — spends real gateway tokens",
 )
 
 SAMPLE_INVOICE_TEXT = """Acme Supplies Pte Ltd
