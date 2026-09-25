@@ -1,11 +1,3 @@
-export const HERO = {
-  pill: 'New: AI memory for growing teams',
-  headingLead: 'Build a reliable company memory',
-  headingSoft: 'at scale',
-  copy: 'Capture the knowledge scattered across your business and retrieve it whenever your team needs it.',
-  searchPlaceholder: 'Ask what your company already knows...',
-} as const
-
 export const HOW_IT_WORKS = [
   { number: '01', title: 'Capture', body: 'Connect documents, messages and operational records.' },
   { number: '02', title: 'Organise', body: 'Extract structured information and apply permissions and tags.' },

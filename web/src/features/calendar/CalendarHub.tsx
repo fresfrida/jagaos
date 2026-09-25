@@ -4,10 +4,10 @@
  * three former OpsConsole tabs are "find something by when it matters"
  * concerns, none of them named individually in the header's five-item
  * nav, so they're grouped here under Calendar rather than each getting
- * its own top-level route). Only ever mounted once a session is
- * confirmed — `pages/Page.tsx`'s `calendar` case shows the logged-out
- * marketing CalendarPreview instead until then, so this doesn't need its
- * own RequireSession guard. */
+ * its own top-level route). Needs a session: `pages/Page.tsx`'s
+ * `calendar` case wraps it in `RequireSession`, which sends a signed-out
+ * visitor to the landing page (DECISIONS #106; there is no signed-out
+ * Calendar any more). */
 
 import { useTranslation } from 'react-i18next'
 import { Card } from '../../components/ui/Card'

@@ -1,6 +1,4 @@
-/** Thin fetch wrapper over the real backend (app/main.py). Separate from
- * features/search/searchService.ts on purpose: that boundary is for the
- * marketing preview's mock "memories" model, this one talks to the actual
+/** Thin fetch wrapper over the real backend (app/main.py): the actual
  * ARCHITECTURE.md pipeline (documents/expectations/obligations/trace).
  * Base URL: VITE_API_BASE_URL (web/.env, never committed).
  *
@@ -358,11 +356,10 @@ export const opsApi = {
   archiveDocument: (documentId: number) =>
     request<{ status: string }>(`/api/documents/${documentId}/archive`, { method: 'POST' }),
 
-  // Real search (2026-09-22) — NOT the same thing as features/search/'s
-  // mockSearchService: that one serves the logged-out marketing preview
-  // with sample data and has no session to send. This is the actual,
-  // tenant-scoped search over real documents, so it lives here with
-  // everything else that needs the session.
+  // Real search (2026-09-22): the actual, tenant-scoped search over real
+  // documents, so it lives here with everything else that needs the session.
+  // (A mock search service for the logged-out preview used to sit in
+  // features/search/; it was removed with the sample pages, DECISIONS #107.)
   search: (q: string) => request<DocumentRow[]>(`/api/search?${new URLSearchParams({ q })}`),
 
   editDocument: (

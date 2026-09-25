@@ -6,8 +6,8 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { routeHref } from '../router/routes'
 
 // 2026-09-23, live BM/Tamil i18n audit: found by grep, not on the seed
-// list — a real page (reachable signed-in and signed-out, unlike the
-// deprioritized marketing preview pages) with zero i18n wiring.
+// list — a real page (reachable signed-in and signed-out) with zero i18n
+// wiring.
 export function NotFoundPage() {
   const { t } = useTranslation()
   return (

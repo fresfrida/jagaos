@@ -37,10 +37,8 @@ export function localeFor(language: string): string {
   return INTL_LOCALE[language] ?? 'en-GB'
 }
 
-/** `locale` defaults to 'en-GB' so existing callers that don't pass one
- * (the logged-out marketing preview's `EventDetails.tsx`/`MemoryCard.tsx`,
- * deliberately not localized — DECISIONS #57) keep their exact prior
- * output; the real Calendar page passes `localeFor(i18n.language)`. */
+/** `locale` defaults to 'en-GB' for a caller that doesn't pass one; the real
+ * Calendar page passes `localeFor(i18n.language)`. */
 export function formatShortDate(iso: string, locale: string = 'en-GB'): string {
   return parseIsoDate(iso).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
 }

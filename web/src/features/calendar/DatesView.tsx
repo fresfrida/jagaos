@@ -1,9 +1,6 @@
-/** Groups documents by date (2026-09-22, doc 3's calendar wiring). Not
- * the logged-out marketing preview's CalendarPreview/WeekGrid at
- * /calendar (when signed out) — that models generic meetings with mock
- * data and no session; this is the real, session-scoped Calendar page's
- * "Dates" section, over real documents, reusing whatever list it's handed
- * rather than a new endpoint. Two date bases: received_at (upload
+/** Groups documents by date (2026-09-22, doc 3's calendar wiring). This is the real,
+ * session-scoped Calendar page's "Dates" section, over real documents, reusing whatever
+ * list it's handed rather than a new endpoint. Two date bases: received_at (upload
  * timestamp, always set) and occurred_on (the document's own date —
  * invoice/statutory issued_on, or EXIF for photos; not every document has
  * one — Amendment 2 requires saying so plainly rather than silently

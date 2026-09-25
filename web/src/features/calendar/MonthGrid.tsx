@@ -3,11 +3,7 @@
  * didn't read as a calendar at all. A cell only ever shows a compact
  * count, never full entries (that's `DatesView`'s selected-day list,
  * below the grid) — cramming labels into a ~50px mobile cell isn't
- * readable at any font size. Not `WeekGrid.tsx` (the logged-out marketing
- * preview's time-of-day week view over mock meeting events) — a different
- * data model (real documents, by day only, no time-of-day) and a
- * different grid shape, so it's its own component rather than a forced
- * reuse. */
+ * readable at any font size. Real documents, by day only, no time-of-day. */
 
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
