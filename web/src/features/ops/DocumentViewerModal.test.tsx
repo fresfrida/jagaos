@@ -1,6 +1,7 @@
-/** Round 3, item 1 (DECISIONS #121): a PDF on a browser with no PDF viewer of its own (Android Chrome and Brave) is handed to the device
- * under its real name instead of drawn in an `<embed>`, which there shows the browser's own "cannot preview" box named by the blob's UUID.
- * Desktop and images are unchanged. `navigator.pdfViewerEnabled` is what tells the two browsers apart (lib/pdfSupport.ts). */
+/** A PDF on a browser with no PDF viewer of its own (Android Chrome and Brave) is DOWNLOADED, not drawn: round 3 (DECISIONS #121) stopped
+ * the `<embed>` (which there shows the browser's own "cannot preview" box named by a UUID) and round 4 (DECISIONS #122) replaced its blob
+ * hand-off, which never worked on a real phone, with a server-made, single-use download link. One explicit tap; nothing starts by itself.
+ * Desktop and images are unchanged. `navigator.pdfViewerEnabled` tells the two kinds of browser apart (lib/pdfSupport.ts). */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,15 +9,17 @@ import i18n from '../../i18n'
 
 vi.mock('./opsApi', async (importActual) => ({
   ...(await importActual<typeof import('./opsApi')>()),
-  opsApi: { fetchDocumentFile: vi.fn(), fetchDocumentThumbnail: vi.fn() },
+  opsApi: { fetchDocumentFile: vi.fn(), fetchDocumentThumbnail: vi.fn(), createDownloadLink: vi.fn() },
 }))
+vi.mock('../../lib/download', () => ({ startDownload: vi.fn() }))
 
+import { startDownload } from '../../lib/download'
 import { DocumentViewerModal } from './DocumentCard'
 import { opsApi } from './opsApi'
 
 const fetchFile = vi.mocked(opsApi.fetchDocumentFile)
+const makeLink = vi.mocked(opsApi.createDownloadLink)
 const setViewer = (value: boolean | undefined) => Object.defineProperty(navigator, 'pdfViewerEnabled', { value, configurable: true })
-let clicks: HTMLAnchorElement[]
 
 beforeEach(async () => {
   vi.resetAllMocks()
@@ -24,14 +27,10 @@ beforeEach(async () => {
   URL.createObjectURL = vi.fn(() => 'blob:the-file')
   URL.revokeObjectURL = vi.fn()
   fetchFile.mockResolvedValue(new Blob(['%PDF'], { type: 'application/pdf' }))
-  clicks = []
-  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
-    clicks.push(this) // jsdom would try to navigate to a blob: URL
-  })
+  makeLink.mockResolvedValue({ url: '/api/documents/9/download?token=abc', expires_in: 60 })
 })
 afterEach(() => {
   cleanup()
-  vi.restoreAllMocks()
   Reflect.deleteProperty(navigator, 'pdfViewerEnabled')
 })
 
@@ -39,73 +38,99 @@ const show = (over: Partial<{ filename: string; media_type: string }> = {}) =>
   render(<DocumentViewerModal doc={{ id: 9, filename: '01_certificate_of_incorporation.pdf', media_type: 'application/pdf', ...over }} onClose={vi.fn()} />)
 
 describe('DocumentViewerModal, a PDF where the browser has a PDF viewer (desktop)', () => {
-  it('draws it inline, as before, and starts no download', async () => {
+  it('draws it inline, as before, and asks for no download link', async () => {
     setViewer(true)
     const { container } = show()
 
     await waitFor(() => expect(container.querySelector('embed')?.getAttribute('src')).toBe('blob:the-file'))
-    expect(screen.queryByRole('link', { name: 'Open PDF' })).toBeNull()
-    expect(clicks).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: 'Download PDF' })).toBeNull()
+    expect(makeLink).not.toHaveBeenCalled()
+    expect(startDownload).not.toHaveBeenCalled()
   })
 
   it('a browser too old to say is treated the same, so nothing changes for it', async () => {
     setViewer(undefined)
     const { container } = show()
     await waitFor(() => expect(container.querySelector('embed')).not.toBeNull())
-    expect(clicks).toHaveLength(0)
+    expect(makeLink).not.toHaveBeenCalled()
   })
 })
 
 describe('DocumentViewerModal, a PDF where the browser has no PDF viewer (a phone)', () => {
-  it('never draws the embed, and hands the file over under its real name the moment it is ready, once', async () => {
+  it('draws no embed, fetches no bytes, and offers ONE button; nothing starts by itself', async () => {
     setViewer(false)
-    const { container, rerender } = show()
+    const { container } = show()
 
     expect(container.querySelector('embed')).toBeNull()
-    expect(screen.getByText('Loading source…')).toBeTruthy() // nothing to click until the bytes are here
-    const link = await screen.findByRole('link', { name: 'Open PDF' })
+    const button = await screen.findByRole('button', { name: 'Download PDF' })
+    expect(screen.getByText("This browser can't show a PDF inside the page. Download it to open it on your device.")).toBeTruthy()
+    await Promise.resolve()
 
-    expect(link.getAttribute('href')).toBe('blob:the-file')
-    expect(link.getAttribute('download')).toBe('01_certificate_of_incorporation.pdf') // the real name, not the blob's UUID
-    expect(container.querySelector('embed')).toBeNull()
-    expect(clicks).toEqual([link]) // one tap: the download was started for the person
-    expect(screen.getByText(/can't show a PDF inside the page/)).toBeTruthy()
-
-    rerender(<DocumentViewerModal doc={{ id: 9, filename: '01_certificate_of_incorporation.pdf', media_type: 'application/pdf' }} onClose={vi.fn()} />)
-    expect(clicks).toHaveLength(1) // a re-render does not start it again
+    expect(fetchFile).not.toHaveBeenCalled() // the whole file is not pulled into memory for a download that will not use it
+    expect(makeLink).not.toHaveBeenCalled() // no automatic attempt: a link is asked for on the tap, so it cannot expire unused
+    expect(startDownload).not.toHaveBeenCalled()
+    expect(button.getAttribute('href')).toBeNull() // a real button, not a blob: link
+    expect(screen.queryByText(/if nothing happens/i)).toBeNull() // there is no first attempt to explain
+    expect(container.querySelector('a[download]')).toBeNull()
+    expect(container.querySelector('a[href^="blob:"]')).toBeNull()
   })
 
-  it('keeps the link on screen as the fallback, so a browser that holds the automatic download back still works with one more tap', async () => {
+  it('a tap asks the server for a link for THAT document and follows it, with the API address in front', async () => {
     setViewer(false)
     show()
-    const link = await screen.findByRole('link', { name: 'Open PDF' })
-    link.addEventListener('click', (e) => e.preventDefault()) // jsdom cannot navigate to a blob: URL
-    fireEvent.click(link)
-    expect(clicks.length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByRole('link', { name: 'Open PDF' })).toBeTruthy()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Download PDF' }))
+
+    await waitFor(() => expect(startDownload).toHaveBeenCalledTimes(1))
+    expect(makeLink).toHaveBeenCalledWith(9)
+    // API_BASE_URL is empty in the test build, so the relative URL comes through as is; on the box it is the same origin, on Vercel the box's address.
+    expect(vi.mocked(startDownload).mock.calls[0]![0]).toMatch(/\/api\/documents\/9\/download\?token=abc$/)
   })
 
-  it('gives a PDF a person named without an extension the .pdf a phone needs', async () => {
+  it('says it is preparing while the link is being made, and cannot be tapped twice', async () => {
     setViewer(false)
-    show({ filename: 'Lease' })
-    expect((await screen.findByRole('link', { name: 'Open PDF' })).getAttribute('download')).toBe('Lease.pdf')
-  })
-
-  it('shows the same failure message as ever when the file cannot be loaded, and offers no link', async () => {
-    setViewer(false)
-    fetchFile.mockRejectedValue(new Error('404'))
+    let release: () => void = () => undefined
+    makeLink.mockReturnValue(new Promise((resolve) => { release = () => resolve({ url: '/api/documents/9/download?token=abc', expires_in: 60 }) }))
     show()
-    expect(await screen.findByText("Couldn't load the source file.")).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Open PDF' })).toBeNull()
-    expect(clicks).toHaveLength(0)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Download PDF' }))
+
+    const busy = await screen.findByRole('button', { name: 'Preparing your download…' })
+    expect((busy as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(busy)
+    expect(makeLink).toHaveBeenCalledTimes(1)
+    release()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Download PDF' })).toBeTruthy())
   })
 
-  it('leaves an image alone: it renders in an <img> everywhere', async () => {
+  it('shows the failure and lets the person tap again, without following anything', async () => {
+    setViewer(false)
+    makeLink.mockRejectedValueOnce(new Error('404'))
+    show()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Download PDF' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe("Couldn't prepare the download. Try again.")
+    expect(startDownload).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download PDF' })) // the second try works
+    await waitFor(() => expect(startDownload).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('reads in the chosen language', async () => {
+    setViewer(false)
+    await i18n.changeLanguage('ms')
+    show()
+    expect(await screen.findByRole('button', { name: 'Muat turun PDF' })).toBeTruthy()
+  })
+
+  it('leaves an image alone: it renders in an <img> everywhere, with no download button', async () => {
     setViewer(false)
     fetchFile.mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }))
     const { container } = show({ filename: 'receipt.jpg', media_type: 'image/jpeg' })
     await waitFor(() => expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:the-file'))
-    expect(screen.queryByRole('link', { name: 'Open PDF' })).toBeNull()
-    expect(clicks).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: 'Download PDF' })).toBeNull()
+    expect(makeLink).not.toHaveBeenCalled()
   })
 })

@@ -127,6 +127,21 @@ def _membership_from_token(token: str, db_path: str = DB_PATH) -> CurrentMembers
         )
 
 
+def membership_in_company(user_id: int, company_id: int, db_path: str = DB_PATH) -> CurrentMembership | None:
+    """The person's CURRENT membership of ONE company, or None when they have none (any more). For a caller that has no session in hand
+    but holds a proof made earlier: app/downloads.py redeems a download link with it, so a person removed from the company, or demoted,
+    after the link was made is judged by what they are NOW. Never accepts a company from the client: the ids come from the stored proof."""
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT u.id AS user_id, u.email AS email, u.name AS name, m.company_id AS company_id, m.role AS role "
+            "FROM membership m JOIN app_user u ON u.id = m.user_id WHERE m.user_id = ? AND m.company_id = ?",
+            (user_id, company_id),
+        ).fetchone()
+    if row is None:
+        return None
+    return CurrentMembership(user_id=row["user_id"], email=row["email"], name=row["name"], company_id=row["company_id"], role=row["role"])
+
+
 def list_memberships(user_id: int, db_path: str = DB_PATH) -> list[dict]:
     """Every company this user belongs to, for the company switcher — only
     ever the caller's OWN membership rows, so it can reveal nothing about a

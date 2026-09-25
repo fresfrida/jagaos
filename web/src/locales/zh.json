@@ -459,8 +459,10 @@
       "loading": "正在加载源文件…",
       "closePreview": "关闭预览",
       "previewLabel": "预览：{{filename}}",
-      "noInlinePdf": "此浏览器无法在页面内显示 PDF，因此文件会发送到你的设备。如果没有反应，请点按“打开 PDF”。",
-      "openPdf": "打开 PDF"
+      "noInlinePdf": "此浏览器无法在页面内显示 PDF。请下载后在你的设备上打开。",
+      "downloadPdf": "下载 PDF",
+      "preparing": "正在准备下载…",
+      "downloadFailed": "无法准备下载，请重试。"
     },
     "documentPreview": {
       "loadFailed": "无法加载源文件。",

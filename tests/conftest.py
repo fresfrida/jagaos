@@ -40,6 +40,8 @@ _TABLES = [
     # reset here too, so a prior test's rows for a reused rowid never leak
     # into the next test.
     "document_search",
+    # download_link points at document and app_user (round 4, DECISIONS #122), so it goes before both.
+    "download_link",
     "document", "session", "membership",
     # company_group after company: company.group_id points at it (round 12).
     "app_user", "company", "company_group",

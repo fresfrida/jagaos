@@ -63,6 +63,17 @@ CREATE TABLE IF NOT EXISTS session (
     revoked_at TEXT
 );
 
+-- A short-lived, single-use link that lets a plain browser navigation download ONE document without the bearer header (round 4, item 3,
+-- DECISIONS #122; app/downloads.py). Only the SHA-256 of the token is stored, so a copy of this table opens nothing.
+CREATE TABLE IF NOT EXISTS download_link (
+    token_hash TEXT PRIMARY KEY,
+    document_id INTEGER NOT NULL REFERENCES document(id),
+    user_id INTEGER NOT NULL REFERENCES app_user(id),
+    company_id INTEGER NOT NULL REFERENCES company(id),
+    expires_at TEXT NOT NULL,
+    used_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS document (
     id INTEGER PRIMARY KEY,
     company_id INTEGER NOT NULL REFERENCES company(id),

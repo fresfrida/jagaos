@@ -27,6 +27,7 @@ HANDLED_REFERENCES = {
         ("extraction", "document_id"), ("review_item", "document_id"), ("trace", "document_id"),
         ("security_event", "document_id"), ("event", "source_document_id"),
         ("expectation", "evidence_document_id"), ("obligation", "evidence_document_id"),
+        ("download_link", "document_id"),
     },
     "event": {("expectation", "event_id"), ("obligation", "event_id")},
     "obligation": {("notification", "obligation_id"), ("review_item", "obligation_id")},
@@ -151,7 +152,7 @@ def execute_purge(conn: sqlite3.Connection, plan: PurgePlan) -> None:
         reopen_expectation(expectation_id, ACTOR, conn=conn)
     for expectation_id in plan.expectations_to_unlink:
         conn.execute("UPDATE expectation SET evidence_document_id = NULL WHERE id = ?", (expectation_id,))
-    for table in ("extraction", "review_item", "trace", "security_event"):
+    for table in ("extraction", "review_item", "trace", "security_event", "download_link"):
         conn.execute(f"DELETE FROM {table} WHERE document_id = ?", (document_id,))
     conn.execute("DELETE FROM document_search WHERE rowid = ?", (document_id,))
     conn.execute("DELETE FROM document WHERE id = ?", (document_id,))

@@ -16,9 +16,14 @@ from app.main import app
 
 client = TestClient(app, raise_server_exceptions=False)
 
-# The only two routes that legitimately work with no credentials: liveness,
-# and the login that mints them.
-PUBLIC = {("GET", "/api/health"), ("POST", "/api/auth/dev-login")}
+# The only routes that legitimately work with no credentials: liveness, the login that mints
+# them, and the single-use download-link redemption (round 4, item 3, DECISIONS #122) — a plain
+# browser navigation can't carry a Bearer header, so the token itself is the proof; it is
+# authenticated by app/downloads.py's redeem_download_link, not by this dependency.
+PUBLIC = {
+    ("GET", "/api/health"), ("POST", "/api/auth/dev-login"),
+    ("GET", "/api/documents/{document_id}/download"),
+}
 
 
 def _routes() -> list[tuple[str, str]]:

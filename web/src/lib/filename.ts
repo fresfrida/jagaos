@@ -33,14 +33,3 @@ export function middleEllipsis(name: string, max: number = DEFAULT_FILENAME_MAX)
   const head = budget - tail
   return `${stem.slice(0, head).join('')}…${stem.slice(stem.length - tail).join('')}${extension.join('')}`
 }
-
-/** The name a downloaded copy of a document should carry (round 3, item 1, DECISIONS #121). A person may have named a file
- * "Lease" or "Passport", and a browser saving a PDF under that name would leave off the extension the phone needs to open it
- * with; a name that already ends in the right one is left alone. Only a type this app can hand to the device is mapped. */
-const EXTENSION_FOR_MEDIA_TYPE: Record<string, string> = { 'application/pdf': '.pdf' }
-
-export function downloadName(filename: string, mediaType: string): string {
-  const extension = EXTENSION_FOR_MEDIA_TYPE[mediaType]
-  if (!extension || filename.toLowerCase().endsWith(extension)) return filename
-  return `${filename}${extension}`
-}

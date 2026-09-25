@@ -144,6 +144,16 @@ export interface SearchTerm {
   count: number
 }
 
+/** POST /api/documents/{id}/download-link (round 4, DECISIONS #122). */
+export interface DownloadLink {
+  /** Relative to the API base, carrying a token good for `expires_in` seconds and ONE use. */
+  url: string
+  expires_in: number
+}
+
+/** The absolute URL to follow for a link: the API's own address in front (empty on the box, where the page and the API share one origin). */
+export const downloadHref = (link: DownloadLink): string => `${API_BASE_URL}${link.url}`
+
 /** One pending purge request (round 21, A5, DECISIONS #101): what the owner asked to have removed permanently. */
 export interface PurgeRequest {
   id: number
@@ -406,6 +416,12 @@ export const opsApi = {
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       return res.blob()
     }),
+  // Round 4, item 3 (DECISIONS #122): a short-lived, ONE-USE link a plain browser navigation can download the document with, made by an
+  // authenticated request and named by the server (`Content-Disposition: attachment`). `url` is relative to the API: put the base in
+  // front (`downloadHref`). It is what a browser with no PDF viewer of its own (Android Chrome and Brave) gets, since in-memory blob
+  // downloads are interrupted there.
+  createDownloadLink: (documentId: number) =>
+    request<DownloadLink>(`/api/documents/${documentId}/download-link`, { method: 'POST' }),
   // Round 20 (item 5, DECISIONS #97): a small JPEG of a PDF's first page, made by the server on the
   // first request and cached there. A 404 (not a PDF, cannot be rendered, or not yours to see) is
   // just "no thumbnail": the card keeps its generic icon.

@@ -4,16 +4,17 @@
  * its shared pieces now come from. */
 
 import { FileText, MoreHorizontal, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
-import { Button, buttonClasses } from '../../components/ui/Button'
+import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { FileName } from '../../components/ui/FileName'
 import { ApiError } from '../../lib/apiClient'
 import { formatShortDate, localeFor } from '../../lib/dates'
-import { downloadName, middleEllipsis } from '../../lib/filename'
+import { startDownload } from '../../lib/download'
+import { middleEllipsis } from '../../lib/filename'
 import { canShowPdfInline } from '../../lib/pdfSupport'
 import {
   BucketField,
@@ -27,7 +28,7 @@ import {
   docTypeLabel,
   useDocumentBlobUrl,
 } from './opsShared'
-import { opsApi, type Bucket, type DocumentRow } from './opsApi'
+import { downloadHref, opsApi, type Bucket, type DocumentRow } from './opsApi'
 import { isPurgeRequested, isRejectedDocument } from './documentStatus'
 import { useEditableDescription } from './useEditableDescription'
 
@@ -66,12 +67,15 @@ export function DocumentThumbnail({ documentId, mediaType }: { documentId: numbe
  * live. This renders the same source bytes inline instead: closable with
  * Escape, the X, or a click on the backdrop, never a new tab.
  *
- * **A PDF on a browser with no PDF viewer of its own (Android Chrome and Brave; round 3, item 1, DECISIONS #121)** is not drawn: an
- * `<embed>` there falls back to the browser's own "cannot preview" box, which names the file by the blob's UUID (reproduced on a
- * phone). Once the bytes are here, this hands the file to the device with `<a download="<real name>">`, so it is saved and opened
- * under its real name, and keeps that link on screen as the fallback if the browser holds the automatic one back. It is the
- * `download` attribute that names the file: a `File` wrapper does not, and `window.open` on the blob URL saves it as a UUID
- * (both measured in Chromium, which has no PDF viewer in headless mode either). Images and desktop browsers are unchanged. */
+ * **A PDF on a browser with no PDF viewer of its own (Android Chrome and Brave)** is not drawn and not fetched here: an `<embed>` there
+ * falls back to the browser's own "cannot preview" box (round 3, DECISIONS #121). What replaces it is ONE button, "Download PDF". A tap asks
+ * the server for a short-lived, single-use link (`opsApi.createDownloadLink`) and follows it (`startDownload`); the server answers as an
+ * attachment under the file's real name. It has to be a network download: on real Android Chrome and Brave (an Android emulator, with a
+ * genuine touch) EVERY in-memory download, a `blob:` anchor with or without `download`, `blob:` through window.open and a `data:` URL,
+ * was interrupted, on HTTP and HTTPS, while this kind completed on both (DECISIONS #122; it replaced round 3's blob hand-off, which
+ * never worked on a phone: a genuine tap on that link failed exactly as the automatic click did, so the automatic click was never the
+ * cause). Nothing starts by itself, and there is no "if nothing happens" copy because there is no first attempt to explain. Images and
+ * desktop browsers are unchanged. */
 export function DocumentViewerModal({
   doc,
   onClose,
@@ -81,9 +85,23 @@ export function DocumentViewerModal({
 }) {
   const { t } = useTranslation()
   const { id: documentId, filename, media_type: mediaType } = doc
-  const { blobUrl, failed } = useDocumentBlobUrl(documentId)
   const handOff = mediaType === 'application/pdf' && !canShowPdfInline()
-  const handOffLink = useRef<HTMLAnchorElement | null>(null)
+  // No bytes are fetched for a PDF that will be downloaded instead of drawn.
+  const { blobUrl, failed } = useDocumentBlobUrl(documentId, !handOff)
+  const [preparing, setPreparing] = useState(false)
+  const [downloadFailed, setDownloadFailed] = useState(false)
+
+  const download = async () => {
+    setPreparing(true)
+    setDownloadFailed(false)
+    try {
+      startDownload(downloadHref(await opsApi.createDownloadLink(documentId)))
+    } catch {
+      setDownloadFailed(true)
+    } finally {
+      setPreparing(false)
+    }
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -92,11 +110,6 @@ export function DocumentViewerModal({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-
-  // One tap stays one tap: the moment the bytes are here the download starts. It runs once per blob URL, not per render.
-  useEffect(() => {
-    if (handOff && blobUrl) handOffLink.current?.click()
-  }, [handOff, blobUrl])
 
   return (
     <div
@@ -121,17 +134,18 @@ export function DocumentViewerModal({
           </button>
         </div>
         <div className="flex-1 overflow-auto p-4">
-          {failed && <p className="text-[14px] text-red-700">{t('ops.documentViewer.loadFailed')}</p>}
-          {!failed && !blobUrl && <p className="text-[14px] text-muted">{t('ops.documentViewer.loading')}</p>}
+          {failed && !handOff && <p className="text-[14px] text-red-700">{t('ops.documentViewer.loadFailed')}</p>}
+          {!failed && !blobUrl && !handOff && <p className="text-[14px] text-muted">{t('ops.documentViewer.loading')}</p>}
           {blobUrl && mediaType === 'application/pdf' && !handOff && (
             <embed src={blobUrl} type="application/pdf" className="h-[70vh] w-full rounded-control border border-line" />
           )}
-          {blobUrl && handOff && (
+          {handOff && (
             <div className="space-y-4">
               <p className="text-[14px] leading-6 text-muted">{t('ops.documentViewer.noInlinePdf')}</p>
-              <a ref={handOffLink} href={blobUrl} download={downloadName(filename, mediaType)} className={buttonClasses('primary', 'md')}>
-                {t('ops.documentViewer.openPdf')}
-              </a>
+              {downloadFailed && <p className="text-[14px] text-red-700" role="alert">{t('ops.documentViewer.downloadFailed')}</p>}
+              <Button size="md" disabled={preparing} onClick={() => void download()}>
+                {t(preparing ? 'ops.documentViewer.preparing' : 'ops.documentViewer.downloadPdf')}
+              </Button>
             </div>
           )}
           {blobUrl && mediaType.startsWith('image/') && (

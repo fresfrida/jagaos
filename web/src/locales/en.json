@@ -459,8 +459,10 @@
       "loading": "Loading source…",
       "closePreview": "Close preview",
       "previewLabel": "Preview: {{filename}}",
-      "noInlinePdf": "This browser can't show a PDF inside the page, so the file is sent to your device. If nothing happens, tap Open PDF.",
-      "openPdf": "Open PDF"
+      "noInlinePdf": "This browser can't show a PDF inside the page. Download it to open it on your device.",
+      "downloadPdf": "Download PDF",
+      "preparing": "Preparing your download…",
+      "downloadFailed": "Couldn't prepare the download. Try again."
     },
     "documentPreview": {
       "loadFailed": "Couldn't load the source file.",

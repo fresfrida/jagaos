@@ -79,6 +79,7 @@ from app.limits import (  # noqa: E402
     personal_file_count,
     personal_file_limit_detail,
 )
+from app.downloads import DOWNLOAD_LINK_TTL_SECONDS, attachment_filename, issue_download_link, redeem_download_link  # noqa: E402
 from app.purge import PurgeRefused, purge_now  # noqa: E402
 from app.thumbnails import get_pdf_thumbnail  # noqa: E402
 from app.wordcloud import MAX_DOCUMENTS_SCANNED, top_terms  # noqa: E402
@@ -1318,21 +1319,61 @@ def get_document_file(
     for a caller in its own company too — invisibility, not "exists but
     you can't have it."
     """
+    # Round 13 (DECISIONS #83/#85): a document the caller may not see — pending
+    # review and not theirs, or someone else's personal file — is the same 404
+    # as an archived or nonexistent one, so the bytes are not "hidden but
+    # reachable" by anyone who knows or guesses an id. (The rule is `_readable_file_row`,
+    # shared with the download link, round 4.)
+    doc = _readable_file_row(membership, document_id)
+    if doc is None:
+        raise HTTPException(404, "document not found")
+    return FileResponse(
+        doc["stored_path"], media_type=doc["media_type"],
+        filename=doc["filename"], content_disposition_type="inline",
+    )
+
+
+def _readable_file_row(membership: CurrentMembership, document_id: int) -> sqlite3.Row | None:
+    """The document's file row if THIS caller may open it, else None (answered as a 404: absent, another company's, archived, pending review
+    and not theirs, someone's personal file). ONE place for the file endpoints' rule, so the file, the download link and its redemption
+    cannot disagree about who may have the bytes."""
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
             "SELECT company_id, stored_path, media_type, filename, status, uploaded_by_user_id, visibility "
             f"FROM document WHERE id = ? AND {_LIVE_OR_PURGE_REQUESTED}",
             (document_id, _owner_flag(membership)),
         ).fetchone()
-    # Round 13 (DECISIONS #83/#85): a document the caller may not see — pending
-    # review and not theirs, or someone else's personal file — is the same 404
-    # as an archived or nonexistent one, so the bytes are not "hidden but
-    # reachable" by anyone who knows or guesses an id.
-    if _hidden_or_missing(membership, doc):
+    return None if _hidden_or_missing(membership, doc) else doc
+
+
+@app.post("/api/documents/{document_id}/download-link")
+def create_download_link(
+    document_id: int,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> dict:
+    """A link a plain browser navigation can use to DOWNLOAD this document (round 4, item 3, DECISIONS #122; app/downloads.py explains why
+    the in-app blob download cannot). Authenticated like every data endpoint, and only for a document this caller may open by the file
+    endpoint's own rule (a 404 otherwise, never a hint that it exists). The answer is a relative URL good for DOWNLOAD_LINK_TTL_SECONDS
+    and ONE use; the client puts its API base in front."""
+    if _readable_file_row(membership, document_id) is None:
         raise HTTPException(404, "document not found")
+    token = issue_download_link(membership, document_id, DB_PATH)
+    return {"url": f"/api/documents/{document_id}/download?token={token}", "expires_in": DOWNLOAD_LINK_TTL_SECONDS}
+
+
+@app.get("/api/documents/{document_id}/download")
+def download_document(document_id: int, token: str = "") -> FileResponse:
+    """Serves the file as an ATTACHMENT under its real name to whoever holds a valid, unspent link (app/downloads.py). No Authorization
+    header: the link is the proof. It is spent by this request, the person's membership is looked up again, and the file endpoint's rule is
+    re-applied, so anything that stopped being true since the link was made is a 404. Every failure is the same 404 (unknown, spent,
+    expired, wrong document, no longer a member, no longer visible), so this reveals nothing about which."""
+    membership = redeem_download_link(token, document_id, DB_PATH)
+    doc = _readable_file_row(membership, document_id) if membership is not None else None
+    if doc is None or not Path(doc["stored_path"]).is_file():
+        raise HTTPException(404, "download link not valid")
     return FileResponse(
-        doc["stored_path"], media_type=doc["media_type"],
-        filename=doc["filename"], content_disposition_type="inline",
+        doc["stored_path"], media_type=doc["media_type"], filename=attachment_filename(doc["filename"], doc["media_type"]),
+        content_disposition_type="attachment", headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
     )
 
 

@@ -459,8 +459,10 @@
       "loading": "Memuatkan sumber…",
       "closePreview": "Tutup pratonton",
       "previewLabel": "Pratonton: {{filename}}",
-      "noInlinePdf": "Pelayar ini tidak dapat memaparkan PDF di dalam halaman, jadi fail dihantar ke peranti anda. Jika tiada apa-apa berlaku, ketik Buka PDF.",
-      "openPdf": "Buka PDF"
+      "noInlinePdf": "Pelayar ini tidak dapat memaparkan PDF di dalam halaman. Muat turun untuk membukanya pada peranti anda.",
+      "downloadPdf": "Muat turun PDF",
+      "preparing": "Menyediakan muat turun…",
+      "downloadFailed": "Tidak dapat menyediakan muat turun. Cuba lagi."
     },
     "documentPreview": {
       "loadFailed": "Tidak dapat memuatkan fail sumber.",
