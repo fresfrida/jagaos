@@ -56,6 +56,30 @@ describe('review card source preview (item 4)', () => {
   })
 })
 
+describe('review card source preview on a browser with no PDF viewer (round 3, item 1)', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'pdfViewerEnabled')
+  })
+
+  it('a PDF shows no inline preview and fetches nothing up front, only the button that opens the viewer', async () => {
+    Object.defineProperty(navigator, 'pdfViewerEnabled', { value: false, configurable: true })
+    const { opsApi } = await import('./opsApi')
+    vi.mocked(opsApi.fetchDocumentFile).mockClear()
+
+    const { container } = renderCard({ document_media_type: 'application/pdf', document_filename: 'bill.pdf' })
+
+    expect(await screen.findByRole('button', { name: 'Open source PDF' })).toBeTruthy()
+    expect(container.querySelector('embed')).toBeNull()
+    expect(opsApi.fetchDocumentFile).not.toHaveBeenCalled()
+  })
+
+  it('a photo keeps its inline preview on the same browser', async () => {
+    Object.defineProperty(navigator, 'pdfViewerEnabled', { value: false, configurable: true })
+    renderCard()
+    expect(await screen.findByRole('button', { name: 'Open the full-size image' })).toBeTruthy()
+  })
+})
+
 describe('pill pickers (item 5)', () => {
   it('bucket pills are a fixed three-column grid, each cell cut with an ellipsis and carrying its full text as a tooltip', () => {
     render(<BucketField value="Expenses" disabled={false} onChange={vi.fn()} clearLabel="None" />)

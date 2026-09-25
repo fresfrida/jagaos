@@ -1,6 +1,8 @@
-/** The owner's pending purge requests, a section of Company Settings (round 21, A5, DECISIONS #101). A purged-for-now
- * document is archived and so appears in no other list; this is where "purge requested: the team removes it permanently"
- * is visible. Owner only (the endpoint refuses anyone else); nothing is deleted from here. */
+/** The owner's pending purge requests, on their own page under Company Settings (round 21, A5, DECISIONS #101; a page of its own since
+ * round 3, item 9c, DECISIONS #121). A purged-for-now document is archived and so appears in no other list but the owner's Company
+ * Files; this is where "purge requested: the team removes it permanently" is visible. Owner only (the endpoint refuses anyone else).
+ * Nothing is deleted from here, and the only action is TAKING A REQUEST BACK (round 3, item 9b), which returns the document to
+ * where it was; once the team has purged the row there is nothing left to cancel and it is gone from this list. */
 
 import { useTranslation } from 'react-i18next'
 import { Button } from '../../components/ui/Button'
@@ -13,11 +15,11 @@ import { usePurgeRequests } from './usePurgeRequests'
 
 export function PurgeRequestsSection({ enabled }: { enabled: boolean }) {
   const { t, i18n } = useTranslation()
-  const { state, retry } = usePurgeRequests(enabled)
+  const { state, retry, cancel, cancellingId, cancelledFilename, cancelError } = usePurgeRequests(enabled)
 
   const count = state.status === 'ready' ? state.requests.length : 0
   return (
-    <section className="mt-10" aria-labelledby="company-purge-requests-heading">
+    <section aria-labelledby="company-purge-requests-heading">
       <h2 id="company-purge-requests-heading" className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">
         {t('companySettings.purgeRequests.heading', { count })}
       </h2>
@@ -26,6 +28,14 @@ export function PurgeRequestsSection({ enabled }: { enabled: boolean }) {
         <div className="rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
           <p>{t('companySettings.purgeRequests.loadFailed')}</p>
           <Button size="sm" variant="secondary" className="mt-2" onClick={retry}>{t('common.buttons.retry')}</Button>
+        </div>
+      )}
+      {cancelError && (
+        <div className="mb-3 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{cancelError}</div>
+      )}
+      {cancelledFilename && (
+        <div className="mb-3 rounded-card border border-line bg-white px-4 py-3 text-sm text-ink" role="status">
+          {t('ops.documents.purgeRequest.cancelled', { filename: middleEllipsis(cancelledFilename, 40) })}
         </div>
       )}
       {state.status === 'ready' && (
@@ -54,6 +64,9 @@ export function PurgeRequestsSection({ enabled }: { enabled: boolean }) {
                       who: request.requested_by ?? '-',
                     })}
                   </p>
+                  <Button size="sm" variant="secondary" className="mt-2" disabled={cancellingId !== null} onClick={() => void cancel(request)}>
+                    {t('ops.documents.purgeRequest.cancel')}
+                  </Button>
                 </li>
               ))}
             </ul>

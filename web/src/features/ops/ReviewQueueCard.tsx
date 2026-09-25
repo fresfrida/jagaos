@@ -11,6 +11,7 @@ import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { ApiError } from '../../lib/apiClient'
 import { middleEllipsis } from '../../lib/filename'
+import { canShowPdfInline } from '../../lib/pdfSupport'
 import {
   BOOLEAN_FIELD_NAMES,
   BucketField,
@@ -71,8 +72,20 @@ function DocumentPreview({
   onOpen: () => void
 }) {
   const { t } = useTranslation()
-  const { blobUrl, failed } = useDocumentBlobUrl(documentId)
+  // No PDF viewer in this browser (a phone): no inline preview to draw and no need to fetch the whole file for one. The button opens the
+  // viewer, which hands the file to the device under its real name (DocumentViewerModal; round 3, item 1, DECISIONS #121).
+  const noInlinePdf = mediaType === 'application/pdf' && !canShowPdfInline()
+  const { blobUrl, failed } = useDocumentBlobUrl(documentId, !noInlinePdf)
 
+  if (noInlinePdf) {
+    return (
+      <div className="mt-3">
+        <button type="button" onClick={onOpen} className="inline-block text-[13px] text-muted underline hover:text-ink">
+          {t('ops.documentPreview.openSourcePdf')}
+        </button>
+      </div>
+    )
+  }
   if (failed) return <p className="mt-3 text-[13px] text-muted">{t('ops.documentPreview.loadFailed')}</p>
   if (!blobUrl) return <p className="mt-3 text-[13px] text-muted">{t('ops.documentPreview.loading')}</p>
 

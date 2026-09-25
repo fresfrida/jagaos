@@ -11,7 +11,13 @@
  * There is no Log In anywhere on the signed-out chrome any more.
  *
  * Designed for a phone first and stretched for a desktop. A signed-in visitor never renders this: Page.tsx shows the
- * signed-in home at `/` instead. */
+ * signed-in home at `/` instead.
+ *
+ * Round 3 (DECISIONS #121), spacing and one background, nothing else: from `lg` the left column's rhythm is opened up (top padding 56 to 80px,
+ * headline to subhead 16 to 24, subhead to button 28 to 44, button to hint 8 to 12), because the phone frame beside it grew taller once its
+ * pause button and caption were added (656px against a 290px column, measured at 1280 and 1440) and the column read as cramped next to it; phone
+ * and tablet spacing are unchanged. And one soft sage wash sits behind the hero (`.hero-wash`, index.css), on its own layer so the cards,
+ * which paint an opaque white, stay pure white. */
 
 import { CalendarClock, ClipboardCheck, ScanLine } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -71,20 +77,22 @@ export function WelcomeHero() {
   const { t } = useTranslation()
 
   return (
-    <section className="pb-16 pt-8 sm:pt-14">
+    <section className="relative isolate pb-16 pt-8 sm:pt-14 lg:pt-20">
+      {/* The wash: a decoration behind the hero only, not the page. `isolate` + `-z-10` keep it under everything in this section. */}
+      <div className="hero-wash pointer-events-none absolute inset-x-0 top-0 -z-10 h-[56rem]" aria-hidden="true" data-testid="hero-wash" />
       <Container>
         <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-16">
           <div>
             <h1 className="max-w-xl text-[34px] font-semibold leading-[1.1] tracking-tight text-ink sm:text-5xl">
               {t('home.hero.headline')}
             </h1>
-            <p className="mt-4 max-w-xl text-[17px] leading-7 text-muted sm:text-lg sm:leading-8">{t('home.hero.subhead')}</p>
-            <div className="mt-7">
+            <p className="mt-4 max-w-xl text-[17px] leading-7 text-muted sm:text-lg sm:leading-8 lg:mt-6">{t('home.hero.subhead')}</p>
+            <div className="mt-7 lg:mt-11">
               <Button size="md" className="w-full sm:w-auto" onClick={openDemoPicker} aria-haspopup="dialog">
                 {t('home.demo.button')}
               </Button>
               {/* 16px, up from 14 (DECISIONS #111): the line under the button read as fine print. Same colour. */}
-              <p className="mt-2 text-base leading-6 text-muted">{t('home.demo.hint')}</p>
+              <p className="mt-2 text-base leading-6 text-muted lg:mt-3">{t('home.demo.hint')}</p>
             </div>
           </div>
           <PhoneFrame />

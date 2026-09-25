@@ -140,7 +140,10 @@
       "status": "Hapus kekal diminta: pasukan akan menghapuskannya secara kekal.",
       "by": "Diminta pada {{date}} oleh {{who}}",
       "loading": "Memuatkan permintaan hapus kekal…",
-      "loadFailed": "Permintaan hapus kekal tidak dapat dimuatkan."
+      "loadFailed": "Permintaan hapus kekal tidak dapat dimuatkan.",
+      "title": "Permintaan hapus kekal",
+      "description": "Dokumen yang anda minta dihapuskan secara kekal. Selagi pasukan belum menghapuskannya, anda boleh membatalkan permintaan itu.",
+      "back": "Kembali ke Tetapan Syarikat"
     }
   },
   "header": {
@@ -405,13 +408,16 @@
       },
       "purgeRequest": {
         "button": "Hapus kekal",
-        "message": "Minta \"{{filename}}\" dihapuskan secara kekal? Orang lain tidak lagi melihatnya sekarang. Anda masih melihatnya, ditandai \"Hapus kekal diminta\", sehingga pasukan menghapuskannya secara kekal. Tindakan ini tidak boleh dibuat asal.",
+        "message": "Minta \"{{filename}}\" dihapuskan secara kekal? Orang lain tidak lagi melihatnya sekarang. Anda masih melihatnya, ditandai \"Hapus kekal diminta\", sehingga pasukan menghapuskannya secara kekal. Anda boleh membatalkan permintaan ini sehingga ketika itu.",
         "confirm": "Hapus kekal",
         "done": "Hapus kekal diminta untuk \"{{filename}}\". Orang lain tidak lagi melihatnya. Ia kekal di sini, bertanda, sehingga pasukan menghapuskannya secara kekal.",
-        "pending": "Hapus kekal diminta: pasukan akan menghapuskannya secara kekal."
+        "pending": "Hapus kekal diminta: pasukan akan menghapuskannya secara kekal.",
+        "cancel": "Batal hapus kekal",
+        "cancelled": "Permintaan hapus kekal untuk \"{{filename}}\" telah dibatalkan. Ia kembali dalam Fail Syarikat."
       },
       "rejectedTitle": "Dokumen ditolak",
-      "deleteAlsoPurge": "Juga hapus kekal"
+      "deleteAlsoPurge": "Juga hapus kekal",
+      "traceEmpty": "Tiada langkah AI direkodkan untuk dokumen ini."
     },
     "dates": {
       "uploadDate": "Tarikh muat naik",
@@ -452,7 +458,9 @@
       "loadFailed": "Tidak dapat memuatkan fail sumber.",
       "loading": "Memuatkan sumber…",
       "closePreview": "Tutup pratonton",
-      "previewLabel": "Pratonton: {{filename}}"
+      "previewLabel": "Pratonton: {{filename}}",
+      "noInlinePdf": "Pelayar ini tidak dapat memaparkan PDF di dalam halaman, jadi fail dihantar ke peranti anda. Jika tiada apa-apa berlaku, ketik Buka PDF.",
+      "openPdf": "Buka PDF"
     },
     "documentPreview": {
       "loadFailed": "Tidak dapat memuatkan fail sumber.",

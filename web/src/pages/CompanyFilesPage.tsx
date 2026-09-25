@@ -9,7 +9,11 @@
  * Filters (round 21, DECISIONS #101): the bucket buttons (with an "All" that clears the bucket, A6) and a
  * from/to date range over either the upload date or the document's own date (A7, features/ops/documentDates.ts).
  * They combine: a document must match both. The range also arrives on the Tags page's links (`?from=&to=&basis=`).
- * A Calendar day-list row links here with `?doc=<id>` (DECISIONS #105): no filter is set, and that document is ringed and scrolled to. */
+ * A Calendar day-list row links here with `?doc=<id>` (DECISIONS #105): no filter is set, and that document is ringed and scrolled to.
+ *
+ * "Purge requested" (round 3, item 9a, DECISIONS #121), for the OWNER alone (the server sends no such document to anyone else): a toggle set
+ * apart from the bucket buttons, because it is a different dimension. A purge-requested document still has its bucket, so it is not a
+ * bucket; the toggle narrows to the requests still pending and combines with the bucket and the date range like the others. */
 
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -20,6 +24,7 @@ import { DateRangeFilter } from '../features/ops/DateRangeFilter'
 import { DocumentResultsList } from '../features/ops/DocumentResultsList'
 import { filterByDateRange, rangeFromParams, type DateBasis, type DateRange } from '../features/ops/documentDates'
 import { documentIdFromParams } from '../features/ops/documentLinks'
+import { isPurgeRequested } from '../features/ops/documentStatus'
 import { OpsStatusBar } from '../features/ops/OpsStatusBar'
 import { VENDOR_NAMES_DATALIST_ID, bucketLabel } from '../features/ops/opsShared'
 import { BUCKETS, type Bucket } from '../features/ops/opsApi'
@@ -39,6 +44,7 @@ function CompanyFilesContent() {
   const [dateBasis, setDateBasis] = useState<DateBasis>(initialDates.basis)
   const [dateRange, setDateRange] = useState<DateRange>(initialDates.range)
   const [highlightId] = useState(() => documentIdFromParams(new URLSearchParams(window.location.search)))
+  const [purgeOnly, setPurgeOnly] = useState(false)
   const timezone = company?.timezone ?? 'Asia/Singapore'
 
   const canUpload = role !== null && roleAtLeast(role, 'user')
@@ -48,10 +54,14 @@ function CompanyFilesContent() {
     () => filterByDateRange(documents, dateBasis, dateRange, timezone),
     [documents, dateBasis, dateRange, timezone],
   )
+  // Each button's count is what pressing it would show given the OTHER filters: the buckets follow the range and the purge toggle, and the
+  // toggle's own count follows the range and the chosen bucket.
+  const scoped = purgeOnly ? inRange.filter(isPurgeRequested) : inRange
   const bucketCounts = Object.fromEntries(
-    BUCKETS.map((b) => [b, inRange.filter((d) => d.bucket === b).length]),
+    BUCKETS.map((b) => [b, scoped.filter((d) => d.bucket === b).length]),
   ) as Record<Bucket, number>
-  const visibleDocuments = activeBucketFilter ? inRange.filter((d) => d.bucket === activeBucketFilter) : inRange
+  const visibleDocuments = activeBucketFilter ? scoped.filter((d) => d.bucket === activeBucketFilter) : scoped
+  const purgeCount = (activeBucketFilter ? inRange.filter((d) => d.bucket === activeBucketFilter) : inRange).filter(isPurgeRequested).length
   const vendorNames = [...new Set(documents.map((d) => d.vendor_name).filter((v): v is string => Boolean(v)))].sort()
 
   return (
@@ -85,7 +95,7 @@ function CompanyFilesContent() {
           aria-pressed={activeBucketFilter === null}
           className={`rounded-md px-2 py-0.5 font-mono text-[12px] transition-colors ${activeBucketFilter === null ? 'bg-ink text-white' : 'bg-canvas text-muted hover:text-ink'}`}
         >
-          {t('ops.documents.filter.all')} ({inRange.length})
+          {t('ops.documents.filter.all')} ({scoped.length})
         </button>
         {BUCKETS.map((b) => {
           const active = activeBucketFilter === b
@@ -101,6 +111,21 @@ function CompanyFilesContent() {
             </button>
           )
         })}
+        {/* The owner's pending purge requests: its own toggle, set apart from the buckets and tinted like the "Purge requested" marker on the
+           card. Always there for the owner, empty ones included, like every bucket button (DECISIONS #118). */}
+        {role === 'owner' && (
+          <>
+            <span className="mx-1 h-5 w-px self-center bg-line" aria-hidden="true" />
+            <button
+              type="button"
+              aria-pressed={purgeOnly}
+              onClick={() => setPurgeOnly((on) => !on)}
+              className={`rounded-md px-2 py-0.5 font-mono text-[12px] transition-colors ${purgeOnly ? 'bg-red-800 text-white' : 'bg-red-50 text-red-800 ring-1 ring-red-200 hover:bg-red-100'}`}
+            >
+              {t('ops.status.purgeRequested')} ({purgeCount})
+            </button>
+          </>
+        )}
       </div>
 
       <DocumentResultsList
@@ -110,7 +135,11 @@ function CompanyFilesContent() {
         canRequestPurge={role === 'owner'}
         highlightId={highlightId}
         onSaved={() => void refresh()}
-        emptyMessage={t(documents.length > 0 ? 'ops.documents.filter.noMatch' : 'ops.documents.noneUploaded')}
+        emptyMessage={t(
+          purgeOnly && !documents.some(isPurgeRequested)
+            ? 'companySettings.purgeRequests.empty'
+            : documents.length > 0 ? 'ops.documents.filter.noMatch' : 'ops.documents.noneUploaded',
+        )}
       />
     </div>
   )

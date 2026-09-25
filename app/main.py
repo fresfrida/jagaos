@@ -34,6 +34,7 @@ from app.auth import (  # noqa: E402
     issue_session,
     list_memberships,
     may_archive_document,
+    may_cancel_purge_request,
     may_edit_document,
     may_purge_document,
     may_request_purge,
@@ -65,7 +66,9 @@ from app.rules.company_profile import (  # noqa: E402
     may_prefill_company_from,
 )
 from app.rules.expectations import LABEL_BY_DOC_TYPE  # noqa: E402
-from app.rules.transitions import InvalidTransition, file_personal_document, transition_document  # noqa: E402
+from app.rules.transitions import (  # noqa: E402
+    InvalidTransition, file_personal_document, restore_document_after_purge_request, transition_document,
+)
 from app.limits import (  # noqa: E402
     BodySizeLimit,
     MAX_CAPTION_CHARS,
@@ -1539,6 +1542,44 @@ def request_document_purge(
         )
     _audit.info("AUDIT purge-request: %s asked for document %s (%r) to be removed permanently", membership.email, document_id, doc["filename"])
     return {"status": "purge_requested"}
+
+
+@app.post("/api/documents/{document_id}/cancel-purge-request")
+def cancel_document_purge_request(
+    document_id: int,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> dict:
+    """The OWNER takes a PENDING purge request back (round 3, item 9b, DECISIONS #121). It undoes exactly what
+    request_document_purge did, no more: the document was archived and flagged and nothing was deleted, so it goes back to the
+    status it had (rules.transitions.restore_document_after_purge_request reads that from the audit row of the archive; it is
+    not assumed to be `filed`) and the flag is cleared. It is NOT a general un-archive: an ordinary Delete has no way back, and
+    once the team has run scripts/purge_document.py the row is gone and there is nothing left to cancel.
+
+    Who: the owner only (auth.may_cancel_purge_request, the same rule as requesting). A document the caller cannot see is a 404,
+    and to anyone but the owner a purge-requested document is archived and so does not exist (`_LIVE_OR_PURGE_REQUESTED`),
+    which is why a lower role gets the same 404 and not a 403. Then 403 if the rule refuses, 409 when there is no pending
+    request, or when the status before it cannot be determined (the request stays pending, never guessed)."""
+    with get_conn(DB_PATH) as conn:
+        doc = conn.execute(
+            "SELECT company_id, filename, status, uploaded_by_user_id, visibility, purge_requested_at "
+            f"FROM document WHERE id = ? AND {_LIVE_OR_PURGE_REQUESTED}",
+            (document_id, _owner_flag(membership)),
+        ).fetchone()
+    if _hidden_or_missing(membership, doc):
+        raise HTTPException(404, "document not found")
+    if not may_cancel_purge_request(membership, visibility=doc["visibility"]):
+        raise HTTPException(403, "Only the owner can cancel a purge request")
+    if doc["purge_requested_at"] is None:
+        raise HTTPException(409, "this document has no pending purge request")
+    try:
+        restored = restore_document_after_purge_request(document_id, actor=membership.email, db_path=DB_PATH)
+    except InvalidTransition as e:
+        raise HTTPException(409, str(e)) from None
+    _audit.info(
+        "AUDIT purge-request-cancel: %s took back the request for document %s (%r); it is %s again",
+        membership.email, document_id, doc["filename"], restored,
+    )
+    return {"status": restored}
 
 
 @app.get("/api/purge-requests")

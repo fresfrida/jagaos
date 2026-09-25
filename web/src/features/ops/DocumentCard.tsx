@@ -4,16 +4,17 @@
  * its shared pieces now come from. */
 
 import { FileText, MoreHorizontal, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
-import { Button } from '../../components/ui/Button'
+import { Button, buttonClasses } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { FileName } from '../../components/ui/FileName'
 import { ApiError } from '../../lib/apiClient'
 import { formatShortDate, localeFor } from '../../lib/dates'
-import { middleEllipsis } from '../../lib/filename'
+import { downloadName, middleEllipsis } from '../../lib/filename'
+import { canShowPdfInline } from '../../lib/pdfSupport'
 import {
   BucketField,
   descriptionFor,
@@ -27,7 +28,7 @@ import {
   useDocumentBlobUrl,
 } from './opsShared'
 import { opsApi, type Bucket, type DocumentRow } from './opsApi'
-import { isRejectedDocument } from './documentStatus'
+import { isPurgeRequested, isRejectedDocument } from './documentStatus'
 import { useEditableDescription } from './useEditableDescription'
 
 /** Small preview next to each row in the Documents list (2026-09-22, doc
@@ -63,7 +64,14 @@ export function DocumentThumbnail({ documentId, mediaType }: { documentId: numbe
  * 09-22, doc 2's preview UX pass): that landed on a bare blob: URL with
  * no chrome and no way back — a dead end, especially on mobile, confirmed
  * live. This renders the same source bytes inline instead: closable with
- * Escape, the X, or a click on the backdrop, never a new tab. */
+ * Escape, the X, or a click on the backdrop, never a new tab.
+ *
+ * **A PDF on a browser with no PDF viewer of its own (Android Chrome and Brave; round 3, item 1, DECISIONS #121)** is not drawn: an
+ * `<embed>` there falls back to the browser's own "cannot preview" box, which names the file by the blob's UUID (reproduced on a
+ * phone). Once the bytes are here, this hands the file to the device with `<a download="<real name>">`, so it is saved and opened
+ * under its real name, and keeps that link on screen as the fallback if the browser holds the automatic one back. It is the
+ * `download` attribute that names the file: a `File` wrapper does not, and `window.open` on the blob URL saves it as a UUID
+ * (both measured in Chromium, which has no PDF viewer in headless mode either). Images and desktop browsers are unchanged. */
 export function DocumentViewerModal({
   doc,
   onClose,
@@ -74,6 +82,8 @@ export function DocumentViewerModal({
   const { t } = useTranslation()
   const { id: documentId, filename, media_type: mediaType } = doc
   const { blobUrl, failed } = useDocumentBlobUrl(documentId)
+  const handOff = mediaType === 'application/pdf' && !canShowPdfInline()
+  const handOffLink = useRef<HTMLAnchorElement | null>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -82,6 +92,11 @@ export function DocumentViewerModal({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // One tap stays one tap: the moment the bytes are here the download starts. It runs once per blob URL, not per render.
+  useEffect(() => {
+    if (handOff && blobUrl) handOffLink.current?.click()
+  }, [handOff, blobUrl])
 
   return (
     <div
@@ -108,8 +123,16 @@ export function DocumentViewerModal({
         <div className="flex-1 overflow-auto p-4">
           {failed && <p className="text-[14px] text-red-700">{t('ops.documentViewer.loadFailed')}</p>}
           {!failed && !blobUrl && <p className="text-[14px] text-muted">{t('ops.documentViewer.loading')}</p>}
-          {blobUrl && mediaType === 'application/pdf' && (
+          {blobUrl && mediaType === 'application/pdf' && !handOff && (
             <embed src={blobUrl} type="application/pdf" className="h-[70vh] w-full rounded-control border border-line" />
+          )}
+          {blobUrl && handOff && (
+            <div className="space-y-4">
+              <p className="text-[14px] leading-6 text-muted">{t('ops.documentViewer.noInlinePdf')}</p>
+              <a ref={handOffLink} href={blobUrl} download={downloadName(filename, mediaType)} className={buttonClasses('primary', 'md')}>
+                {t('ops.documentViewer.openPdf')}
+              </a>
+            </div>
           )}
           {blobUrl && mediaType.startsWith('image/') && (
             <img src={blobUrl} alt={`Source: ${filename}`} className="mx-auto max-h-[70vh] w-auto object-contain" />
@@ -139,6 +162,7 @@ export function DocumentCard({
   onTrace,
   onArchive,
   onRequestPurge,
+  onCancelPurge,
   onSaved,
 }: {
   doc: DocumentRow
@@ -151,6 +175,9 @@ export function DocumentCard({
   onTrace: () => void
   onArchive: () => void
   onRequestPurge?: () => void
+  /** Takes a PENDING purge request back (round 3, item 9b, DECISIONS #121): offered on a purge-requested card, to the owner alone (the
+   * same `canRequestPurge` rule that offers Purge). The document returns to the status it had; nothing was ever deleted. */
+  onCancelPurge?: () => void
   onSaved: () => void
 }) {
   const { t, i18n } = useTranslation()
@@ -177,10 +204,11 @@ export function DocumentCard({
   const [alsoPurge, setAlsoPurge] = useState(false)
   // The owner's purge request, still shown to them until the team removes the row (round 21, DECISIONS #102): read-only,
   // marked, and with nothing left to ask for (Edit, Delete, Purge and Trace are off; View still opens the file).
-  const purgePending = doc.status === 'purge_requested'
+  const purgePending = isPurgeRequested(doc)
   // The owner's "also remove it permanently" option in Delete's confirmation: the existing rule (canRequestPurge, never on a personal file), and
   // never on a document already waiting to be purged.
   const offerPurge = canRequestPurge && !!onRequestPurge && !purgePending
+  const offerCancelPurge = canRequestPurge && !!onCancelPurge && purgePending
   const isPictureLane = doc.lane === 'memory'
   const isPendingCaption = isPictureLane && doc.description === null
 
@@ -361,6 +389,11 @@ export function DocumentCard({
           <button onClick={onView} className={ACTION_CLASS}>
             {t('ops.documents.view')}
           </button>
+          {offerCancelPurge && (
+            <button onClick={onCancelPurge} className={ACTION_CLASS}>
+              {t('ops.documents.purgeRequest.cancel')}
+            </button>
+          )}
           {canEdit && !purgePending && !editing && (
             <button
               onClick={() => {

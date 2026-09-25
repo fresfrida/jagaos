@@ -40,6 +40,18 @@ describe('DatesView with nothing uploaded (item 7)', () => {
     expect(screen.queryByText(/tap a day with documents/i)).toBeNull() // not two hints at once
   })
 
+  it('does not say "none uploaded" while the documents are still on their way, and still draws the grid (round 3, item 2)', () => {
+    render(<DatesView documents={[]} loaded={false} />)
+    expect(screen.getAllByRole('button', { pressed: false }).length).toBeGreaterThanOrEqual(28) // the grid is there at once
+    expect(screen.queryByTestId('no-documents-hint')).toBeNull() // and nothing claims the company has nothing yet
+    expect(screen.queryByText(/tap a day with documents/i)).toBeNull()
+  })
+
+  it('says it once the first load has finished and there is truly nothing', () => {
+    render(<DatesView documents={[]} loaded />)
+    expect(screen.getByTestId('no-documents-hint').textContent).toBe('No documents uploaded yet.')
+  })
+
   it('uses the renamed toggle labels', () => {
     render(<DatesView documents={[]} />)
     expect(screen.getByRole('button', { name: 'Uploaded dates' })).toBeTruthy()

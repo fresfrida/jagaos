@@ -1,4 +1,5 @@
-/** The owner's pending purge requests, in Company Settings (round 21, A5, DECISIONS #101). */
+/** The owner's pending purge requests, on their own page under Company Settings (round 21, A5, DECISIONS #101; round 3, items 9b and 9c,
+ * DECISIONS #121: a page of their own, and a pending request can be taken back). */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +7,7 @@ import i18n from '../../i18n'
 
 vi.mock('../ops/opsApi', async (importActual) => ({
   ...(await importActual<typeof import('../ops/opsApi')>()),
-  opsApi: { listPurgeRequests: vi.fn() },
+  opsApi: { listPurgeRequests: vi.fn(), cancelPurgeRequest: vi.fn() },
 }))
 
 import { opsApi } from '../ops/opsApi'
@@ -55,11 +56,60 @@ describe('PurgeRequestsSection', () => {
     await waitFor(() => expect(screen.getByText('No purge requests.')).toBeTruthy())
   })
 
-  it('is read-only: nothing on it deletes or changes anything', async () => {
+  it('deletes nothing: the only action on a row is Cancel purge, which takes the request back', async () => {
     list.mockResolvedValue([{ id: 5, filename: 'a.pdf', requested_at: '2026-09-25 09:30:00', requested_by: 'o@x.y' }])
     render(<PurgeRequestsSection enabled />)
     await screen.findByTestId('purge-request-row')
-    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Cancel purge'])
+  })
+})
+
+describe('PurgeRequestsSection: cancelling a pending request (round 3, item 9b)', () => {
+  const two = [
+    { id: 5, filename: 'old-contract.pdf', requested_at: '2026-09-25 09:30:00', requested_by: 'o@x.y' },
+    { id: 3, filename: 'draft.pdf', requested_at: '2026-09-20 01:00:00', requested_by: 'o@x.y' },
+  ]
+
+  it('cancels that request, re-reads the list so the row is gone, and says which file is back', async () => {
+    list.mockResolvedValueOnce(two).mockResolvedValue([two[1]!])
+    vi.mocked(opsApi.cancelPurgeRequest).mockResolvedValue({ status: 'filed' })
+    render(<PurgeRequestsSection enabled />)
+    const rows = await screen.findAllByTestId('purge-request-row')
+
+    fireEvent.click(within(rows[0]!).getByRole('button', { name: 'Cancel purge' }))
+
+    await waitFor(() => expect(opsApi.cancelPurgeRequest).toHaveBeenCalledWith(5))
+    await waitFor(() => expect(screen.getAllByTestId('purge-request-row')).toHaveLength(1))
+    expect(screen.getByRole('heading', { name: 'Purge requests (1)' })).toBeTruthy()
+    expect(screen.queryByText('old-contract.pdf', { selector: 'p' })).toBeNull() // the row went, only the notice below names it
+    expect(screen.getByRole('status').textContent).toBe('The purge request for "old-contract.pdf" was cancelled. It is back in Company Files.')
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+
+  it('disables the other rows while one is being cancelled, so two cancels cannot race', async () => {
+    list.mockResolvedValue(two)
+    let finish: () => void = () => undefined
+    vi.mocked(opsApi.cancelPurgeRequest).mockReturnValue(new Promise((resolve) => { finish = () => resolve({ status: 'filed' }) }))
+    render(<PurgeRequestsSection enabled />)
+    const rows = await screen.findAllByTestId('purge-request-row')
+
+    fireEvent.click(within(rows[0]!).getByRole('button', { name: 'Cancel purge' }))
+
+    await waitFor(() => expect((within(rows[1]!).getByRole('button', { name: 'Cancel purge' }) as HTMLButtonElement).disabled).toBe(true))
+    finish()
+  })
+
+  it('shows the refusal, keeps the row, and claims nothing', async () => {
+    list.mockResolvedValue(two)
+    vi.mocked(opsApi.cancelPurgeRequest).mockRejectedValue(new Error('the status this document had before the purge request cannot be determined'))
+    render(<PurgeRequestsSection enabled />)
+    const rows = await screen.findAllByTestId('purge-request-row')
+
+    fireEvent.click(within(rows[0]!).getByRole('button', { name: 'Cancel purge' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('cannot be determined')
+    expect(screen.getAllByTestId('purge-request-row')).toHaveLength(2)
+    expect(screen.queryByText(/was cancelled/)).toBeNull()
   })
 })
 

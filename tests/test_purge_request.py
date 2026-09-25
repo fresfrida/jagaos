@@ -6,6 +6,10 @@ The OWNER, and only the owner, keeps seeing it, marked "purge_requested" and rea
 request is an accountability trail and not a disappearance; the owner-only GET /api/purge-requests lists what is pending too.
 An admin keeps Delete and has no Purge; a personal file is never purge-requested; an ordinary Delete stays invisible to everyone.
 
+Taking a pending request back (round 3, item 9b, DECISIONS #121): POST /api/documents/{id}/cancel-purge-request, owner only. It
+undoes exactly what the request did (the archive and the flag), so the document returns to the status it had, which the audit row
+of the archive records; it is NOT a general un-archive (an ordinary Delete still has no way back).
+
 Real logins and real uploads; noise JPEGs take classify's no-text branch, so nothing here calls the gateway.
 """
 
@@ -18,10 +22,11 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from app.auth import CurrentMembership, may_request_purge, may_see_purge_requested
+from app.auth import CurrentMembership, may_cancel_purge_request, may_request_purge, may_see_purge_requested
 from app.db import get_conn
 from app.main import app
 from app.purge import purge_now
+from app.rules.transitions import InvalidTransition, restore_document_after_purge_request, transition_document
 
 client = TestClient(app)
 _seed = iter(range(1, 100_000))
@@ -397,3 +402,191 @@ def test_the_two_columns_exist_and_default_to_null():
         columns = {r["name"]: r for r in conn.execute("PRAGMA table_info(document)")}
     for name in ("purge_requested_at", "purge_requested_by"):
         assert name in columns and columns[name]["notnull"] == 0 and columns[name]["dflt_value"] is None
+
+
+# --- taking a pending request back (round 3, item 9b, DECISIONS #121) -----------------------------------------
+
+
+def _cancel(team: dict, actor: str, doc: int):
+    return client.post(f"/api/documents/{doc}/cancel-purge-request", headers=_headers(team["tokens"][actor]))
+
+
+def _set_status(doc: int, status: str) -> None:
+    with get_conn() as conn:
+        conn.execute("UPDATE document SET status = ? WHERE id = ?", (status, doc))
+
+
+def _open_review_ids(team: dict, actor: str = "owner") -> set[int]:
+    return {i["document_id"] for i in client.get("/api/review", headers=_headers(team["tokens"][actor])).json()}
+
+
+def test_the_owner_can_cancel_a_pending_request_and_the_document_comes_back_exactly_as_it_was(team):
+    doc = _filed_company_doc(team, tag="undo")
+    stored = Path(_row(doc)["stored_path"])
+    _ask(team, "owner", doc)
+    assert doc not in _ids(team["tokens"]["admin"])
+
+    resp = _cancel(team, "owner", doc)
+
+    assert resp.status_code == 200 and resp.json() == {"status": "filed"}
+    row = _row(doc)
+    assert (row["status"], row["purge_requested_at"], row["purge_requested_by"]) == ("filed", None, None)
+    assert stored.exists()
+    for actor in ("owner", "admin", "user1", "viewer"):                    # back for everyone, everywhere
+        assert doc in _ids(team["tokens"][actor]), actor
+        assert client.get(f"/api/documents/{doc}/file", headers=_headers(team["tokens"][actor])).status_code == 200
+    assert doc in _ids(team["tokens"]["admin"], "/api/search?q=user1-undo")
+    listed = next(d for d in client.get("/api/documents", headers=_headers(team["tokens"]["owner"])).json() if d["id"] == doc)
+    assert listed["status"] == "filed" and listed["can_edit"] is True      # no longer marked, no longer read-only
+    assert _requests(team["tokens"]["owner"]).json() == []                 # and it is gone from the pending list
+
+
+def test_a_document_asked_for_while_waiting_for_review_goes_back_to_waiting_and_can_still_be_confirmed(team):
+    doc = _upload(team, "user1", tag="waiting")
+    assert doc in _open_review_ids(team)
+    _ask(team, "owner", doc)
+    assert doc not in _open_review_ids(team)                                # the request dismissed its review item
+
+    resp = _cancel(team, "owner", doc)
+
+    assert resp.status_code == 200 and resp.json() == {"status": "needs_review"}
+    assert doc in _open_review_ids(team)                                    # the item is open again, not lost
+    assert doc in _ids(team["tokens"]["user1"]) and doc not in _ids(team["tokens"]["user2"])   # the pending-review visibility rule is back
+    _confirm_review(team, doc)                                              # and the review can still be finished
+    assert _row(doc)["status"] == "filed"
+
+
+@pytest.mark.parametrize("prior", ["received", "proposed", "filed", "rejected", "quarantined"])
+def test_whatever_status_it_had_is_the_status_it_gets_back(team, prior):
+    doc = _filed_company_doc(team, tag=f"was-{prior}")
+    _set_status(doc, prior)
+    _ask(team, "owner", doc)
+
+    resp = _cancel(team, "owner", doc)
+
+    assert resp.status_code == 200 and resp.json() == {"status": prior}
+    assert _row(doc)["status"] == prior and _row(doc)["purge_requested_at"] is None
+
+
+def test_a_quarantined_documents_review_item_is_reopened_too(team):
+    doc = _upload(team, "user1", tag="held")
+    _set_status(doc, "quarantined")                                         # what the injection guard does, with its item still open
+    _ask(team, "owner", doc)
+    assert doc not in _open_review_ids(team)
+
+    assert _cancel(team, "owner", doc).json() == {"status": "quarantined"}
+
+    assert doc in _open_review_ids(team)
+
+
+def test_a_request_can_be_made_again_after_a_cancel_and_the_latest_archive_is_the_one_undone(team):
+    doc = _filed_company_doc(team, tag="twice")
+    _ask(team, "owner", doc)
+    assert _cancel(team, "owner", doc).json() == {"status": "filed"}
+    _set_status(doc, "rejected")                                            # a different status the second time round
+    assert _ask(team, "owner", doc).status_code == 200
+
+    assert _cancel(team, "owner", doc).json() == {"status": "rejected"}     # not the first request's "filed"
+
+
+@pytest.mark.parametrize("actor", ["admin", "user1", "viewer"])
+def test_nobody_below_the_owner_can_take_a_request_back_and_to_them_the_document_does_not_exist(team, actor):
+    doc = _filed_company_doc(team, tag="notyours")
+    _ask(team, "owner", doc)
+
+    assert _cancel(team, actor, doc).status_code == 404                     # the same answer as for a document that was never there
+    assert _row(doc)["status"] == "archived" and _row(doc)["purge_requested_at"] is not None
+
+
+def test_another_companys_owner_gets_a_404_and_changes_nothing_when_cancelling(team, other_company):
+    doc = _filed_company_doc(team, tag="foreign")
+    _ask(team, "owner", doc)
+
+    resp = client.post(f"/api/documents/{doc}/cancel-purge-request", headers=_headers(other_company["token"]))
+
+    assert resp.status_code == 404
+    assert _row(doc)["status"] == "archived" and _row(doc)["purge_requested_at"] is not None
+
+
+def test_cancelling_needs_a_session(team):
+    doc = _filed_company_doc(team, tag="nosession")
+    _ask(team, "owner", doc)
+    assert client.post(f"/api/documents/{doc}/cancel-purge-request").status_code == 401
+
+
+def test_cancelling_when_there_is_nothing_to_cancel_is_a_409_and_a_missing_document_a_404(team):
+    live = _filed_company_doc(team, tag="never-asked")
+    assert _cancel(team, "owner", live).status_code == 409                 # visible, filed, no request
+    assert _row(live)["status"] == "filed"
+
+    doc = _filed_company_doc(team, tag="cancelled-once")
+    _ask(team, "owner", doc)
+    assert _cancel(team, "owner", doc).status_code == 200
+    assert _cancel(team, "owner", doc).status_code == 409                  # a second cancel: the request is already gone
+
+    assert _cancel(team, "owner", 987_654).status_code == 404
+
+
+def test_an_ordinary_delete_cannot_be_undone_this_way_and_stays_invisible_even_to_the_owner(team):
+    doc = _filed_company_doc(team, tag="plain-delete")
+    assert client.post(f"/api/documents/{doc}/archive", headers=_headers(team["tokens"]["admin"])).status_code == 200
+
+    assert _cancel(team, "owner", doc).status_code == 404                  # not a purge request, so not the owner's to see
+    assert _row(doc)["status"] == "archived"
+    with pytest.raises(InvalidTransition):                                 # and the function itself refuses too
+        restore_document_after_purge_request(doc, "owner@preq.test")
+    with pytest.raises(InvalidTransition):                                 # archived still has no way out of the state machine
+        transition_document(doc, "filed", actor="owner@preq.test")
+
+
+def test_a_live_document_is_refused_by_the_restore_function(team):
+    doc = _filed_company_doc(team, tag="live")
+    with pytest.raises(InvalidTransition):
+        restore_document_after_purge_request(doc, "owner@preq.test")
+    assert _row(doc)["status"] == "filed"
+
+
+def test_a_request_whose_earlier_status_cannot_be_found_is_refused_and_stays_pending(team):
+    doc = _filed_company_doc(team, tag="lost-history")
+    _ask(team, "owner", doc)
+    with get_conn() as conn:                                                # a request made before this feature, with its audit row gone
+        conn.execute(
+            "DELETE FROM trace WHERE document_id = ? AND node = 'rules.transition_document' AND decision LIKE '%->archived by %'", (doc,),
+        )
+
+    resp = _cancel(team, "owner", doc)
+
+    assert resp.status_code == 409                                          # never guess a status
+    assert _row(doc)["status"] == "archived" and _row(doc)["purge_requested_at"] is not None
+    assert doc in [r["id"] for r in _requests(team["tokens"]["owner"]).json()]
+
+
+def test_a_cancel_leaves_an_audit_row_and_a_log_line(team, caplog):
+    doc = _filed_company_doc(team, tag="audited-cancel")
+    name = _row(doc)["filename"]
+    _ask(team, "owner", doc)
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        _cancel(team, "owner", doc)
+    lines = [r.getMessage() for r in caplog.records if "AUDIT purge-request-cancel" in r.getMessage()]
+    assert len(lines) == 1 and "owner@preq.test" in lines[0] and str(doc) in lines[0] and name in lines[0]
+    with get_conn() as conn:
+        decision = conn.execute(
+            "SELECT decision FROM trace WHERE document_id = ? AND node = 'rules.restore_after_purge_request'", (doc,),
+        ).fetchone()["decision"]
+    assert decision == "archived->filed by owner@preq.test (purge request cancelled)"
+
+
+@pytest.mark.parametrize(
+    "role,visibility,allowed",
+    [
+        ("owner", "company", True),
+        ("owner", "only_me", False),
+        ("admin", "company", False),
+        ("user", "company", False),
+        ("viewer", "company", False),
+    ],
+)
+def test_may_cancel_purge_request_matrix_is_the_same_as_may_request_purge(role, visibility, allowed):
+    membership = CurrentMembership(user_id=1, email="x@y.z", name=None, company_id=1, role=role)
+    assert may_cancel_purge_request(membership, visibility=visibility) is allowed
+    assert may_cancel_purge_request(membership, visibility=visibility) == may_request_purge(membership, visibility=visibility)

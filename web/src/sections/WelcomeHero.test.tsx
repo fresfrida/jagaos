@@ -144,6 +144,47 @@ describe('WelcomeHero', () => {
     expect(screen.getByTestId('hero-phone').querySelector('video')!.getAttribute('aria-label')).toBe(label)
   })
 
+  it('opens up the left column from lg and leaves the phone and tablet spacing exactly as it was (round 3, item 6, DECISIONS #121)', () => {
+    const { container } = render(<WelcomeHero />)
+    const section = container.querySelector('section') as HTMLElement
+    const heading = screen.getByRole('heading', { level: 1 })
+    const subhead = heading.nextElementSibling as HTMLElement
+    const cta = subhead.nextElementSibling as HTMLElement
+    const hint = cta.querySelector('p') as HTMLElement
+
+    // Below lg: the values the page had before, untouched. From lg: one step more, at each of the four places.
+    expect(section.className).toContain('pt-8')
+    expect(section.className).toContain('sm:pt-14')
+    expect(section.className).toContain('lg:pt-20')
+    expect(subhead.className).toMatch(/(^|\s)mt-4(\s|$)/)
+    expect(subhead.className).toContain('lg:mt-6')
+    expect(cta.className).toMatch(/(^|\s)mt-7(\s|$)/)
+    expect(cta.className).toContain('lg:mt-11')
+    expect(hint.className).toMatch(/(^|\s)mt-2(\s|$)/)
+    expect(hint.className).toContain('lg:mt-3')
+  })
+
+  // The gradient itself (sage at 6%, ending transparent, pure-white cards) lives in index.css, which vitest cannot read as text (it blanks
+  // stylesheets); it was checked by sampling real pixels in Chromium, DECISIONS #121. What is pinned here is the structure around it.
+  it('has one soft sage wash behind the hero: a decoration on its own layer, under everything, and not around the cards (round 3, item 7)', () => {
+    const { container } = render(<WelcomeHero />)
+    const section = container.querySelector('section') as HTMLElement
+    const wash = screen.getByTestId('hero-wash')
+
+    expect(container.querySelectorAll('.hero-wash')).toHaveLength(1)
+    expect(section.contains(wash)).toBe(true)
+    expect(section.className).toContain('isolate') // its own stacking context, so -z-10 stays inside this section
+    expect(wash.className).toContain('-z-10')
+    expect(wash.className).toContain('pointer-events-none')
+    expect(wash.getAttribute('aria-hidden')).toBe('true')
+    expect(wash.children).toHaveLength(0) // a decoration, holding nothing
+    expect(wash.contains(screen.getByRole('heading', { level: 1 }))).toBe(false)
+    for (const card of container.querySelectorAll('section ul li > div')) {
+      expect(wash.contains(card)).toBe(false)
+      expect(card.className).toContain('bg-white') // the cards paint an opaque white, so nothing shows through them
+    }
+  })
+
   it('has three cards, Capture, Review and Remember, and the page ends after them', () => {
     render(<><WelcomeHero /><DemoPickerHost /></>)
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Capture', 'Review', 'Remember'])

@@ -92,7 +92,11 @@ function DateGroupRow({ doc }: { doc: DocumentRow }) {
   )
 }
 
-export function DatesView({ documents: allDocuments }: { documents: DocumentRow[] }) {
+/** `loaded` is whether the first read of the documents has finished (useOpsData's flag). Until it has, an empty list means "not here yet", not
+ * "none": the grid is drawn at once regardless, and the "No documents uploaded yet." hint waits for the truth instead of being shown for the
+ * length of a slow request and then taken back (round 3, item 2, DECISIONS #121). It defaults to true, so a caller with its list already in
+ * hand is unchanged. */
+export function DatesView({ documents: allDocuments, loaded = true }: { documents: DocumentRow[]; loaded?: boolean }) {
   const { t, i18n } = useTranslation()
   // A rejected document (a legacy state, features/ops/documentStatus.ts) is not one the company holds: it is not grouped by day, counted in
   // the grid, or listed under a day (DECISIONS #109).
@@ -153,7 +157,7 @@ export function DatesView({ documents: allDocuments }: { documents: DocumentRow[
         />
 
         {documents.length === 0 ? (
-          <p className="text-[14px] text-muted" data-testid="no-documents-hint">{t('ops.dates.noneUploaded')}</p>
+          loaded && <p className="text-[14px] text-muted" data-testid="no-documents-hint">{t('ops.dates.noneUploaded')}</p>
         ) : (
           <>
             <section>

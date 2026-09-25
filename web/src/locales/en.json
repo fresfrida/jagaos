@@ -170,7 +170,10 @@
       "status": "Purge requested: the team removes it permanently.",
       "by": "Requested {{date}} by {{who}}",
       "loading": "Loading purge requests…",
-      "loadFailed": "The purge requests could not be loaded."
+      "loadFailed": "The purge requests could not be loaded.",
+      "title": "Purge requests",
+      "description": "Documents you asked to have removed permanently. Until the team removes one, you can cancel its request.",
+      "back": "Back to Company Settings"
     }
   },
   "auth": {
@@ -405,13 +408,16 @@
       },
       "purgeRequest": {
         "button": "Purge",
-        "message": "Ask for \"{{filename}}\" to be permanently removed? Everyone else stops seeing it now. You keep seeing it, marked \"Purge requested\", until the team removes it permanently. You can't undo this.",
+        "message": "Ask for \"{{filename}}\" to be permanently removed? Everyone else stops seeing it now. You keep seeing it, marked \"Purge requested\", until the team removes it permanently. You can cancel the request until then.",
         "confirm": "Purge",
         "done": "Purge requested for \"{{filename}}\". Everyone else no longer sees it. It stays here, marked, until the team removes it permanently.",
-        "pending": "Purge requested: the team removes it permanently."
+        "pending": "Purge requested: the team removes it permanently.",
+        "cancel": "Cancel purge",
+        "cancelled": "The purge request for \"{{filename}}\" was cancelled. It is back in Company Files."
       },
       "rejectedTitle": "Rejected document",
-      "deleteAlsoPurge": "Also remove it permanently"
+      "deleteAlsoPurge": "Also remove it permanently",
+      "traceEmpty": "No AI steps were recorded for this document."
     },
     "dates": {
       "uploadDate": "Upload date",
@@ -452,7 +458,9 @@
       "loadFailed": "Couldn't load the source file.",
       "loading": "Loading source…",
       "closePreview": "Close preview",
-      "previewLabel": "Preview: {{filename}}"
+      "previewLabel": "Preview: {{filename}}",
+      "noInlinePdf": "This browser can't show a PDF inside the page, so the file is sent to your device. If nothing happens, tap Open PDF.",
+      "openPdf": "Open PDF"
     },
     "documentPreview": {
       "loadFailed": "Couldn't load the source file.",

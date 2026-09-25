@@ -29,9 +29,11 @@
  * Compliance checklist (round 21, A2, DECISIONS #101): the full checklist is a section under the form; the Calendar
  * keeps only a one-line count that links here for admin and owner.
  *
- * Purge requests (round 21, A5, DECISIONS #101): the owner sees, under the checklist, the documents they asked to have
- * purged and the team has not yet removed. */
+ * Purge requests (round 21, A5, DECISIONS #101): the documents the owner asked to have purged and the team has not yet removed. They
+ * were a section under the checklist; since round 3 (item 9c, DECISIONS #121) they are a page of their own, and this page only links to it
+ * (owner only). */
 
+import { ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
@@ -45,7 +47,6 @@ import {
   applyPrefill, backendHasIdentityFields, formFromCompany, prefillChanges, toUpdate, type CompanyForm, type CompanyFormField,
 } from '../features/company/companyForm'
 import { PrefillConfirmSheet } from '../features/company/PrefillConfirmSheet'
-import { PurgeRequestsSection } from '../features/company/PurgeRequestsSection'
 import { useBusinessProfile } from '../features/company/useBusinessProfile'
 import { useCompanyProfilePrefill } from '../features/company/useCompanyProfilePrefill'
 import { FIELD_CLASS } from '../features/ops/opsShared'
@@ -53,6 +54,7 @@ import { cn } from '../lib/cn'
 import { middleEllipsis } from '../lib/filename'
 import { navigate } from '../router/navigate'
 import { routeHref } from '../router/routes'
+import { Link } from '../router/Link'
 
 const BLANK_FORM: CompanyForm = { name: '', fyeMonth: 12, fyeDay: 31, uen: '', gstRegistered: false, registeredAddress: '' }
 // What a field a pre-fill just changed looks like — the owner should see what the document is proposing.
@@ -273,7 +275,18 @@ function CompanySettingsContent() {
       <ComplianceChecklistSection enabled={canView} />
     </section>
 
-    {canEdit && <PurgeRequestsSection enabled />}
+    {canEdit && (
+      <Link
+        href={routeHref('purge-requests')}
+        className="mt-10 flex items-center justify-between gap-3 rounded-card border border-line bg-white px-4 py-3 transition-colors hover:border-ink/40"
+      >
+        <span className="min-w-0">
+          <span className="block text-[14px] font-medium text-ink">{t('companySettings.purgeRequests.title')}</span>
+          <span className="block text-[13px] text-muted">{t('companySettings.purgeRequests.description')}</span>
+        </span>
+        <ChevronRight size={16} className="shrink-0 text-muted" aria-hidden="true" />
+      </Link>
+    )}
     </div>
   )
 }

@@ -47,3 +47,19 @@
     html { scroll-behavior: auto; }
   }
 }
+
+/* The landing hero's one soft wash (round 3, DECISIONS #121): the app's single accent, sage, at 6% fading to nothing, behind the hero and not the page.
+   Felt, not seen. The peak is placed where nothing opaque covers it: below `lg` the hero is one column and the peak is behind the headline and
+   button, fading out down the phone frame; from `lg` it is in the gap between the text column and the frame (a first version put it behind the
+   frame, which is opaque, and only the faint tail showed). It ends fully transparent well inside its layer, so there is no edge to see. The cards
+   paint an opaque white, so it never shows through them. */
+@layer components {
+  .hero-wash {
+    background-image: radial-gradient(ellipse 100% 40% at 50% 30%, color-mix(in srgb, var(--color-sage) 6%, transparent), transparent 72%);
+  }
+  @media (min-width: 64rem) {
+    .hero-wash {
+      background-image: radial-gradient(ellipse 60% 62% at 58% 38%, color-mix(in srgb, var(--color-sage) 6%, transparent), transparent 72%);
+    }
+  }
+}

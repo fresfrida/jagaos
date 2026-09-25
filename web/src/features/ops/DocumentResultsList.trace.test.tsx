@@ -1,5 +1,6 @@
-/** The trace panel under the list keeps everything it had (real numbers: node, model, tokens, cost, decision) and only its label
- * changed, to "AI trace" (DECISIONS #110). */
+/** The trace panel keeps everything it had (real numbers: node, model, tokens, cost, decision) and only its label changed, to "AI trace"
+ * (DECISIONS #110). Round 3, item 5 (DECISIONS #121): it opens directly under the card it was asked from, not after the whole list, and a
+ * document with no recorded step gets a sentence, not a table with only a header. */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -42,7 +43,7 @@ const open = async () => {
 }
 
 describe('the AI trace panel', () => {
-  it('opens under the list with the new heading and the same real figures', async () => {
+  it('opens with the new heading and the same real figures', async () => {
     await open()
     expect((await screen.findByRole('heading', { level: 2 })).textContent).toBe('AI trace: document #7 · total $0.0265')
     const table = screen.getByRole('table')
@@ -62,5 +63,60 @@ describe('the AI trace panel', () => {
     fireEvent.click(screen.getAllByRole('button').find((b) => b.getAttribute('aria-haspopup') === 'menu')!)
     fireEvent.click(screen.getAllByRole('menuitem')[0]!)
     expect((await screen.findByRole('heading', { level: 2 })).textContent).toBe(heading)
+  })
+})
+
+describe('the AI trace panel: where it opens and what an empty one says (round 3, item 5)', () => {
+  const docs = [1, 2, 3, 4].map((id): DocumentRow => ({ ...doc, id, description: JSON.stringify({ en: `Doc ${id}` }) }))
+  const openFor = async (documentId: number) => {
+    const card = screen.getByText(`Doc ${documentId}`).closest('div.p-4') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /more actions/i }))
+    fireEvent.click(within(card).getByRole('menuitem', { name: 'AI trace' }))
+    await waitFor(() => expect(opsApi.getTrace).toHaveBeenCalledWith(documentId))
+    return card
+  }
+  const showList = () =>
+    render(<DocumentResultsList documents={docs} canEdit canArchive canRequestPurge={false} onSaved={vi.fn()} emptyMessage="none" />)
+
+  it('opens directly under the card that asked for it, not at the bottom of a long list where it would look like nothing happened', async () => {
+    showList()
+    const card = await openFor(1)
+    const panel = await screen.findByTestId('trace-panel')
+    const cardWrapper = card.parentElement as HTMLElement
+    expect(cardWrapper.nextElementSibling).toBe(panel) // right after the FIRST card
+    expect(panel.nextElementSibling).toBe(screen.getByText('Doc 2').closest('div.p-4')!.parentElement) // and before the second
+  })
+
+  it('moves to another card when that card asks, and there is only ever one', async () => {
+    showList()
+    await openFor(1)
+    await screen.findByTestId('trace-panel')
+    const card = await openFor(3)
+    await waitFor(() => expect(within(card.parentElement!.nextElementSibling as HTMLElement).getByRole('heading').textContent).toContain('document #3'))
+    expect(screen.getAllByTestId('trace-panel')).toHaveLength(1)
+  })
+
+  it('brings itself into view, for a card near the bottom of the screen', async () => {
+    const scrollIntoView = vi.fn()
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      showList()
+      await openFor(4)
+      await screen.findByTestId('trace-panel')
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
+  })
+
+  it('says so when the pipeline recorded no step for the document, instead of a table with only a header', async () => {
+    vi.mocked(opsApi.getTrace).mockResolvedValue({ nodes: [], total_cost_usd: 0 } as never)
+    showList()
+    await openFor(2)
+    const panel = await screen.findByTestId('trace-panel')
+    expect(within(panel).getByText('No AI steps were recorded for this document.')).toBeTruthy()
+    expect(within(panel).queryByRole('table')).toBeNull()
+    expect(within(panel).getByRole('heading').textContent).toBe('AI trace: document #2 · total $0.0000')
   })
 })

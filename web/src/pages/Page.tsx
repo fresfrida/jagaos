@@ -9,6 +9,7 @@ import { HowItWorks } from '../sections/HowItWorks'
 import { StackList } from '../sections/StackList'
 import { CompanyFilesPage } from './CompanyFilesPage'
 import { CompanySettingsPage } from './CompanySettingsPage'
+import { PurgeRequestsPage } from './PurgeRequestsPage'
 import { FramePage } from './FramePage'
 import { LoginPage } from './LoginPage'
 import { NotFoundPage } from './NotFoundPage'
@@ -89,6 +90,12 @@ export function Page({ route }: { route: ResolvedRoute }) {
       return (
         <FramePage route="company-settings">
           <CompanySettingsPage />
+        </FramePage>
+      )
+    case 'purge-requests':
+      return (
+        <FramePage route="purge-requests">
+          <PurgeRequestsPage />
         </FramePage>
       )
     case 'only-me':

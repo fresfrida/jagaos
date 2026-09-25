@@ -15,7 +15,7 @@ vi.mock('../features/ops/useOpsData', () => ({
 }))
 vi.mock('../features/ops/opsApi', async (importActual) => ({
   ...(await importActual<typeof import('../features/ops/opsApi')>()),
-  opsApi: { requestPurge: vi.fn(), archiveDocument: vi.fn(), getTrace: vi.fn() },
+  opsApi: { requestPurge: vi.fn(), cancelPurgeRequest: vi.fn(), archiveDocument: vi.fn(), getTrace: vi.fn() },
 }))
 
 import { opsApi, type DocumentRow } from '../features/ops/opsApi'
@@ -47,7 +47,9 @@ afterEach(cleanup)
 
 describe('Company Files: every bucket always has a chip, an empty one included (DECISIONS #118, reversing #109)', () => {
   const ALL_BUCKETS = ['Receivables', 'Expenses', 'Statutory', 'Operations', 'Contracts', 'Memory Lane', 'Miscellaneous']
-  const chips = () => screen.getAllByRole('button', { pressed: false }).map((b) => b.textContent).filter((t) => /\(\d+\)/.test(t ?? ''))
+  // The bucket chips only: the owner's "Purge requested" toggle beside them is its own control (round 3, item 9a), tested below.
+  const chips = () =>
+    screen.getAllByRole('button', { pressed: false }).map((b) => b.textContent).filter((t) => /\(\d+\)/.test(t ?? '') && !/^Purge requested/.test(t ?? ''))
 
   it('all seven buckets get a chip after All, in the fixed order, an empty one showing (0): the filter row is navigation, not data', () => {
     render(<CompanyFilesPage />) // DOCS are in Expenses and Statutory only
@@ -303,11 +305,12 @@ describe('Company Files: a purge the owner asked for stays visible to them until
     expect(shown()).toContain('Doc 5')
   })
 
-  it('leaves View and nothing else: no Edit, no Delete, no Purge, no more-actions menu', () => {
+  it('leaves View, and for the owner Cancel purge, and nothing else: no Edit, no Delete, no Purge, no more-actions menu', () => {
     ops.documents = [requested()]
     render(<CompanyFilesPage />)
     const card = screen.getByText('Doc 5').closest('div.p-4') as HTMLElement
     expect(within(card).getByRole('button', { name: /^view$/i })).toBeTruthy()
+    expect(within(card).getByRole('button', { name: 'Cancel purge' })).toBeTruthy() // round 3, item 9b
     for (const name of [/^edit$/i, /^delete$/i, /^purge$/i, /more actions/i]) expect(within(card).queryByRole('button', { name }), String(name)).toBeNull()
   })
 
@@ -322,6 +325,107 @@ describe('Company Files: a purge the owner asked for stays visible to them until
     ops.documents = [...DOCS, requested()]
     render(<CompanyFilesPage />)
     expect(screen.getByText('Documents (5)')).toBeTruthy()
+  })
+})
+
+describe('Company Files: the owner\'s "Purge requested" toggle (round 3, item 9a, DECISIONS #121)', () => {
+  const pending = (id: number, bucket: DocumentRow['bucket'] = 'Expenses') =>
+    doc(id, { status: 'purge_requested', can_edit: false, bucket, description: JSON.stringify({ en: `Doc ${id}` }) })
+  const toggle = (count: number) => screen.getByRole('button', { name: `Purge requested (${count})` })
+
+  it('is there for the owner, empty included, and set apart from the bucket buttons', () => {
+    render(<CompanyFilesPage />) // no request is pending
+    expect(toggle(0).getAttribute('aria-pressed')).toBe('false')
+    expect(toggle(0).previousElementSibling?.getAttribute('aria-hidden')).toBe('true') // the divider that sets it apart
+  })
+
+  it.each(['admin', 'user', 'viewer'])('is not there for a %s: the server sends no purge request to anyone but the owner', (role) => {
+    auth.value = { ...auth.value, role }
+    render(<CompanyFilesPage />)
+    expect(screen.queryByRole('button', { name: /^Purge requested/ })).toBeNull()
+  })
+
+  it('pressing it narrows the list to the requests still pending, and the buttons beside it count what is left', () => {
+    ops.documents = [...DOCS, pending(5, 'Expenses'), pending(6, 'Statutory')]
+    render(<CompanyFilesPage />)
+    expect(shown()).toHaveLength(6)
+    expect(button('All (6)')).toBeTruthy()
+
+    fireEvent.click(toggle(2))
+
+    expect(shown()).toEqual(['Doc 5', 'Doc 6'])
+    expect(toggle(2).getAttribute('aria-pressed')).toBe('true')
+    expect(button('All (2)')).toBeTruthy() // the others follow it
+    expect(button(/Expenses \(1\)/)).toBeTruthy()
+    expect(button(/Statutory \(1\)/)).toBeTruthy()
+    expect(button(/Receivables \(0\)/)).toBeTruthy()
+    expect(screen.getByText('Documents (2)')).toBeTruthy()
+
+    fireEvent.click(toggle(2)) // and again: everything is back
+    expect(shown()).toHaveLength(6)
+    expect(toggle(2).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('a pending request keeps its own bucket: it is also found under it, and the two filters combine', () => {
+    ops.documents = [...DOCS, pending(5, 'Expenses'), pending(6, 'Statutory')]
+    render(<CompanyFilesPage />)
+
+    fireEvent.click(button(/Statutory \(3\)/)) // Doc 3, Doc 4 and the pending Doc 6
+    expect(shown()).toEqual(['Doc 3', 'Doc 4', 'Doc 6'])
+    expect(toggle(1)).toBeTruthy() // the toggle counts what pressing it would show inside the chosen bucket
+
+    fireEvent.click(toggle(1))
+    expect(shown()).toEqual(['Doc 6'])
+  })
+
+  it('follows the date range like every other count', () => {
+    ops.documents = [...DOCS, doc(5, { status: 'purge_requested', can_edit: false, bucket: 'Expenses', received_at: '2026-01-12 03:00:00', description: JSON.stringify({ en: 'Doc 5' }) })]
+    window.history.replaceState({}, '', '/company-files?from=2026-03-01&to=2026-04-30')
+    render(<CompanyFilesPage />)
+    expect(toggle(0)).toBeTruthy() // the pending request was uploaded in January, outside the range
+  })
+
+  it('says there are no purge requests, not "no match", when it is pressed and none is pending', () => {
+    render(<CompanyFilesPage />)
+    fireEvent.click(toggle(0))
+    expect(screen.getByText('No purge requests.')).toBeTruthy()
+    expect(shown()).toEqual([])
+  })
+})
+
+describe('Company Files: taking a pending purge request back (round 3, item 9b, DECISIONS #121)', () => {
+  const requested = () => doc(5, { status: 'purge_requested', can_edit: false, filename: 'lease.pdf', description: JSON.stringify({ en: 'Doc 5' }) })
+  const cardOf = () => screen.getByText('Doc 5').closest('div.p-4') as HTMLElement
+
+  it('asks the server to cancel THAT document, says so by name, and reloads the list', async () => {
+    ops.documents = [requested()]
+    vi.mocked(opsApi.cancelPurgeRequest).mockResolvedValue({ status: 'filed' })
+    render(<CompanyFilesPage />)
+
+    fireEvent.click(within(cardOf()).getByRole('button', { name: 'Cancel purge' }))
+
+    await waitFor(() => expect(opsApi.cancelPurgeRequest).toHaveBeenCalledWith(5))
+    expect((await screen.findByRole('status')).textContent).toBe('The purge request for "lease.pdf" was cancelled. It is back in Company Files.')
+    expect(ops.refresh).toHaveBeenCalled()
+  })
+
+  it('shows the server\'s refusal and does not claim success', async () => {
+    ops.documents = [requested()]
+    vi.mocked(opsApi.cancelPurgeRequest).mockRejectedValue(new Error('this document has no pending purge request'))
+    render(<CompanyFilesPage />)
+
+    fireEvent.click(within(cardOf()).getByRole('button', { name: 'Cancel purge' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('no pending purge request')
+    expect(screen.queryByText(/was cancelled/)).toBeNull()
+    expect(ops.refresh).not.toHaveBeenCalled()
+  })
+
+  it('an ordinary filed document has no Cancel purge, and neither does a card seen by anyone but the owner', () => {
+    ops.documents = [...DOCS, requested()]
+    auth.value = { ...auth.value, role: 'admin' }
+    render(<CompanyFilesPage />)
+    expect(screen.queryByRole('button', { name: 'Cancel purge' })).toBeNull()
   })
 })
 

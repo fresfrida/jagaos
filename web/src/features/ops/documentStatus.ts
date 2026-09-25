@@ -18,3 +18,12 @@ export function isRejectedDocument(doc: Pick<DocumentRow, 'status'>): boolean {
 export function documentsForCalendar<T extends Pick<DocumentRow, 'status'>>(documents: readonly T[]): T[] {
   return documents.filter((doc) => !isRejectedDocument(doc))
 }
+
+/** A document the OWNER asked to have purged, which the team has not yet removed (round 21, DECISIONS #102): the server sends it to the
+ * owner alone, with this status, read-only. ONE rule for the card's marker and actions and for Company Files' "Purge requested" filter
+ * (round 3, item 9a, DECISIONS #121), so the two cannot disagree about what is pending. */
+export const PURGE_REQUESTED_STATUS = 'purge_requested'
+
+export function isPurgeRequested(doc: Pick<DocumentRow, 'status'>): boolean {
+  return doc.status === PURGE_REQUESTED_STATUS
+}

@@ -140,7 +140,10 @@
       "status": "已请求清除：团队会将其永久删除。",
       "by": "{{date}}，由 {{who}} 请求",
       "loading": "正在加载清除请求…",
-      "loadFailed": "无法加载清除请求。"
+      "loadFailed": "无法加载清除请求。",
+      "title": "清除请求",
+      "description": "你请求永久删除的文件。在团队将其删除之前，你可以撤销请求。",
+      "back": "返回公司设置"
     }
   },
   "header": {
@@ -405,13 +408,16 @@
       },
       "purgeRequest": {
         "button": "彻底清除",
-        "message": "要请求永久删除“{{filename}}”吗？其他人会立即看不到它。你仍能看到它，标记为“已请求清除”，直到团队将其永久删除。此操作无法撤销。",
+        "message": "要请求永久删除“{{filename}}”吗？其他人会立即看不到它。你仍能看到它，标记为“已请求清除”，直到团队将其永久删除。在那之前，你可以撤销该请求。",
         "confirm": "彻底清除",
         "done": "已请求清除“{{filename}}”。其他人不再看到它。它会带着标记留在这里，直到团队将其永久删除。",
-        "pending": "已请求清除：团队会将其永久删除。"
+        "pending": "已请求清除：团队会将其永久删除。",
+        "cancel": "撤销清除请求",
+        "cancelled": "“{{filename}}”的清除请求已撤销，它已回到公司文件中。"
       },
       "rejectedTitle": "已拒绝的文件",
-      "deleteAlsoPurge": "同时彻底清除"
+      "deleteAlsoPurge": "同时彻底清除",
+      "traceEmpty": "此文件没有记录任何 AI 步骤。"
     },
     "dates": {
       "uploadDate": "上传日期",
@@ -452,7 +458,9 @@
       "loadFailed": "无法加载源文件。",
       "loading": "正在加载源文件…",
       "closePreview": "关闭预览",
-      "previewLabel": "预览：{{filename}}"
+      "previewLabel": "预览：{{filename}}",
+      "noInlinePdf": "此浏览器无法在页面内显示 PDF，因此文件会发送到你的设备。如果没有反应，请点按“打开 PDF”。",
+      "openPdf": "打开 PDF"
     },
     "documentPreview": {
       "loadFailed": "无法加载源文件。",

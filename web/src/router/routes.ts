@@ -3,11 +3,11 @@ import { PRODUCT_NAME } from '../config/product'
 /** Real URL paths (/calendar), served by the SPA fallback on Vite, Caddy and Vercel (see web/vercel.json). */
 export type RouteId =
   | 'home' | 'calendar' | 'how-it-works' | 'stack' | 'login' | 'ops'
-  | 'upload' | 'company-files' | 'search' | 'company-settings' | 'only-me'
+  | 'upload' | 'company-files' | 'search' | 'company-settings' | 'purge-requests' | 'only-me'
 export type ResolvedRoute = RouteId | 'not-found'
 /** Pages that share the title + content layout. */
 export type FrameRouteId =
-  | 'calendar' | 'how-it-works' | 'stack' | 'ops' | 'upload' | 'company-files' | 'search' | 'company-settings' | 'only-me'
+  | 'calendar' | 'how-it-works' | 'stack' | 'ops' | 'upload' | 'company-files' | 'search' | 'company-settings' | 'purge-requests' | 'only-me'
 
 export interface RouteConfig {
   path: string
@@ -54,6 +54,13 @@ export const ROUTES: Record<RouteId, RouteConfig> = {
   'company-files': { path: '/company-files', title: 'Company Files', titleKey: 'ops.companyFiles.heading' },
   search: { path: '/search', title: 'Search', titleKey: 'ops.search.heading' },
   'company-settings': { path: '/company-settings', title: 'Company Settings', titleKey: 'companySettings.heading' },
+  // Round 3, item 9c (DECISIONS #121): the owner's pending purge requests, a page of their own under Company Settings, linked from it.
+  'purge-requests': {
+    path: '/company-settings/purge-requests',
+    title: 'Purge requests',
+    titleKey: 'companySettings.purgeRequests.title',
+    descriptionKey: 'companySettings.purgeRequests.description',
+  },
   // Round 19 (DECISIONS #94): the person's private space, in the account menu (user and above).
   'only-me': { path: '/only-me', title: 'Only me', titleKey: 'onlyMe.heading', descriptionKey: 'onlyMe.description' },
 }

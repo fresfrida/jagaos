@@ -325,6 +325,10 @@ export const opsApi = {
   requestPurge: (documentId: number) =>
     request<{ status: string }>(`/api/documents/${documentId}/request-purge`, { method: 'POST' }),
   listPurgeRequests: () => request<PurgeRequest[]>('/api/purge-requests'),
+  // Round 3, item 9b (DECISIONS #121): the owner takes a PENDING request back. The document returns to the status it had (the answer's
+  // `status`), nothing having been deleted. Once the team has purged the row there is nothing left to cancel.
+  cancelPurgeRequest: (documentId: number) =>
+    request<{ status: string }>(`/api/documents/${documentId}/cancel-purge-request`, { method: 'POST' }),
 
   // The word cloud on Search (round 21, A8, DECISIONS #101): the most telling words across the company's documents the caller
   // may see, with the number of documents each is in. A backend older than this answers 404.

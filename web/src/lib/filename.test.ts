@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_FILENAME_MAX, middleEllipsis } from './filename'
+import { DEFAULT_FILENAME_MAX, downloadName, middleEllipsis } from './filename'
 
 describe('middleEllipsis', () => {
   it('leaves a name that fits exactly as it is', () => {
@@ -50,5 +50,21 @@ describe('middleEllipsis', () => {
 
   it('is a no-op for an empty name', () => {
     expect(middleEllipsis('')).toBe('')
+  })
+})
+
+describe('downloadName', () => {
+  it('leaves a PDF that already ends in .pdf alone, whatever its case', () => {
+    expect(downloadName('01_certificate_of_incorporation.pdf', 'application/pdf')).toBe('01_certificate_of_incorporation.pdf')
+    expect(downloadName('LEASE.PDF', 'application/pdf')).toBe('LEASE.PDF')
+  })
+
+  it('adds the extension to a PDF a person named without one, so the phone can open it', () => {
+    expect(downloadName('Lease', 'application/pdf')).toBe('Lease.pdf')
+    expect(downloadName('Scan of the agreement.v2', 'application/pdf')).toBe('Scan of the agreement.v2.pdf')
+  })
+
+  it('never renames a type it does not map', () => {
+    expect(downloadName('Passport', 'image/jpeg')).toBe('Passport')
   })
 })

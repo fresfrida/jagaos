@@ -87,6 +87,7 @@ const ICONS: Record<RouteId, typeof CalendarDays> = {
   // slot. A filler value only, same as the other non-nav RouteIds above,
   // just satisfying Record<RouteId, ...>.
   'company-settings': CalendarDays,
+  'purge-requests': CalendarDays, // likewise never rendered here: a sub-page of Company Settings
 }
 
 function NavItem({ id, active }: { id: RouteId; active: boolean }) {

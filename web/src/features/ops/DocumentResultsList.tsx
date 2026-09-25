@@ -1,18 +1,18 @@
-/** Renders a list of documents as DocumentCards, plus the trace table and
- * viewer modal any of them can open — shared by the Company Files and
+/** Renders a list of documents as DocumentCards, plus the trace panel (under the
+ * card that asked for it) and viewer modal any of them can open — shared by the Company Files and
  * Search pages (2026-09-23, header/nav restructure) so the "view/trace/
  * archive a document" wiring exists in one place rather than copy-pasted
  * into both. Archiving here calls opsApi directly and then `onSaved()`
  * (the caller's refresh/re-filter), same shape OpsConsole used to have
  * inline. */
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Card } from '../../components/ui/Card'
 import { middleEllipsis } from '../../lib/filename'
 import { DocumentCard, DocumentViewerModal } from './DocumentCard'
 import { opsApi, type DocumentRow, type TraceReport } from './opsApi'
 import { documentIsEditable } from './opsShared'
+import { TracePanel } from './TracePanel'
 
 export function DocumentResultsList({
   documents,
@@ -76,6 +76,19 @@ export function DocumentResultsList({
     }
   }
 
+  // Round 3, item 9b (DECISIONS #121): the owner takes a pending request back. The document returns to the status it had and to every list
+  // it left, so the list is refreshed and the request confirmed here, by name, or the click would look like it did nothing.
+  const cancelPurge = async (doc: DocumentRow) => {
+    try {
+      await opsApi.cancelPurgeRequest(doc.id)
+      setError(null)
+      setNotice(t('ops.documents.purgeRequest.cancelled', { filename: middleEllipsis(doc.filename, 40) }))
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   return (
     <div className="space-y-8">
       {notice && (
@@ -96,8 +109,8 @@ export function DocumentResultsList({
           {documents.map((doc) => {
             const highlighted = doc.id === highlightId
             return (
+              <Fragment key={doc.id}>
               <div
-                key={doc.id}
                 ref={highlighted ? highlightRef : undefined}
                 aria-current={highlighted || undefined}
                 className={highlighted ? 'rounded-card ring-2 ring-ink' : undefined}
@@ -111,46 +124,16 @@ export function DocumentResultsList({
                   onTrace={() => void viewTrace(doc.id)}
                   onArchive={() => void archiveDocument(doc)}
                   onRequestPurge={() => void requestPurge(doc)}
+                  onCancelPurge={() => void cancelPurge(doc)}
                   onSaved={onSaved}
                 />
               </div>
+              {/* Directly under the card it was asked from, outside the highlight ring (round 3, item 5, DECISIONS #121). */}
+              {trace?.documentId === doc.id && <TracePanel documentId={doc.id} report={trace.report} />}
+              </Fragment>
             )
           })}
         </div>
-      )}
-
-      {trace && (
-        <section>
-          <h2 className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">
-            {t('ops.documents.traceHeading', { documentId: trace.documentId, cost: trace.report.total_cost_usd.toFixed(4) })}
-          </h2>
-          <Card className="overflow-hidden p-0" interactive={false}>
-            <table className="w-full text-left text-[13px]">
-              <thead className="bg-canvas text-muted">
-                <tr>
-                  <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.node')}</th>
-                  <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.model')}</th>
-                  <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.tokens')}</th>
-                  <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.cost')}</th>
-                  <th className="px-4 py-2 font-normal">{t('ops.documents.traceTable.decision')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {trace.report.nodes.map((node, i) => (
-                  <tr key={i} className="border-t border-line">
-                    <td className="px-4 py-2 text-ink">{node.node}</td>
-                    <td className="px-4 py-2 text-muted">{node.model ?? '-'}</td>
-                    <td className="px-4 py-2 text-muted">
-                      {node.input_tokens ?? '-'} / {node.output_tokens ?? '-'}
-                    </td>
-                    <td className="px-4 py-2 text-muted">{node.cost_usd ? `$${node.cost_usd.toFixed(5)}` : '-'}</td>
-                    <td className="px-4 py-2 text-muted">{node.decision ?? '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        </section>
       )}
 
       {viewingDocument && (

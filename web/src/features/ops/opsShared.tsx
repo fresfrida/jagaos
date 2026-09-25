@@ -410,7 +410,12 @@ export const VENDOR_NAMES_DATALIST_ID = 'ops-vendor-names'
  * that fetch-and-object-URL dance, pulled out once a third caller needed
  * it (2026-09-22). `enabled=false` skips the fetch entirely (the
  * thumbnail never fetches a file it has no picture for). `variant` picks what is fetched: the
- * file itself, or (round 20, item 5) a PDF's first-page thumbnail. */
+ * file itself, or (round 20, item 5) a PDF's first-page thumbnail.
+ *
+ * The blob: URL is opaque, and NOTHING about the Blob changes what a browser calls it: wrapping the bytes in a
+ * `new File([blob], name)` does not (measured in Chromium, round 3, item 1, DECISIONS #121: the saved file is still named by the
+ * URL's UUID). A file that must carry its real name is handed over with `<a download="name">`, as DocumentViewerModal does for a PDF
+ * on a browser with no PDF viewer. */
 export function useDocumentBlobUrl(
   documentId: number,
   enabled = true,

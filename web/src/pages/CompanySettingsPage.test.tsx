@@ -1,5 +1,6 @@
 /** Company Settings' sections by role (round 21, A2 and A5, DECISIONS #101): the compliance checklist for admin and owner, and
- * the purge requests for the owner alone. Anyone lower is sent back to the Calendar, as before. */
+ * a link to the purge requests for the owner alone (they are a page of their own since round 3, item 9c, DECISIONS #121, not a section
+ * of this one). Anyone lower is sent back to the Calendar, as before. */
 
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -33,36 +34,37 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 describe('CompanySettingsPage sections', () => {
-  it('the owner gets the form, the compliance checklist and the purge requests', async () => {
+  it('the owner gets the form, the compliance checklist and a link to the purge requests, which are NOT listed here any more', async () => {
     render(<CompanySettingsPage />)
     expect(await screen.findByText('Company constitution')).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Compliance checklist' })).toBeTruthy()
     expect(screen.getAllByRole('heading', { name: /^Compliance checklist/ })).toHaveLength(1) // one heading, not the same words twice
-    expect(await screen.findByText('old.pdf')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Purge requests (1)' })).toBeTruthy()
-    expect(opsApi.listPurgeRequests).toHaveBeenCalledTimes(1)
+    const link = screen.getByRole('link', { name: /Purge requests/ })
+    expect(link.getAttribute('href')).toBe('/company-settings/purge-requests')
+    expect(screen.queryByText('old.pdf')).toBeNull() // the list itself lives on its own page now
+    expect(screen.queryByRole('heading', { name: /^Purge requests/ })).toBeNull()
+    expect(opsApi.listPurgeRequests).not.toHaveBeenCalled() // and this page no longer fetches it
   })
 
-  it('all three sections share ONE centred column, and none sets a width of its own (DECISIONS #111)', async () => {
+  it('the form, the checklist and the link share ONE centred column, and none sets a width of its own (DECISIONS #111)', async () => {
     const { container } = render(<CompanySettingsPage />)
-    await screen.findByText('old.pdf')
+    await screen.findByText('Company constitution')
     const column = screen.getByTestId('settings-column')
     expect(column.className).toContain('mx-auto')
     expect(column.className).toContain('max-w-2xl')
-    // The profile card, the checklist section and the purge-requests section are all inside it...
     expect(column.querySelector('.rounded-card')).toBeTruthy()
     expect(within(column).getByRole('region', { name: 'Compliance checklist' })).toBeTruthy()
-    expect(within(column).getByRole('heading', { name: 'Purge requests (1)' })).toBeTruthy()
+    expect(within(column).getByRole('link', { name: /Purge requests/ })).toBeTruthy()
     // ...and there is no other max-width anywhere under the column: it used to be 448px on the card and 672px on the two sections.
     expect([...column.querySelectorAll('*')].filter((el) => /(^|\s)max-w-(md|2xl)(\s|$)/.test(el.getAttribute('class') ?? ''))).toEqual([])
     expect(container.querySelectorAll('[data-testid="settings-column"]')).toHaveLength(1)
   })
 
-  it('an admin gets the checklist (read-only settings above it) and no purge requests, and never asks for them', async () => {
+  it('an admin gets the checklist (read-only settings above it) and no link to the purge requests, and never asks for them', async () => {
     auth.value = { ...auth.value, role: 'admin' }
     render(<CompanySettingsPage />)
     expect(await screen.findByText('Company constitution')).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: /Purge requests/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Purge requests/ })).toBeNull()
     expect(opsApi.listPurgeRequests).not.toHaveBeenCalled() // the endpoint is owner-only: do not ask and get a 403
   })
 

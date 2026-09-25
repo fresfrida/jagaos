@@ -337,6 +337,14 @@ def may_request_purge(membership: CurrentMembership, *, visibility: str) -> bool
     return membership.role == "owner" and visibility == VISIBILITY_COMPANY
 
 
+def may_cancel_purge_request(membership: CurrentMembership, *, visibility: str) -> bool:
+    """Who may TAKE BACK a pending purge request (round 3, item 9b, DECISIONS #121): whoever may make one, so the owner, for a
+    company document, and nobody else. It undoes only the archive and the flag the request set; once the team has actually purged
+    the row there is nothing left to cancel. Visibility itself is checked first (may_see_document, and the owner's exception,
+    may_see_purge_requested, is what lets the owner reach a document that is archived)."""
+    return may_request_purge(membership, visibility=visibility)
+
+
 def may_purge_document(
     membership: CurrentMembership, *, uploaded_by_user_id: int | None, visibility: str,
 ) -> bool:

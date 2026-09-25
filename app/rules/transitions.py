@@ -9,6 +9,7 @@ Every transition takes an explicit `actor` so the audit trail (PLATFORM.md
 never "the AI decided".
 """
 
+import re
 from typing import Literal
 
 from app.db import DB_PATH, get_conn
@@ -146,6 +147,58 @@ def file_personal_document(document_id: int, actor: str, db_path: str = DB_PATH)
             "VALUES ('transition', ?, 'rules.file_personal_document', ?, datetime('now'))",
             (document_id, f"received->filed by {actor} (personal file, no review)"),
         )
+
+
+# The statuses a document can be archived FROM: exactly the ones whose row in _DOCUMENT_TRANSITIONS lists "archived".
+_ARCHIVABLE_FROM = frozenset(status for status, allowed in _DOCUMENT_TRANSITIONS.items() if "archived" in allowed)
+# A document in one of these was waiting on a human, and a purge request dismissed its open review item(s): they come back with it.
+_REVIEW_STATUSES = ("needs_review", "quarantined")
+_ARCHIVED_FROM = re.compile(r"^(\w+)->archived by ")
+
+
+def restore_document_after_purge_request(document_id: int, actor: str, db_path: str = DB_PATH) -> str:
+    """archived -> the status it had before, for ONE case only: a document archived BY A PURGE REQUEST (round 3, item 9b,
+    DECISIONS #121). The owner asked for it to be removed and has changed their mind; nothing was deleted, so the request is
+    exactly reversible: the archive and the flag (`purge_requested_at`, `purge_requested_by`) are undone and the document is as
+    it was. Returns the status it went back to.
+
+    Deliberately NOT an edge in _DOCUMENT_TRANSITIONS, like file_personal_document: `archived` stays a dead end for every other
+    caller and for every other archive (an ordinary Delete has no way back, on purpose). It is refused, from the row itself,
+    unless the document is archived AND carries a purge request.
+
+    The previous status is not assumed to be `filed`: an owner may request a purge from any status a document can be archived
+    from, so it is read back from the audit row `transition_document` wrote when the request archived it ("filed->archived by
+    <email>", the latest such row). A row that cannot be found, or that names a status that could not have been archived, is
+    REFUSED (InvalidTransition) rather than guessed: the request stays pending for the team to deal with. A document that was
+    waiting on a human (needs_review, quarantined) gets its dismissed review item(s) back, in the same transaction, since the
+    request dismissed them and a document waiting for a review that no longer exists could never be finished."""
+    with get_conn(db_path) as conn:
+        row = conn.execute("SELECT status, purge_requested_at FROM document WHERE id = ?", (document_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"document {document_id} not found")
+        if row["status"] != "archived" or row["purge_requested_at"] is None:
+            raise InvalidTransition("only a document archived by a purge request can be restored this way")
+        prior = None
+        for trace in conn.execute(
+            "SELECT decision FROM trace WHERE document_id = ? AND node = 'rules.transition_document' ORDER BY id DESC", (document_id,),
+        ):
+            match = _ARCHIVED_FROM.match(trace["decision"] or "")
+            if match:
+                prior = match.group(1)
+                break
+        if prior not in _ARCHIVABLE_FROM:
+            raise InvalidTransition("the status this document had before the purge request cannot be determined")
+        conn.execute(
+            "UPDATE document SET status = ?, purge_requested_at = NULL, purge_requested_by = NULL WHERE id = ?", (prior, document_id),
+        )
+        if prior in _REVIEW_STATUSES:
+            conn.execute("UPDATE review_item SET status = 'open' WHERE document_id = ? AND status = 'dismissed'", (document_id,))
+        conn.execute(
+            "INSERT INTO trace (run_id, document_id, node, decision, at) "
+            "VALUES ('transition', ?, 'rules.restore_after_purge_request', ?, datetime('now'))",
+            (document_id, f"archived->{prior} by {actor} (purge request cancelled)"),
+        )
+    return prior
 
 
 def reopen_expectation(
