@@ -66,7 +66,7 @@ Then verify the content with the CLI (it handles the login): `vercel curl https:
 The frontend is static (`web/dist`) with path routes (`/calendar`), so the host needs an SPA fallback: the Caddyfile's last `handle` (`try_files {path} /index.html`) already provides it. Verify a deep path after deploy (`curl -I https://<host>/calendar` returns 200). Steps, each needing your approval where it spends money or publishes:
 
 1. Provision the Lightsail instance and run `deploy/bootstrap.sh` (`LIGHTSAIL.md`). Confirm the Python version (3.11 vs 3.12) first.
-2. Build (`npm ci && npm run build` in `web/`) and copy `dist/*` to `/var/www/jaga/web`; validate the Caddyfile (`caddy validate`) and reload.
+2. Build (`npm ci && npm run build` in `web/`) and copy `dist/*` to `/var/www/jaga/web`; compare the tracked `deploy/Caddyfile` with the box's (see the checklist below), validate it (`caddy validate`) and reload.
 3. Put access control in front while it is still UAT-like (Caddy `basic_auth`, or restrict by IP); Vercel login no longer applies.
 4. Run the checklist below on the Lightsail URL and attach screenshots.
 5. Backend arrives: `/api/*` is proxied by Caddy on the same origin (rule 4).
@@ -81,6 +81,11 @@ Deploy (once you have approved spend and access; see `LIGHTSAIL.md`):
 cd web && npm ci && npm run build
 scp -r dist/* ubuntu@<IP>:/tmp/jaga-web        # then on the box:
 sudo mkdir -p /var/www/jaga/web && sudo cp -r /tmp/jaga-web/* /var/www/jaga/web/
+# BEFORE copying a Caddyfile over the live one: the tracked deploy/Caddyfile is the live file (site address written out,
+# DECISIONS #100). Compare, and ship only differences you meant to:
+sha256sum deploy/Caddyfile            # on your machine
+sudo sha256sum /etc/caddy/Caddyfile   # on the box: equal, or `diff` shows only what you changed
+# `caddy validate` checks syntax only. A wrong site address passes it and still takes the site down.
 sudo caddy validate --config /etc/caddy/Caddyfile   # must say "Valid configuration"
 sudo systemctl reload caddy
 ```
@@ -107,4 +112,4 @@ It fails on: Vercel URLs, Supabase references, hardcoded absolute API URLs in `w
 ## Open
 
 - Ask the organisers whether a non-AWS preview host is acceptable for internal UAT (we are treating it as "keep private" until they answer).
-- Caddyfile edit is **not yet validated** by `caddy validate` (Caddy is not installed on the dev machine). Validate on the Lightsail box before relying on it.
+- Caddy is not installed on the dev machine, so a Caddyfile change cannot be validated here; validate it on the box (the peer session did before its 2026-09-25 reloads). Validation checks syntax only: compare the tracked and live files before a reload (DECISIONS #100).

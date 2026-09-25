@@ -3,7 +3,7 @@
 # Swap :80 for your real domain/Lightsail static IP's DNS name once known;
 # Caddy also serves plain HTTP+auto-redirect if you only have a bare IP.
 
-{$JAGA_DOMAIN:localhost} {
+13-251-52-222.nip.io {
 	encode gzip
 
 	# backend (same origin as the site, so no CORS setup is needed)
