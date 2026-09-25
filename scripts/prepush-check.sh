@@ -119,6 +119,13 @@ report "no hardcoded absolute API URLs in web/ (use same-origin /api)" "$hits" "
 
 check "no secret-looking assignments"    '(API_KEY|SECRET|TOKEN|PASSWORD)[A-Z_]*=[^ ]+'
 
+# A source file that .gitignore matches exists on this machine, so a local build passes, and is missing from a clean
+# checkout, so the deploy build fails (DECISIONS #103: a bare `assets/` rule ignored web/src/assets/, and round 21's landing
+# screenshot was never tracked). `git add -A` skips such a file without a word and the checks above never read it. This
+# lists them by PATH ONLY (git prints names, never contents) and fails if there are any.
+ignored_hits=$(git ls-files --others --ignored --exclude-standard -- web/src 2>/dev/null); ignored_rc=$?
+report "no git-ignored files under web/src (an ignored source file builds here and breaks a clean checkout)" "$ignored_hits" "$ignored_rc"
+
 # Existence checks, not content scans: a local dev machine legitimately has these files, they
 # just must never be tracked. Unchanged by DECISIONS #96.
 for f in .env web/.env; do
