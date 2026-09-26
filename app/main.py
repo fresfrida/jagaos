@@ -579,9 +579,10 @@ def _process_upload(
     try:
         result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
     except LLMUnavailable:
-        # A real gateway failure part-way through (a 429, a timeout, a 5xx) reaches here AFTER ingest() committed the row (status
-        # 'received', or already classified if only extract failed). It is NOT cleaned up here yet: whether to roll it back or route it
-        # to review is an open question in DECISIONS #132 (a re-upload of the same bytes is a "duplicate" and never reprocesses it).
+        # A real gateway failure part-way through reaches here AFTER ingest() committed the row (status 'received', or 'proposed' if only
+        # extract failed; after extract verify always pauses for review, so no gateway call can follow it in this first run).
+        # Roll that row back, so the retry the 503 asks for can work, then answer 503 whatever the rollback did.
+        _roll_back_unfinished_upload(ingest_state["document_id"], created_here=ingest_state.get("text_source") != "duplicate")
         raise _ai_unavailable() from None
     document_id = ingest_state["document_id"]
 
@@ -653,6 +654,30 @@ def _ai_unavailable() -> HTTPException:
     return HTTPException(503, detail={
         "code": "ai_unavailable", "message": "AI is temporarily unavailable. Please try again shortly.",
     })
+
+
+def _roll_back_unfinished_upload(document_id: int, *, created_here: bool) -> None:
+    """Undo the row a FAILED upload created, so the person's retry works (round 7, DECISIONS #132). ingest() commits the row before the
+    pipeline runs, and a re-upload of the same bytes is then answered "duplicate" for ever, so leaving it is a dead end. It is removed
+    through app/purge.py (which records Deleted by the operator "system: AI unavailable" first, and writes no status), and ONLY when
+    (a) this request created it (the duplicate branch returned earlier, so it always did; checked, not assumed) and (b) it is still
+    unfinished: status received or proposed, with no extraction and no review item. Any other state is kept. Whatever happens here is
+    logged with numbers only and NEVER changes the response: the caller answers 503 either way."""
+    try:
+        with get_conn(DB_PATH) as conn:
+            row = conn.execute("SELECT status FROM document WHERE id = ?", (document_id,)).fetchone()
+            extractions = conn.execute("SELECT COUNT(*) FROM extraction WHERE document_id = ?", (document_id,)).fetchone()[0]
+            review_items = conn.execute("SELECT COUNT(*) FROM review_item WHERE document_id = ?", (document_id,)).fetchone()[0]
+        if not created_here or row is None or row["status"] not in ("received", "proposed") or extractions or review_items:
+            _audit.warning(
+                "AI_UNAVAILABLE_ROLLBACK document_id=%s outcome=kept created_here=%s status=%s extractions=%s review_items=%s",
+                document_id, created_here, row["status"] if row else None, extractions, review_items,
+            )
+            return
+        not_removed = purge_now(document_id, actor=activity.operator("system: AI unavailable"))
+        _audit.warning("AI_UNAVAILABLE_ROLLBACK document_id=%s outcome=purged files_not_removed=%s", document_id, len(not_removed))
+    except Exception as e:  # noqa: BLE001 - a failed rollback must never turn the 503 into a 500 or hide the original cause
+        _audit.warning("AI_UNAVAILABLE_ROLLBACK document_id=%s outcome=failed error=%s", document_id, type(e).__name__)
 
 
 def _clean_personal_details(name: str | None, caption: str | None) -> tuple[str, str | None]:
@@ -965,6 +990,9 @@ def resolve_review(
         "events": result.get("events"),
         # 0, not None: the pipeline creates no obligations while derive_obligations is switched off (DECISIONS #108).
         "obligations_created": result.get("obligations_created", 0),
+        # False only when derive_events could not reach the gateway and skipped (DECISIONS #132): the document IS filed, but its life
+        # event was not created and the compliance checklist did not learn from it.
+        "events_derived": result.get("events_derived", True),
     }
 
 

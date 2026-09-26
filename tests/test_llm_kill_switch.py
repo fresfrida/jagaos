@@ -2,7 +2,7 @@
 
 DECISIONS #130 bans spending the gateway budget on seeding, resets and evals; this is the code that enforces it. `app.llm.call()` is the
 one place a client is built, so the switch (env LLM_CALLS_DISABLED) lives there and is checked FIRST: with it on, no client is built and
-nothing is sent. A gateway that is transiently unavailable (429, timeout, connection failure, 5xx) becomes the same `LLMUnavailable`,
+nothing is sent. A gateway that is transiently unavailable (429, 402, 403, timeout, connection failure, 5xx) becomes the same `LLMUnavailable`,
 and the upload path answers 503 {code: ai_unavailable, message} instead of a bare 500. Everything here uses fake clients; no test can
 reach the real gateway.
 """
@@ -80,6 +80,9 @@ def _sdk_errors() -> dict[str, Exception]:
         "internal_500": openai.InternalServerError(SECRET_BODY, response=_response(500), body=None),
         "bad_gateway_502": openai.InternalServerError(SECRET_BODY, response=_response(502), body=None),
         "unavailable_503": openai.InternalServerError(SECRET_BODY, response=_response(503), body=None),
+        # 402 has no SDK class of its own (a plain APIStatusError); 402 and 403 are the user-directed best guess for a spent budget.
+        "payment_required_402": openai.APIStatusError(SECRET_BODY, response=_response(402), body=None),
+        "forbidden_403": openai.PermissionDeniedError(SECRET_BODY, response=_response(403), body=None),
     }
 
 
@@ -171,20 +174,88 @@ def test_the_status_of_a_status_error_is_in_the_line(monkeypatch, caplog):
     assert any("InternalServerError status=503" in r.getMessage() for r in caplog.records)
 
 
-@pytest.mark.parametrize("error", [
-    openai.BadRequestError("Only the approved model is allowed", response=_response(400), body=None),
-    openai.AuthenticationError("bad key", response=_response(401), body=None),
-    openai.PermissionDeniedError("nope", response=_response(403), body=None),
-    openai.NotFoundError("no route", response=_response(404), body=None),
-    openai.UnprocessableEntityError("schema", response=_response(422), body=None),
-], ids=lambda e: type(e).__name__)
-def test_every_other_error_propagates_unchanged(monkeypatch, error):
-    """What this gateway sends when the budget runs out was never recorded (MDs/GAPS.md has only the 400 on the model alias), so
-    nothing besides 429, timeout, connection and 5xx is mapped."""
+def _unmapped_errors() -> list[Exception]:
+    """The message AND the body carry the sentinel: neither may ever reach the log."""
+    def body(**extra):
+        return {"message": SECRET_BODY, "detail": SECRET_BODY, **extra}
+    return [
+        openai.BadRequestError(SECRET_BODY, response=_response(400), body=body(type="invalid_request_error", code="model_not_allowed")),
+        openai.AuthenticationError(SECRET_BODY, response=_response(401), body=body(type="auth_error")),
+        openai.NotFoundError(SECRET_BODY, response=_response(404), body=body()),
+        openai.UnprocessableEntityError(SECRET_BODY, response=_response(422), body=None),
+    ]
+
+
+@pytest.mark.parametrize("error", _unmapped_errors(), ids=lambda e: type(e).__name__)
+def test_every_other_status_error_propagates_unchanged_and_is_logged_once_without_its_text(monkeypatch, caplog, error):
+    """What this gateway sends for a spent budget was never recorded (MDs/GAPS.md has only the 400 on the model alias), so besides
+    429, 402, 403 and 5xx nothing is converted: the original is re-raised as it was, and ONE LLM_ERROR_UNMAPPED line says what it was."""
     monkeypatch.setattr(llm, "_client", lambda: _Gateway(raises={1: error}))
-    with pytest.raises(type(error)) as raised:
-        _call()
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        with pytest.raises(type(error)) as raised:
+            _call()
     assert raised.value is error and not isinstance(raised.value, llm.LLMUnavailable)
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("LLM_ERROR_UNMAPPED")]
+    assert len(lines) == 1
+    line = lines[0]
+    assert f"reason={type(error).__name__}" in line and f"status={error.status_code}" in line
+    assert "purpose=classify" in line and "document_id=7" in line
+    assert SECRET_BODY not in line and "user text" not in line and "system" not in line
+    assert not any(r.getMessage().startswith("LLM_UNAVAILABLE") for r in caplog.records)
+
+
+def test_the_unmapped_line_carries_the_gateways_error_type_and_code_when_present(monkeypatch, caplog):
+    error = _unmapped_errors()[0]  # the known 400 "Only the approved model is allowed" shape
+    monkeypatch.setattr(llm, "_client", lambda: _Gateway(raises={1: error}))
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        with pytest.raises(openai.BadRequestError):
+            _call()
+    (line,) = [r.getMessage() for r in caplog.records if r.getMessage().startswith("LLM_ERROR_UNMAPPED")]
+    assert line == "LLM_ERROR_UNMAPPED reason=BadRequestError status=400 purpose=classify document_id=7 type=invalid_request_error code=model_not_allowed"
+
+
+def test_the_unmapped_line_omits_type_and_code_when_the_body_has_none(monkeypatch, caplog):
+    error = openai.NotFoundError(SECRET_BODY, response=_response(404), body=None)
+    monkeypatch.setattr(llm, "_client", lambda: _Gateway(raises={1: error}))
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        with pytest.raises(openai.NotFoundError):
+            _call()
+    (line,) = [r.getMessage() for r in caplog.records if r.getMessage().startswith("LLM_ERROR_UNMAPPED")]
+    assert line == "LLM_ERROR_UNMAPPED reason=NotFoundError status=404 purpose=classify document_id=7"
+
+
+def test_type_and_code_are_cut_to_80_characters_and_cannot_break_the_line(monkeypatch, caplog):
+    error = openai.BadRequestError(
+        SECRET_BODY, response=_response(400), body={"type": "t" * 300, "code": "line1\nline2\x1b[31m" + "c" * 300},
+    )
+    monkeypatch.setattr(llm, "_client", lambda: _Gateway(raises={1: error}))
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        with pytest.raises(openai.BadRequestError):
+            _call()
+    (line,) = [r.getMessage() for r in caplog.records if r.getMessage().startswith("LLM_ERROR_UNMAPPED")]
+    assert "\n" not in line and "\x1b" not in line
+    fields = dict(part.split("=", 1) for part in line.split(" ")[1:] if "=" in part)
+    assert len(fields["type"]) == 80 and fields["type"] == "t" * 80
+    assert len(fields["code"]) <= 80 and SECRET_BODY not in line
+
+
+def test_a_type_or_code_that_is_not_a_plain_string_or_number_is_not_logged(monkeypatch, caplog):
+    error = openai.BadRequestError(SECRET_BODY, response=_response(400), body={"type": {"nested": SECRET_BODY}, "code": [SECRET_BODY]})
+    monkeypatch.setattr(llm, "_client", lambda: _Gateway(raises={1: error}))
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        with pytest.raises(openai.BadRequestError):
+            _call()
+    (line,) = [r.getMessage() for r in caplog.records if r.getMessage().startswith("LLM_ERROR_UNMAPPED")]
+    assert " type=" not in line and " code=" not in line and SECRET_BODY not in line
+
+
+def test_a_mapped_error_writes_no_unmapped_line_and_a_bug_of_ours_writes_none_either(monkeypatch, caplog):
+    for error in (_sdk_errors()["forbidden_403"], _sdk_errors()["payment_required_402"], KeyError("our own bug")):
+        monkeypatch.setattr(llm, "_client", lambda e=error: _Gateway(raises={1: e}))
+        with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+            with pytest.raises((llm.LLMUnavailable, KeyError)):
+                _call()
+    assert not any(r.getMessage().startswith("LLM_ERROR_UNMAPPED") for r in caplog.records)
 
 
 def test_a_bug_of_ours_is_not_swallowed_into_llm_unavailable(monkeypatch):
@@ -291,7 +362,7 @@ def test_with_the_switch_off_the_same_upload_reaches_the_gateway_and_succeeds(mo
     assert gateway.calls >= 1
 
 
-@pytest.mark.parametrize("name", ["rate_limit", "timeout", "connection", "internal_500", "unavailable_503"])
+@pytest.mark.parametrize("name", ["rate_limit", "timeout", "connection", "internal_500", "unavailable_503", "payment_required_402", "forbidden_403"])
 def test_a_real_gateway_failure_mid_pipeline_is_a_503_not_a_500(monkeypatch, fake_ocr, name):
     gateway = _Gateway(raises={1: _sdk_errors()[name]})
     monkeypatch.setattr(llm, "_client", lambda: gateway)

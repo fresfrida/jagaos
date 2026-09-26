@@ -47,5 +47,7 @@ class PipelineState(TypedDict, total=False):
     review_resolution: dict[str, Any]
 
     events: list[dict[str, Any]]
+    # False only when derive_events could not reach the gateway and skipped (DECISIONS #132); absent otherwise. Declared because LangGraph drops an undeclared key.
+    events_derived: bool
     expectations_created: int
     obligations_created: int

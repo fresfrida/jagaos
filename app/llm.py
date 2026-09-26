@@ -56,6 +56,13 @@ class LLMUnavailable(RuntimeError):
 
 _TRUTHY = {"1", "true", "yes"}
 
+# HTTP statuses (besides every 5xx, and a failed connection or timeout) that read to the person as "try again shortly". 429 is the SDK's
+# RateLimitError. 402 and 403 are a USER-DIRECTED BEST GUESS at how this gateway says the team's budget is spent (round 7, DECISIONS
+# #132): what it really sends was never recorded. A 403 can equally mean a bad key or a permission problem, which then also reads as
+# "try again shortly"; the LLM_ERROR_UNMAPPED line below is how we find out if some other status turns up.
+_UNAVAILABLE_STATUSES = {402, 403, 429}
+_LOGGED_FIELD_MAX = 80
+
 
 def calls_disabled() -> bool:
     """True when the operator has switched every gateway call off (env LLM_CALLS_DISABLED = 1, true or yes, any case). Read from the
@@ -63,6 +70,32 @@ def calls_disabled() -> bool:
     empty or any other value means off, which is the default: production on the box is unchanged unless someone opts in. It exists
     because DECISIONS #130 bans spending the gateway budget on seeding, resets and evals and nothing in code enforced it."""
     return os.environ.get("LLM_CALLS_DISABLED", "").strip().lower() in _TRUTHY
+
+
+def _log_safe(value: Any) -> str | None:
+    """A gateway-supplied short identifier (an error `type` or `code`) made safe to put in a log line: only a string or a number, control
+    characters replaced, cut to _LOGGED_FIELD_MAX. Anything else (a dict, a list, None) is not logged at all."""
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return None
+    return "".join(ch if ch.isprintable() else "?" for ch in str(value))[:_LOGGED_FIELD_MAX]
+
+
+def _unavailable(e: Exception, purpose: str, document_id: int | None) -> LLMUnavailable:
+    status = getattr(e, "status_code", None)
+    _log.warning("LLM_UNAVAILABLE reason=%s status=%s purpose=%s document_id=%s", type(e).__name__, status, purpose, document_id)
+    return LLMUnavailable(f"gateway unavailable ({type(e).__name__}, status {status})")
+
+
+def _log_unmapped(e: "openai.APIStatusError", purpose: str, document_id: int | None) -> None:
+    """ONE line for a gateway status error we do NOT map, so the mapping can be widened later from real evidence. The class, the status,
+    the purpose, the document id and the gateway's structured error `type` and `code` when its body carries them. NEVER the error
+    message or the response body (the SDK's message can echo response content) or anything from the prompt."""
+    line = f"LLM_ERROR_UNMAPPED reason={type(e).__name__} status={e.status_code} purpose={purpose} document_id={document_id}"
+    for name in ("type", "code"):
+        value = _log_safe(getattr(e, name, None))
+        if value is not None:
+            line += f" {name}={value}"
+    _log.warning("%s", line)
 
 
 @dataclass
@@ -185,16 +218,17 @@ def call(
         kwargs["tool_choice"] = tool_choice or "required"
     try:
         resp = client.chat.completions.create(**kwargs)
-    except (openai.RateLimitError, openai.APIConnectionError, openai.InternalServerError) as e:
-        # APITimeoutError is an APIConnectionError. openai maps every 5xx to InternalServerError. One numbers-only line: the class
-        # and the HTTP status, never the prompt or the response. No other status is mapped: what this gateway sends when the team's
-        # budget runs out has never been recorded (MDs/GAPS.md has only the 400 "Only the approved model is allowed"), so a guess
-        # would be a guess.
-        status = getattr(e, "status_code", None)
-        _log.warning(
-            "LLM_UNAVAILABLE reason=%s status=%s purpose=%s document_id=%s", type(e).__name__, status, purpose, document_id,
-        )
-        raise LLMUnavailable(f"gateway unavailable ({type(e).__name__}, status {status})") from e
+    except openai.APIConnectionError as e:
+        # A connection failure or a timeout (APITimeoutError is an APIConnectionError): no HTTP status at all.
+        raise _unavailable(e, purpose, document_id) from e
+    except openai.APIStatusError as e:
+        # 429, 402, 403 and every 5xx read as "unavailable"; one numbers-only line, never the prompt or the response. Everything else
+        # (400 including the known "Only the approved model is allowed", 401, 404, 422) is NOT converted: it is logged once as
+        # LLM_ERROR_UNMAPPED and re-raised exactly as it was.
+        if e.status_code in _UNAVAILABLE_STATUSES or e.status_code >= 500:
+            raise _unavailable(e, purpose, document_id) from e
+        _log_unmapped(e, purpose, document_id)
+        raise
     latency_ms = int((time.monotonic() - start) * 1000)
 
     choice = resp.choices[0]

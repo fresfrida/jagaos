@@ -22,7 +22,7 @@ import json
 from app.db import DB_PATH, get_conn
 from app.graph.state import PipelineState
 from app.guards.injection import untrusted_prompt
-from app.llm import MODEL_NAME, call
+from app.llm import MODEL_NAME, LLMUnavailable, call
 from app.models import ProposedEvent, to_tool
 
 TOOL = to_tool(
@@ -65,8 +65,17 @@ def derive_events(state: PipelineState) -> PipelineState:
         return {"events": []}
 
     user = untrusted_prompt(state.get("text", ""), state.get("text_char_limit"))
-    llm_result = call(MODEL_NAME, SYSTEM, user, tools=[TOOL], tool_choice="auto",
-                      purpose="derive_events", document_id=state["document_id"], run_id=state.get("run_id"))
+    try:
+        llm_result = call(MODEL_NAME, SYSTEM, user, tools=[TOOL], tool_choice="auto",
+                          purpose="derive_events", document_id=state["document_id"], run_id=state.get("run_id"))
+    except LLMUnavailable:
+        # Round 7 (DECISIONS #132): degrade LOUDLY, do not fail. By the time this node runs a person has already confirmed the document
+        # (human_review.py resolved the review item and filed it before the graph got here), so an error would tell them to retry
+        # something that is done. Here, in the node, because it is the one place every path passes. No document.status is written:
+        # the trace row and `events_derived: False` are the record. The document's life event is NOT created, and nothing derives it
+        # later (KANBAN Backlog); derive_expectations still runs but has no event of this run to work from.
+        _trace_skip(state, "llm_unavailable")
+        return {"events": [], "events_derived": False}
 
     with get_conn(DB_PATH) as conn:
         conn.execute(
