@@ -55,22 +55,25 @@ PEOPLE = {
     "c0": [
         ("owner", "owner@try-demo.test", "Priya Ramanathan", "owner", "Managing Director"),
         ("admin", "admin@try-demo.test", "Jonathan Ong", "admin", "HR & Finance Manager"),
-        ("user", "user@try-demo.test", "Rachel Tan Hui Min", "user", "Corp Sec"),
-        ("user1", "user1@try-demo.test", "Nur Aisyah Rahman", "user", "Operations Executive"),
-        ("user2", "user2@try-demo.test", "Kavitha Subramaniam", "user", "Sales & Admin Coordinator"),
-        ("viewer", "viewer@try-demo.test", "Marcus Lee Kok Wai", "viewer", "External Auditor"),
+        ("user", "user@try-demo.test", "Nur Aisyah Rahman", "user", "Operations Executive"),
+        ("user1", "user1@try-demo.test", "Kavitha Subramaniam", "user", "Sales & Admin Coordinator"),
+        ("user2", "user2@try-demo.test", "Alvin Sim Jun Hao", "user", "Warehouse Supervisor"),
+        # The Corp Sec is STRICTLY VIEW-ONLY in the demo (the user's ruling, S1c): app role viewer, and the picker's viewer login.
+        ("viewer", "viewer@try-demo.test", "Rachel Tan Hui Min", "viewer", "Corp Sec"),
+        # A NON-PICKER viewer (the user's ruling): a member who performs no action.
+        ("auditor", "marcus.lee@chenrahim.test", "Marcus Lee Kok Wai", "viewer", "External Auditor"),
     ],
     "c1": [
         ("owner", "owner@try-demo.test", "Priya Ramanathan", "owner", "Group Managing Director"),
         ("admin", "hafiz.ismail@pasirkelana.test", "Hafiz Ismail", "admin", "HR & Finance Manager"),
-        ("user", "grace.lim@pasirkelana.test", "Grace Lim Siew Ling", "user", "Corp Sec"),
         ("user1", "ravi.chandran@pasirkelana.test", "Ravi Chandran", "user", "Dispatch Coordinator"),
+        ("corpsec", "grace.lim@pasirkelana.test", "Grace Lim Siew Ling", "viewer", "Corp Sec"),
     ],
     "c2": [
         ("owner", "owner@try-demo.test", "Priya Ramanathan", "owner", "Group Managing Director"),
         ("admin", "beehong.ng@cendanawharf.test", "Ng Bee Hong", "admin", "Finance & HR Manager"),
-        ("user", "farah.yusof@cendanawharf.test", "Farah Yusof", "user", "Corp Sec"),
         ("user1", "daniel.chia@cendanawharf.test", "Daniel Chia", "user", "Purchasing Executive"),
+        ("corpsec", "farah.yusof@cendanawharf.test", "Farah Yusof", "viewer", "Corp Sec"),
     ],
 }
 
@@ -317,20 +320,20 @@ def build(g: Gen) -> None:
     inc = {c["key"]: date.fromisoformat(c["incorporated_on"]) for c in COMPANIES}
 
     # ---------- base statutory documents (the checklist's evidence)
-    g.simple("c0", "base", "user", date(2016, 3, 14), title="CERTIFICATE OF INCORPORATION", vendor="Registrar of Companies (fixture)", lane="statutory",
+    g.simple("c0", "base", "admin", date(2016, 3, 14), title="CERTIFICATE OF INCORPORATION", vendor="Registrar of Companies (fixture)", lane="statutory",
              doc_type="Certificate of Incorporation", bucket="Statutory", delta=300,
              description="Certificate of incorporation of Tembusu Row Engineering Pte Ltd", body=["This is to certify that the company named above is incorporated."],
              filename="Certificate_of_Incorporation.pdf")
-    g.simple("c0", "base", "user", date(2016, 3, 14), title="COMPANY CONSTITUTION", vendor="Tembusu Row Engineering Pte Ltd", lane="statutory",
+    g.simple("c0", "base", "admin", date(2016, 3, 14), title="COMPANY CONSTITUTION", vendor="Tembusu Row Engineering Pte Ltd", lane="statutory",
              doc_type="Company Constitution", bucket="Statutory", delta=301, description="Constitution of Tembusu Row Engineering Pte Ltd",
              body=["1. Name of the company.", "2. Registered office.", "3. Objects and powers.", "4. Shares and members."], filename="Company_Constitution.pdf")
-    g.simple("c1", "base", "user", date(2018, 8, 20), title="CERTIFICATE OF INCORPORATION", vendor="Registrar of Companies (fixture)", lane="statutory",
+    g.simple("c1", "base", "admin", date(2018, 8, 20), title="CERTIFICATE OF INCORPORATION", vendor="Registrar of Companies (fixture)", lane="statutory",
              doc_type="Certificate of Incorporation", bucket="Statutory", delta=20, description="Certificate of incorporation of Pasir Kelana Logistics Pte Ltd",
              body=["This is to certify that the company named above is incorporated."], filename="Certificate_of_Incorporation.pdf")
-    g.simple("c1", "base", "user", date(2018, 8, 20), title="REGISTER OF MEMBERS", vendor="Pasir Kelana Logistics Pte Ltd", lane="statutory",
+    g.simple("c1", "base", "admin", date(2018, 8, 20), title="REGISTER OF MEMBERS", vendor="Pasir Kelana Logistics Pte Ltd", lane="statutory",
              doc_type="Share Register", bucket="Statutory", delta=21, description="Register of members (share register) of Pasir Kelana Logistics Pte Ltd",
              body=["Member 1: Priya Ramanathan, 60,000 ordinary shares.", "Member 2: Hafiz Ismail, 40,000 ordinary shares."], filename="Register_of_Members.pdf")
-    g.simple("c2", "base", "user", date(2020, 1, 6), title="CERTIFICATE OF INCORPORATION", vendor="Registrar of Companies (fixture)", lane="statutory",
+    g.simple("c2", "base", "admin", date(2020, 1, 6), title="CERTIFICATE OF INCORPORATION", vendor="Registrar of Companies (fixture)", lane="statutory",
              doc_type="Certificate of Incorporation", bucket="Statutory", delta=9, description="Certificate of incorporation of Cendana Wharf Trading Pte Ltd",
              body=["This is to certify that the company named above is incorporated."], filename="Certificate_of_Incorporation.pdf")
 
@@ -344,16 +347,16 @@ def build(g: Gen) -> None:
             agm_d = fye + timedelta(days=int(30.4 * 5) + g.rng.randint(-10, 12))
             ar_d = fye + timedelta(days=int(30.4 * 6) + g.rng.randint(8, 21))
             if with_letter:  # the auditor engagement letter sits around the year end it covers
-                g.simple(key, "agm", "admin" if key != "c0" else "user", fye - timedelta(days=g.rng.randint(14, 40)), title="AUDITOR ENGAGEMENT LETTER",
+                g.simple(key, "agm", "admin", fye - timedelta(days=g.rng.randint(14, 40)), title="AUDITOR ENGAGEMENT LETTER",
                          vendor=V["audit"][0], lane="important", doc_type="Auditor Engagement Letter", bucket="Statutory",
                          description=f"Auditor engagement letter for the financial year ending {fye.strftime('%d %b %Y')}",
                          body=[f"We confirm our appointment as auditors for the year ending {fye.strftime('%d %B %Y')}.", "Scope: statutory audit of the financial statements."],
                          filename=f"Auditor_Engagement_FY{fy}.pdf")
-            g.simple(key, "agm", "user", agm_d, title="MINUTES OF ANNUAL GENERAL MEETING", vendor=comp["name"], lane="statutory", doc_type="AGM Minutes",
+            g.simple(key, "agm", "admin", agm_d, title="MINUTES OF ANNUAL GENERAL MEETING", vendor=comp["name"], lane="statutory", doc_type="AGM Minutes",
                      bucket="Statutory", description=f"Minutes of the annual general meeting for the financial year ended {fye.strftime('%d %b %Y')}",
                      body=[f"Financial year ended {fye.strftime('%d %B %Y')}.", "1. Financial statements laid before the members.", "2. Auditors re-appointed.",
                            "3. Directors' fees approved."], filename=f"AGM_Minutes_FY{fy}.pdf")
-            g.simple(key, "agm", "user", ar_d, title="ANNUAL RETURN FILING RECEIPT", vendor="ACRA (fixture)", lane="statutory", doc_type="Annual Return Filing Receipt",
+            g.simple(key, "agm", "admin", ar_d, title="ANNUAL RETURN FILING RECEIPT", vendor="ACRA (fixture)", lane="statutory", doc_type="Annual Return Filing Receipt",
                      bucket="Statutory", description=f"Annual return filing receipt for the financial year ended {fye.strftime('%d %b %Y')}",
                      body=[f"Annual return for the financial year ended {fye.strftime('%d %B %Y')} lodged.", f"Receipt no: AR-{fy}-{g.rng.randint(10000, 99999)}"],
                      filename=f"Annual_Return_FY{fy}.pdf")
@@ -459,7 +462,7 @@ def build(g: Gen) -> None:
     g.receivable("c2", "admin", date(2025, 4, 22), 3100)
 
     # ---------- multi-page PDFs (the GST filings are two-page already), 2 to 3 more
-    g.simple("c0", "base", "user", date(2021, 4, 12), title="SERVICE AGREEMENT", vendor=V["office"][0], lane="important", doc_type="service agreement",
+    g.simple("c0", "base", "admin", date(2021, 4, 12), title="SERVICE AGREEMENT", vendor=V["office"][0], lane="important", doc_type="service agreement",
              bucket="Contracts", description="Serviced office service agreement, 24 months", filename="Service_Agreement_Office.pdf",
              body=["Parties: the company and Harbourview Serviced Offices Pte Ltd.", "Term: 24 months from 1 May 2021.", "Monthly fee: SGD 1,800 (excluding GST)."],
              extra_pages=[["SERVICE AGREEMENT - page 2", FIXTURE_LINE, "", "5. Fees and payment.", "6. Notice and termination.", "7. Deposit: two months' fee."],
@@ -539,17 +542,19 @@ def write_people_doc() -> None:
         "this file and, per company, in `membership.title` (S3, DECISIONS #136), which `scripts/seed_demo_fixtures.py` writes from the same data as this "
         "table. History shows it next to the name.", "",
         f"The group is **{GROUP_NAME}**. The picker owner (`owner@try-demo.test`, Priya Ramanathan) owns all three companies; the six emails "
-        "in the demo login picker (`web/src/config/demo.ts`) are all members of the FIRST company. People with other emails are members of "
-        "one company each and are not in the picker.", "",
-        "**Why the Company Secretary is app role `user`, not `admin`:** the Corp Sec uploads and corrects her own statutory filings, which is "
-        "what a `user` may do (edit only what you uploaded). Resolving reviews, adding members and seeing which checklist items are missing "
-        "are admin and owner work, and those belong to the HR and Finance Manager and the Managing Director here.", ""]
+        "in the demo login picker (`web/src/config/demo.ts`: owner, admin, user, user1, user2, viewer) are all members of the FIRST company and "
+        "each holds its own role. People with other emails are members of one company each and are not in the picker.", "",
+        "**The Corp Sec is STRICTLY VIEW-ONLY in the demo (the user's ruling, S1c).** In every company the person titled Corp Sec holds app role "
+        "`viewer`, and no document, edit, purge request or cancel in the seeded data is attributed to any viewer. Statutory documents are uploaded "
+        "by the HR and Finance admin or the owner. In the first company the login picker's `viewer@try-demo.test` IS the Company Secretary. The "
+        "former External Auditor is kept as a NON-PICKER viewer in the first company (log in with the email in the table): a member who performs no "
+        "action. Nothing in `app/auth.py` changed: a viewer is already blocked from every write route.", ""]
     for c in COMPANIES:
         lines += [f"## {c['name']}", "", f"Financial year end {c['fye'][1]}/{c['fye'][0]}; incorporated {c['incorporated_on']}; "
                   + (f"GST-registered, {c['gst_cycle']}." if c["gst_registered"] else "not GST-registered."), "",
-                  "| Person | Email | Company | App role | Business title | In the login picker |", "|---|---|---|---|---|---|"]
+                  "| Person | Login email | Company | App role | Business title | Login picker |", "|---|---|---|---|---|---|"]
         for key, email, name, role, title in PEOPLE[c["key"]]:
-            picker = "yes" if c["key"] == "c0" else ("yes (owner)" if key == "owner" else "no")
+            picker = ("yes" if c["key"] == "c0" else "yes (the same login as the first company)") if email.endswith("@try-demo.test") else "non-picker"
             lines.append(f"| {name} | `{email}` | {c['name']} | {role} | {title} | {picker} |")
         lines.append("")
     (OUT.parent.parent / "docs" / "DEMO-PEOPLE.md").write_text("\n".join(lines))

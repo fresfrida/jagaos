@@ -194,6 +194,31 @@ def test_the_six_picker_logins_are_named_people_of_the_first_company(seeded):
     assert not any("Demo" in v["name"] for v in personas.values())
 
 
+def test_the_corp_sec_is_strictly_view_only_everywhere_and_the_auditor_is_a_non_picker_viewer(seeded):
+    """S1c (the user's ruling): every Corp Sec holds app role viewer, no viewer acts anywhere in the data, the picker's viewer login is the
+    Company Secretary, the other five picker logins keep their roles and none is a Corp Sec, and the External Auditor is a non-picker viewer."""
+    inv = seeded["report"]["invariants"]
+    for name in ("every_corp_sec_has_role_viewer_in_all_three_companies", "no_history_row_has_a_viewer_as_its_actor", "no_document_is_uploaded_by_a_viewer",
+                 "the_pickers_viewer_login_is_the_corp_sec", "the_other_picker_logins_keep_their_roles_and_none_is_a_corp_sec",
+                 "the_external_auditor_is_a_non_picker_viewer_who_acts_nowhere"):
+        assert inv[name]["ok"], (name, inv[name]["detail"])
+    con = sqlite3.connect(seeded["db"])
+    assert con.execute("SELECT COUNT(*) FROM membership WHERE title = 'Corp Sec'").fetchone()[0] == 3
+    roles = {p["email"]: p["role"] for k in MANIFEST["people"] for p in MANIFEST["people"][k]}
+    assert all(roles[p["email"]] == "viewer" for k in MANIFEST["people"] for p in MANIFEST["people"][k] if p["title"] == "Corp Sec")
+    viewers = {p["key"] for p in MANIFEST["people"]["c0"] if p["role"] == "viewer"} | {"corpsec"}
+    assert not any(d["uploader"] in viewers and d["company"] == "c0" for d in MANIFEST["documents"] if d["uploader"] in ("viewer", "auditor"))
+    assert not any(d["uploader"] in ("viewer", "auditor", "corpsec") for d in MANIFEST["documents"])          # in the manifest itself, in all three companies
+
+
+def test_demo_people_says_the_ruling_and_no_longer_justifies_a_corp_sec_user():
+    text = (REPO / "docs" / "DEMO-PEOPLE.md").read_text()
+    assert "STRICTLY VIEW-ONLY" in text and "Why the Company Secretary is app role `user`" not in text
+    for p in (q for k in MANIFEST["people"] for q in MANIFEST["people"][k]):
+        assert p["name"] in text and p["email"] in text
+    assert text.count("non-picker") >= 4
+
+
 def test_the_owners_switcher_lists_all_three_under_the_new_names_and_the_group(seeded):
     assert {tuple(x) for x in seeded["report"]["switcher"]} == {(c["name"], MANIFEST["group"]) for c in MANIFEST["companies"]}
 
@@ -271,7 +296,7 @@ def test_every_person_holds_the_manifests_business_title_in_that_company_and_his
     for company in MANIFEST["companies"]:
         for person in MANIFEST["people"][company["key"]]:
             assert got[(company["name"], person["email"])] == person["title"], (company["name"], person["email"])
-    assert got[("Tembusu Row Engineering Pte Ltd", "user@try-demo.test")] == "Corp Sec"
+    assert got[("Tembusu Row Engineering Pte Ltd", "viewer@try-demo.test")] == "Corp Sec"      # the picker's viewer login is the Company Secretary
     assert got[("Pasir Kelana Logistics Pte Ltd", "owner@try-demo.test")] == "Group Managing Director"   # the same person, another title, another company
     titles = seeded["report"]["history"]["titles_shown"]
     assert titles and set(titles) <= {p["title"] for p in MANIFEST["people"]["c0"]}

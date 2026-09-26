@@ -212,6 +212,26 @@ def main(argv: list[str] | None = None) -> int:
         "SELECT COUNT(*) FROM document_activity c JOIN document_activity r ON r.lifecycle_id = c.lifecycle_id AND r.action = 'purge_requested' "
         "WHERE c.action = 'purge_cancelled' AND c.at < r.at").fetchone()[0]
     check("a_purge_is_never_cancelled_before_it_was_requested", order == 0)
+    # ---- the Corp Sec is STRICTLY VIEW-ONLY (S1c): a viewer performs no action, so the data must not show one acting
+    corp = db.execute("SELECT c.name, u.email, m.role FROM membership m JOIN company c ON c.id = m.company_id JOIN app_user u ON u.id = m.user_id WHERE m.title = 'Corp Sec'").fetchall()
+    check("every_corp_sec_has_role_viewer_in_all_three_companies", len(corp) == 3 and all(r["role"] == "viewer" for r in corp),
+          str([(r["name"], r["email"], r["role"]) for r in corp]))
+    acting_viewers = db.execute(
+        "SELECT COUNT(*) FROM document_activity a JOIN membership m ON m.user_id = a.actor_user_id AND m.company_id = a.company_id WHERE m.role = 'viewer'").fetchone()[0]
+    check("no_history_row_has_a_viewer_as_its_actor", acting_viewers == 0, f"{acting_viewers} row(s)")
+    uploaded_by_viewer = db.execute(
+        "SELECT COUNT(*) FROM document d JOIN membership m ON m.user_id = d.uploaded_by_user_id AND m.company_id = d.company_id WHERE m.role = 'viewer'").fetchone()[0]
+    check("no_document_is_uploaded_by_a_viewer", uploaded_by_viewer == 0, f"{uploaded_by_viewer} document(s)")
+    picker = {r["email"]: (r["role"], r["title"]) for r in db.execute(
+        "SELECT u.email, m.role, m.title FROM membership m JOIN app_user u ON u.id = m.user_id WHERE m.company_id = ? AND u.email LIKE '%@try-demo.test'", (c0,))}
+    check("the_pickers_viewer_login_is_the_corp_sec", picker.get("viewer@try-demo.test") == ("viewer", "Corp Sec"), str(picker.get("viewer@try-demo.test")))
+    check("the_other_picker_logins_keep_their_roles_and_none_is_a_corp_sec",
+          {e: r for e, (r, t) in picker.items() if e != "viewer@try-demo.test"} == {"owner@try-demo.test": "owner", "admin@try-demo.test": "admin", "user@try-demo.test": "user",
+                                                                                   "user1@try-demo.test": "user", "user2@try-demo.test": "user"}
+          and not any(t == "Corp Sec" for e, (r, t) in picker.items() if e != "viewer@try-demo.test"), str(picker))
+    aud = db.execute("SELECT m.role, m.title, u.email FROM membership m JOIN app_user u ON u.id = m.user_id WHERE u.name = 'Marcus Lee Kok Wai' AND m.company_id = ?", (c0,)).fetchone()
+    check("the_external_auditor_is_a_non_picker_viewer_who_acts_nowhere", bool(aud) and aud["role"] == "viewer" and aud["title"] == "External Auditor" and not aud["email"].endswith("@try-demo.test")
+          and db.execute("SELECT COUNT(*) FROM document_activity WHERE actor_name = 'Marcus Lee Kok Wai'").fetchone()[0] == 0, str(dict(aud) if aud else None))
     check("no_trace_row_pretends_to_be_a_model_call", db.execute("SELECT COUNT(*) FROM trace t JOIN document d ON d.id = t.document_id WHERE d.source_identity = 'seed-fixture' AND t.model IS NOT NULL").fetchone()[0] == 0)
 
     out["ok"] = not fails
