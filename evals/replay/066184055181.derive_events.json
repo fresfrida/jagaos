@@ -1,0 +1,28 @@
+{
+ "run_id": "066184055181",
+ "purpose": "derive_events",
+ "tool_name": "propose_event",
+ "arguments": {
+  "kind": "incorporation",
+  "occurred_on": "2023-01-15",
+  "title": "Constitution adopted - Bright Harbour Pte. Ltd. incorporated",
+  "confidence": 0.95
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 2,
+   "filename": "02_constitution.pdf",
+   "recorded_at": "2026-09-21 16:11:41"
+  },
+  "fields": {
+   "kind": "recorded (from the event row this document produced)",
+   "occurred_on": "recorded (from the event row this document produced)",
+   "title": "recorded (from the event row this document produced)",
+   "confidence": "recorded (from the event row this document produced)"
+  },
+  "authored": []
+ }
+}

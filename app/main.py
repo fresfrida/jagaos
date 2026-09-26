@@ -62,7 +62,7 @@ from app.graph.classify import is_company_profile_doc_type  # noqa: E402
 from app.graph.derive_expectations import backfill_expectation_evidence  # noqa: E402
 from app.graph.ingest import ingest  # noqa: E402
 from app.graph.pipeline import PIPELINE  # noqa: E402
-from app.llm import LLMUnavailable, calls_disabled  # noqa: E402
+from app.llm import LLMUnavailable, calls_disabled, replay_available, replay_configured  # noqa: E402
 from app.rules.company_profile import (  # noqa: E402
     company_settings_from_profile,
     extraction_values,
@@ -149,6 +149,12 @@ def startup() -> None:
     # Round 16 (DECISIONS #90): an expectation satisfied before evidence_document_id
     # existed gets the document that satisfies it. Idempotent; a no-op once done.
     backfill_expectation_evidence(DB_PATH)
+    if replay_configured():
+        # Round 7, S2 (DECISIONS #134): a time-boxed production exception for the 28 Sep 2026 demo. Loud, once, at boot.
+        _audit.warning(
+            "LLM_REPLAY_DIR is ON: files with a recorded fixture are answered from it (model=replay, 0 tokens) and the pipeline runs around "
+            "the recorded answer; a file without one falls through to the kill switch. DECISIONS #134: revert after 2026-09-28."
+        )
     if calls_disabled():
         # Round 7 (DECISIONS #132): loud, once, at boot, so nobody wonders why every upload is refused.
         _audit.warning(
@@ -210,7 +216,9 @@ def _company_out(row: sqlite3.Row) -> CompanyOut:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok"}
+    # `replay` (round 7, S2, DECISIONS #134): whether replay mode is on. A yes or no, no path and nothing else about the configuration;
+    # scripts/rearm_review_queue.py reads it to refuse to run against a server that is not in replay mode.
+    return {"status": "ok", "replay": replay_configured()}
 
 
 @app.post("/api/auth/dev-login")
@@ -533,7 +541,10 @@ def _process_upload(
     # Only me file never enters the pipeline, below) that is not a picture (classify.py skips its call for one, a picture's lane has no
     # extractor, and only the statutory lane derives events). Whether the OCR finds text is known only after ingest, so a file with no
     # readable text, or an exact duplicate, is refused too while the switch is on: a false positive on a machine that opted in, never spend.
-    if visibility == "company" and not is_picture and calls_disabled():
+    # Round 7, S2 (DECISIONS #134): unless the file has a recorded replay answer. With replay on, the file's run_id (the first 12 hex of its
+    # sha256, which is what ingest() will use) names the fixtures, so a recorded file is let through even with the switch armed, and every
+    # other file is still refused.
+    if visibility == "company" and not is_picture and calls_disabled() and not replay_available(hashlib.sha256(Path(tmp_path).read_bytes()).hexdigest()[:12]):
         raise _ai_unavailable()
 
     ingest_state = ingest(

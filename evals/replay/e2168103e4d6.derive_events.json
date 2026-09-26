@@ -1,0 +1,28 @@
+{
+ "run_id": "e2168103e4d6",
+ "purpose": "derive_events",
+ "tool_name": "propose_event",
+ "arguments": {
+  "kind": "incorporation",
+  "occurred_on": "2023-01-15",
+  "title": "BRIGHT HARBOUR PTE. LTD. incorporated",
+  "confidence": 1.0
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 1,
+   "filename": "01_certificate_of_incorporation.pdf",
+   "recorded_at": "2026-09-21 16:11:31"
+  },
+  "fields": {
+   "kind": "recorded (from the event row this document produced)",
+   "occurred_on": "recorded (from the event row this document produced)",
+   "title": "recorded (from the event row this document produced)",
+   "confidence": "recorded (from the event row this document produced)"
+  },
+  "authored": []
+ }
+}

@@ -1,0 +1,53 @@
+{
+ "run_id": "e2168103e4d6",
+ "purpose": "extract",
+ "tool_name": "extract_statutory_fields",
+ "arguments": {
+  "doc_type": {
+   "value": "Certificate of Incorporation",
+   "confidence": 0.95,
+   "page": 1,
+   "char_start": 51,
+   "char_end": 86
+  },
+  "reference_no": {
+   "value": "202312345A",
+   "confidence": 0.98,
+   "page": 1,
+   "char_start": 136,
+   "char_end": 146
+  },
+  "issued_on": {
+   "value": "2023-01-15",
+   "confidence": 0.95,
+   "page": 1,
+   "char_start": 253,
+   "char_end": 267
+  },
+  "subject": {
+   "value": "BRIGHT HARBOUR PTE. LTD.",
+   "confidence": 0.98,
+   "page": 1,
+   "char_start": 106,
+   "char_end": 130
+  }
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 1,
+   "filename": "01_certificate_of_incorporation.pdf",
+   "recorded_at": "2026-09-21 16:11:28"
+  },
+  "fields": {
+   "doc_type": "recorded",
+   "reference_no": "recorded",
+   "issued_on": "recorded",
+   "subject": "recorded"
+  },
+  "authored": [],
+  "absent": []
+ }
+}

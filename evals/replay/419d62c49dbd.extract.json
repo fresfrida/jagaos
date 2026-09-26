@@ -1,0 +1,73 @@
+{
+ "run_id": "419d62c49dbd",
+ "purpose": "extract",
+ "tool_name": "extract_invoice_fields",
+ "arguments": {
+  "vendor": {
+   "value": "Marina Facilities Management Pte Ltd",
+   "confidence": 1.0,
+   "char_start": 12,
+   "char_end": 48
+  },
+  "gst_reg_no": {
+   "value": "M77098765Y",
+   "confidence": 1.0,
+   "char_start": 62,
+   "char_end": 72
+  },
+  "invoice_no": {
+   "value": "MFM-2026-0456",
+   "confidence": 1.0,
+   "char_start": 87,
+   "char_end": 100
+  },
+  "issued_on": {
+   "value": "2026-08-12",
+   "confidence": 1.0,
+   "char_start": 108,
+   "char_end": 122
+  },
+  "subtotal": {
+   "value": 1200.0,
+   "confidence": 1.0,
+   "char_start": 189,
+   "char_end": 197
+  },
+  "tax": {
+   "value": 84.0,
+   "confidence": 1.0,
+   "char_start": 209,
+   "char_end": 215
+  },
+  "total": {
+   "value": 1284.0,
+   "confidence": 1.0,
+   "char_start": 228,
+   "char_end": 235
+  }
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "evals/demo_corpus/demo.db",
+   "document_id": 6,
+   "filename": "06_invoice_bad_gst.pdf",
+   "recorded_at": "2026-09-21 15:33:41"
+  },
+  "fields": {
+   "vendor": "recorded",
+   "gst_reg_no": "recorded",
+   "invoice_no": "recorded",
+   "issued_on": "recorded",
+   "subtotal": "recorded",
+   "tax": "recorded (recorded as `gst`, named `tax` since DECISIONS item 10)",
+   "total": "recorded"
+  },
+  "authored": [],
+  "absent": [
+   "tax_label",
+   "currency"
+  ]
+ }
+}

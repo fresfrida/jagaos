@@ -1,0 +1,41 @@
+{
+ "run_id": "31c888efe23d",
+ "purpose": "classify",
+ "tool_name": "classify_document",
+ "arguments": {
+  "lane": "invoice",
+  "doc_type": "tax_invoice",
+  "confidence": 0.99,
+  "injection_suspected": false,
+  "description": "Invoice from Straits Print Supplies Pte Ltd for company stationery and letterhead printing, SGD 348.80",
+  "description_en": "Invoice from Straits Print Supplies Pte Ltd for company stationery and letterhead printing, SGD 348.80",
+  "bucket": "Expenses",
+  "vendor_name": "Straits Print Supplies Pte Ltd"
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 5,
+   "filename": "05_invoice_clean.pdf",
+   "recorded_at": "2026-09-21 16:12:03"
+  },
+  "fields": {
+   "lane": "recorded",
+   "doc_type": "recorded",
+   "confidence": "recorded (trace of the real call)",
+   "injection_suspected": "recorded (no security event)",
+   "description": "authored",
+   "description_en": "authored",
+   "bucket": "authored",
+   "vendor_name": "authored"
+  },
+  "authored": [
+   "description",
+   "description_en",
+   "bucket",
+   "vendor_name"
+  ]
+ }
+}

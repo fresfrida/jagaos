@@ -1,0 +1,41 @@
+{
+ "run_id": "70aa39135a30",
+ "purpose": "classify",
+ "tool_name": "classify_document",
+ "arguments": {
+  "lane": "important",
+  "doc_type": "office lease agreement",
+  "confidence": 0.98,
+  "injection_suspected": false,
+  "description": "Key terms of the office lease at 10 Anson Road, #22-01, between Marina Bay Properties Pte Ltd and Bright Harbour Pte. Ltd.",
+  "description_en": "Key terms of the office lease at 10 Anson Road, #22-01, between Marina Bay Properties Pte Ltd and Bright Harbour Pte. Ltd.",
+  "bucket": "Contracts",
+  "vendor_name": "Marina Bay Properties Pte Ltd"
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 8,
+   "filename": "08_lease_important.pdf",
+   "recorded_at": "2026-09-21 16:12:28"
+  },
+  "fields": {
+   "lane": "recorded",
+   "doc_type": "recorded",
+   "confidence": "recorded (trace of the real call)",
+   "injection_suspected": "recorded (no security event)",
+   "description": "authored",
+   "description_en": "authored",
+   "bucket": "authored",
+   "vendor_name": "authored"
+  },
+  "authored": [
+   "description",
+   "description_en",
+   "bucket",
+   "vendor_name"
+  ]
+ }
+}

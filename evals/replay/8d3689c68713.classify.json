@@ -1,0 +1,41 @@
+{
+ "run_id": "8d3689c68713",
+ "purpose": "classify",
+ "tool_name": "classify_document",
+ "arguments": {
+  "lane": "statutory",
+  "doc_type": "Notice of Appointment of Company Secretary",
+  "confidence": 0.95,
+  "injection_suspected": false,
+  "description": "Notice appointing Harbour Corp Services Pte Ltd as company secretary from 1 June 2026",
+  "description_en": "Notice appointing Harbour Corp Services Pte Ltd as company secretary from 1 June 2026",
+  "bucket": "Statutory",
+  "vendor_name": "Harbour Corp Services Pte Ltd"
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 4,
+   "filename": "04_notice_corpsec_change.pdf",
+   "recorded_at": "2026-09-21 16:11:53"
+  },
+  "fields": {
+   "lane": "recorded",
+   "doc_type": "recorded",
+   "confidence": "recorded (trace of the real call)",
+   "injection_suspected": "recorded (no security event)",
+   "description": "authored",
+   "description_en": "authored",
+   "bucket": "authored",
+   "vendor_name": "authored"
+  },
+  "authored": [
+   "description",
+   "description_en",
+   "bucket",
+   "vendor_name"
+  ]
+ }
+}

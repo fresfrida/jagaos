@@ -1,0 +1,28 @@
+{
+ "run_id": "8d3689c68713",
+ "purpose": "derive_events",
+ "tool_name": "propose_event",
+ "arguments": {
+  "kind": "corpsec_change",
+  "occurred_on": "2026-06-01",
+  "title": "Appointment of Harbour Corp Services Pte Ltd as Company Secretary",
+  "confidence": 0.95
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 4,
+   "filename": "04_notice_corpsec_change.pdf",
+   "recorded_at": "2026-09-21 16:12:00"
+  },
+  "fields": {
+   "kind": "recorded (from the event row this document produced)",
+   "occurred_on": "recorded (from the event row this document produced)",
+   "title": "recorded (from the event row this document produced)",
+   "confidence": "recorded (from the event row this document produced)"
+  },
+  "authored": []
+ }
+}

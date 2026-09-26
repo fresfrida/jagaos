@@ -1,0 +1,28 @@
+{
+ "run_id": "07d594bf547a",
+ "purpose": "derive_events",
+ "tool_name": "propose_event",
+ "arguments": {
+  "kind": "office_move",
+  "occurred_on": "2026-03-01",
+  "title": "Registered office moved to 10 Anson Road, #22-01",
+  "confidence": 1.0
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 3,
+   "filename": "03_notice_office_change.pdf",
+   "recorded_at": "2026-09-21 16:11:51"
+  },
+  "fields": {
+   "kind": "recorded (from the event row this document produced)",
+   "occurred_on": "recorded (from the event row this document produced)",
+   "title": "recorded (from the event row this document produced)",
+   "confidence": "recorded (from the event row this document produced)"
+  },
+  "authored": []
+ }
+}

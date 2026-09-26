@@ -1,0 +1,73 @@
+{
+ "run_id": "31c888efe23d",
+ "purpose": "extract",
+ "tool_name": "extract_invoice_fields",
+ "arguments": {
+  "vendor": {
+   "value": "Straits Print Supplies Pte Ltd",
+   "confidence": 1.0,
+   "char_start": 12,
+   "char_end": 42
+  },
+  "gst_reg_no": {
+   "value": "M90012345X",
+   "confidence": 1.0,
+   "char_start": 56,
+   "char_end": 66
+  },
+  "invoice_no": {
+   "value": "SP-2026-1187",
+   "confidence": 1.0,
+   "char_start": 80,
+   "char_end": 92
+  },
+  "issued_on": {
+   "value": "2026-07-03",
+   "confidence": 1.0,
+   "char_start": 99,
+   "char_end": 111
+  },
+  "subtotal": {
+   "value": 320.0,
+   "confidence": 1.0,
+   "char_start": 183,
+   "char_end": 190
+  },
+  "tax": {
+   "value": 28.8,
+   "confidence": 1.0,
+   "char_start": 204,
+   "char_end": 209
+  },
+  "total": {
+   "value": 348.8,
+   "confidence": 1.0,
+   "char_start": 222,
+   "char_end": 228
+  }
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 5,
+   "filename": "05_invoice_clean.pdf",
+   "recorded_at": "2026-09-21 16:12:08"
+  },
+  "fields": {
+   "vendor": "recorded",
+   "gst_reg_no": "recorded",
+   "invoice_no": "recorded",
+   "issued_on": "recorded",
+   "subtotal": "recorded",
+   "tax": "recorded (recorded as `gst`, named `tax` since DECISIONS item 10)",
+   "total": "recorded"
+  },
+  "authored": [],
+  "absent": [
+   "tax_label",
+   "currency"
+  ]
+ }
+}

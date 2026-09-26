@@ -1,0 +1,41 @@
+{
+ "run_id": "419d62c49dbd",
+ "purpose": "classify",
+ "tool_name": "classify_document",
+ "arguments": {
+  "lane": "invoice",
+  "doc_type": "tax_invoice",
+  "confidence": 0.99,
+  "injection_suspected": false,
+  "description": "Invoice from Marina Facilities Management Pte Ltd for quarterly office facilities maintenance, SGD 1,284.00",
+  "description_en": "Invoice from Marina Facilities Management Pte Ltd for quarterly office facilities maintenance, SGD 1,284.00",
+  "bucket": "Expenses",
+  "vendor_name": "Marina Facilities Management Pte Ltd"
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "evals/demo_corpus/demo.db",
+   "document_id": 6,
+   "filename": "06_invoice_bad_gst.pdf",
+   "recorded_at": "2026-09-21 15:33:36"
+  },
+  "fields": {
+   "lane": "recorded",
+   "doc_type": "recorded",
+   "confidence": "recorded (trace of the real call)",
+   "injection_suspected": "recorded (no security event)",
+   "description": "authored",
+   "description_en": "authored",
+   "bucket": "authored",
+   "vendor_name": "authored"
+  },
+  "authored": [
+   "description",
+   "description_en",
+   "bucket",
+   "vendor_name"
+  ]
+ }
+}

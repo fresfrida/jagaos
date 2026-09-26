@@ -56,6 +56,7 @@ def _gateway_calls_switched_on(monkeypatch):
     developer who put the flag in their real .env would otherwise switch calls off for the whole suite, and a process that sets it in
     the environment would do the same. Every test starts with it removed; a test that wants it on sets it itself."""
     monkeypatch.delenv("LLM_CALLS_DISABLED", raising=False)
+    monkeypatch.delenv("LLM_REPLAY_DIR", raising=False)  # replay mode (DECISIONS #134) must never leak in from a developer's environment either
 
 
 class _CannedToolCall:

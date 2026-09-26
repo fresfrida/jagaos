@@ -1,0 +1,37 @@
+{
+ "run_id": "8d3689c68713",
+ "purpose": "extract",
+ "tool_name": "extract_statutory_fields",
+ "arguments": {
+  "doc_type": {
+   "value": "NOTICE OF APPOINTMENT OF NEW COMPANY SECRETARY",
+   "confidence": 0.95,
+   "page": 1,
+   "char_start": 0,
+   "char_end": 50
+  },
+  "subject": {
+   "value": "Appointment of Harbour Corp Services Pte Ltd as company secretary with effect from 1 June 2026",
+   "confidence": 0.9,
+   "page": 1,
+   "char_start": 51,
+   "char_end": 220
+  }
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 4,
+   "filename": "04_notice_corpsec_change.pdf",
+   "recorded_at": "2026-09-21 16:11:57"
+  },
+  "fields": {
+   "doc_type": "recorded",
+   "subject": "recorded"
+  },
+  "authored": [],
+  "absent": []
+ }
+}

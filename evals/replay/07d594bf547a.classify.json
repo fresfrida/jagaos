@@ -1,0 +1,41 @@
+{
+ "run_id": "07d594bf547a",
+ "purpose": "classify",
+ "tool_name": "classify_document",
+ "arguments": {
+  "lane": "statutory",
+  "doc_type": "ACRA Notice of Change of Registered Office",
+  "confidence": 0.95,
+  "injection_suspected": false,
+  "description": "ACRA notice that the registered office of Bright Harbour Pte. Ltd. moves to 10 Anson Road, #22-01 from 1 March 2026",
+  "description_en": "ACRA notice that the registered office of Bright Harbour Pte. Ltd. moves to 10 Anson Road, #22-01 from 1 March 2026",
+  "bucket": "Statutory",
+  "vendor_name": "ACRA"
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 3,
+   "filename": "03_notice_office_change.pdf",
+   "recorded_at": "2026-09-21 16:11:44"
+  },
+  "fields": {
+   "lane": "recorded",
+   "doc_type": "recorded",
+   "confidence": "recorded (trace of the real call)",
+   "injection_suspected": "recorded (no security event)",
+   "description": "authored",
+   "description_en": "authored",
+   "bucket": "authored",
+   "vendor_name": "authored"
+  },
+  "authored": [
+   "description",
+   "description_en",
+   "bucket",
+   "vendor_name"
+  ]
+ }
+}

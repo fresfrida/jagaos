@@ -1,0 +1,37 @@
+{
+ "run_id": "07d594bf547a",
+ "purpose": "extract",
+ "tool_name": "extract_statutory_fields",
+ "arguments": {
+  "doc_type": {
+   "value": "ACRA NOTICE OF CHANGE OF REGISTERED OFFICE",
+   "confidence": 1.0,
+   "page": 1,
+   "char_start": 0,
+   "char_end": 43
+  },
+  "subject": {
+   "value": "Notice of change of registered office address with effect from 1 March 2026",
+   "confidence": 0.95,
+   "page": 1,
+   "char_start": 95,
+   "char_end": 219
+  }
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 3,
+   "filename": "03_notice_office_change.pdf",
+   "recorded_at": "2026-09-21 16:11:48"
+  },
+  "fields": {
+   "doc_type": "recorded",
+   "subject": "recorded"
+  },
+  "authored": [],
+  "absent": []
+ }
+}

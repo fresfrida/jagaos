@@ -9,8 +9,10 @@ alongside the trace row the caller writes.
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import openai
@@ -60,6 +62,17 @@ _TRUTHY = {"1", "true", "yes"}
 # RateLimitError. 402 and 403 are a USER-DIRECTED BEST GUESS at how this gateway says the team's budget is spent (round 7, DECISIONS
 # #132): what it really sends was never recorded. A 403 can equally mean a bad key or a permission problem, which then also reads as
 # "try again shortly"; the LLM_ERROR_UNMAPPED line below is how we find out if some other status turns up.
+# ---- REPLAY MODE (round 7, item S2, DECISIONS #134). Env LLM_REPLAY_DIR names a folder of recorded answers, one JSON file per
+# (run_id, purpose): `<run_id>.<purpose>.json`, where run_id is the first 12 hex characters of the file's sha256 (app/graph/ingest.py)
+# and purpose is classify, extract or derive_events. When a file for the call being made exists, call() returns ITS answer and the real
+# pipeline carries on around it (verify, human review, transitions, the trace, the history), so only the model's answer is canned.
+# Off unless the variable is set. It is a TIME-BOXED EXCEPTION on the production box for the 28 Sep 2026 demo, recorded files only
+# (DECISIONS #134, the revert is in KANBAN Backlog). What a MISS does is the named constant below.
+REPLAY_ENV = "LLM_REPLAY_DIR"
+REPLAY_ON_MISS = "fall_through"  # "fall_through": carry on to the kill switch and then the real gateway (the agreed policy); "raise": LLMUnavailable
+_REPLAY_KEY = re.compile(r"^[0-9a-f]{12}$")
+_REPLAY_PURPOSE = re.compile(r"^[a-z_]{1,32}$")
+
 _UNAVAILABLE_STATUSES = {402, 403, 429}
 _LOGGED_FIELD_MAX = 80
 
@@ -70,6 +83,53 @@ def calls_disabled() -> bool:
     empty or any other value means off, which is the default: production on the box is unchanged unless someone opts in. It exists
     because DECISIONS #130 bans spending the gateway budget on seeding, resets and evals and nothing in code enforced it."""
     return os.environ.get("LLM_CALLS_DISABLED", "").strip().lower() in _TRUTHY
+
+
+def replay_dir() -> Path | None:
+    """The replay folder, or None when replay is off. Read from the environment at call time."""
+    raw = os.environ.get(REPLAY_ENV, "").strip()
+    return Path(raw) if raw else None
+
+
+def replay_configured() -> bool:
+    return replay_dir() is not None
+
+
+def _replay_file(run_id: str | None, purpose: str) -> Path | None:
+    """The fixture for this call if one exists. The key is checked against a strict pattern first, so a hostile run_id or purpose can
+    never name a path outside the folder."""
+    folder = replay_dir()
+    if folder is None or not run_id or not _REPLAY_KEY.match(run_id) or not _REPLAY_PURPOSE.match(purpose):
+        return None
+    path = folder / f"{run_id}.{purpose}.json"
+    return path if path.is_file() else None
+
+
+def replay_available(run_id: str) -> bool:
+    """True when replay is on and the file with this run_id has a recorded classify answer: the upload preflight (app/main.py) lets such a
+    file through even while the kill switch is armed, because every call it will make is answered from a fixture."""
+    return _replay_file(run_id, "classify") is not None
+
+
+def _replay_result(purpose: str, document_id: int | None, run_id: str | None) -> "LLMResult | None":
+    path = _replay_file(run_id, purpose)
+    if path is None:
+        return None
+    try:
+        fixture = json.loads(path.read_text())
+        arguments = fixture["arguments"]
+        tool_name = fixture["tool_name"]
+        if not isinstance(arguments, dict) or not isinstance(tool_name, str):
+            raise ValueError("bad fixture shape")
+    except (OSError, ValueError, KeyError):
+        _log.warning("LLM_REPLAY_UNREADABLE purpose=%s run_id=%s document_id=%s", purpose, run_id, document_id)
+        return None  # an unreadable fixture is a miss, never a crash
+    _log.info("LLM_REPLAY purpose=%s run_id=%s document_id=%s", purpose, run_id, document_id)
+    # A known FREE call (0 tokens, $0.0), unlike an unknown-usage real call (None, DECISIONS #129); model "replay" is what the trace records.
+    return LLMResult(
+        content="", tool_calls=[{"id": "replay", "type": "function", "function": {"name": tool_name, "arguments": json.dumps(arguments)}}],
+        model="replay", input_tokens=0, output_tokens=0, cost_usd=0.0, latency_ms=0, cached_input_tokens=0,
+    )
 
 
 def _log_safe(value: Any) -> str | None:
@@ -200,6 +260,14 @@ def call(
 
     Raises LLMUnavailable (never a bare SDK error) when calls are switched off or the gateway is transiently unavailable; see
     that class. The switch is checked FIRST, before a client is built, so with it on nothing is constructed and nothing is sent."""
+    # Replay comes BEFORE the kill switch (DECISIONS #134): with the switch armed, a recorded file is still answered and an unrecorded one
+    # still cannot reach a paid call. A hit never builds a client.
+    replayed = _replay_result(purpose, document_id, run_id)
+    if replayed is not None:
+        return replayed
+    if replay_configured() and REPLAY_ON_MISS == "raise":
+        _log.warning("LLM_REPLAY_MISS purpose=%s run_id=%s document_id=%s policy=raise", purpose, run_id, document_id)
+        raise LLMUnavailable("no recorded answer for this call and replay is set to refuse a miss")
     if calls_disabled():
         _log.warning("LLM_UNAVAILABLE reason=disabled purpose=%s document_id=%s", purpose, document_id)
         raise LLMUnavailable("LLM calls are switched off (LLM_CALLS_DISABLED)")

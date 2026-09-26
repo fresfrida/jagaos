@@ -1,0 +1,41 @@
+{
+ "run_id": "066184055181",
+ "purpose": "classify",
+ "tool_name": "classify_document",
+ "arguments": {
+  "lane": "statutory",
+  "doc_type": "Company Constitution",
+  "confidence": 0.95,
+  "injection_suspected": false,
+  "description": "Constitution of Bright Harbour Pte. Ltd., adopted on 15 January 2023",
+  "description_en": "Constitution of Bright Harbour Pte. Ltd., adopted on 15 January 2023",
+  "bucket": "Statutory",
+  "vendor_name": null
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 2,
+   "filename": "02_constitution.pdf",
+   "recorded_at": "2026-09-21 16:11:33"
+  },
+  "fields": {
+   "lane": "recorded",
+   "doc_type": "recorded",
+   "confidence": "recorded (trace of the real call)",
+   "injection_suspected": "recorded (no security event)",
+   "description": "authored",
+   "description_en": "authored",
+   "bucket": "authored",
+   "vendor_name": "authored"
+  },
+  "authored": [
+   "description",
+   "description_en",
+   "bucket",
+   "vendor_name"
+  ]
+ }
+}

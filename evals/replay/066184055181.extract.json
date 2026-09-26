@@ -1,0 +1,53 @@
+{
+ "run_id": "066184055181",
+ "purpose": "extract",
+ "tool_name": "extract_statutory_fields",
+ "arguments": {
+  "doc_type": {
+   "value": "Constitution",
+   "confidence": 0.95,
+   "page": 1,
+   "char_start": 0,
+   "char_end": 42
+  },
+  "reference_no": {
+   "value": "202312345A",
+   "confidence": 0.9,
+   "page": 1,
+   "char_start": 48,
+   "char_end": 58
+  },
+  "issued_on": {
+   "value": "2023-01-15",
+   "confidence": 0.85,
+   "page": 1,
+   "char_start": 239,
+   "char_end": 254
+  },
+  "subject": {
+   "value": "Constitution of Bright Harbour Pte. Ltd.",
+   "confidence": 0.95,
+   "page": 1,
+   "char_start": 0,
+   "char_end": 42
+  }
+ },
+ "provenance": {
+  "built_by": "scripts/build_replay_fixtures.py",
+  "built_on": "2026-09-27",
+  "source": {
+   "db": "data/jaga.db",
+   "document_id": 2,
+   "filename": "02_constitution.pdf",
+   "recorded_at": "2026-09-21 16:11:38"
+  },
+  "fields": {
+   "doc_type": "recorded",
+   "reference_no": "recorded",
+   "issued_on": "recorded",
+   "subject": "recorded"
+  },
+  "authored": [],
+  "absent": []
+ }
+}
