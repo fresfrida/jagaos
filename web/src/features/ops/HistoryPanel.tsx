@@ -34,7 +34,13 @@ export function HistoryPanel({ entries }: { entries: DocumentActivityEntry[] }) 
     <ul className="space-y-2" data-testid="history-panel">
       {entries.map((entry, i) => {
         // An action with no person to name (a non-web upload with no identity) says so, rather than printing "null".
-        const name = entry.actor_name?.trim() || t('ops.documents.history.unknownActor')
+        const plainName = entry.actor_name?.trim() || ''
+        // The business title (S3, DECISIONS #136) goes beside a NAMED person only, as their own free text ("Corp Sec"); an unknown actor has none.
+        // A missing or blank `actor_title` (an older backend, an operator, someone with no title) simply shows the name, as before.
+        const title = plainName ? entry.actor_title?.trim() : ''
+        const name = plainName
+          ? title ? t('ops.documents.history.nameWithTitle', { name: plainName, title }) : plainName
+          : t('ops.documents.history.unknownActor')
         return (
           <li key={i} className="flex flex-col gap-0.5 text-[13px] sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
             <span className="text-ink">{t(ACTION_KEY[entry.action] ?? 'ops.documents.history.unknownAction', { name })}</span>

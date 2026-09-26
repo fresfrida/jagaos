@@ -119,7 +119,7 @@ def test_upload_records_uploaded_by_the_uploader_with_their_name_and_a_utc_times
     assert UTC_FORMAT.match(entries[0]["at"])
     when = datetime.strptime(entries[0]["at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
     assert abs(datetime.now(timezone.utc) - when) < timedelta(seconds=30)  # UTC, not local time
-    assert set(entries[0]) == {"action", "actor_name", "at"}  # the internal user id is not exposed
+    assert set(entries[0]) == {"action", "actor_name", "actor_title", "at"}  # the internal user id is not exposed
 
 
 def test_a_person_with_no_name_is_recorded_by_their_email_not_left_blank(team):

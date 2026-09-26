@@ -420,7 +420,8 @@
         "purgeRequested": "{{name}} நிரந்தர நீக்கம் கோரினார்",
         "purgeCancelled": "{{name}} நிரந்தர நீக்கக் கோரிக்கையை ரத்து செய்தார்",
         "deleted": "{{name}} நீக்கினார்",
-        "unknownAction": "{{name}} செயல்பாடு செய்தார்"
+        "unknownAction": "{{name}} செயல்பாடு செய்தார்",
+        "nameWithTitle": "{{name}} ({{title}})"
       }
     },
     "dates": {

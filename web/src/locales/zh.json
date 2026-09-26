@@ -419,7 +419,8 @@
         "purgeRequested": "{{name}} 请求了清除",
         "purgeCancelled": "{{name}} 撤销了清除请求",
         "deleted": "{{name}} 删除了",
-        "unknownAction": "{{name}} 进行了操作"
+        "unknownAction": "{{name}} 进行了操作",
+        "nameWithTitle": "{{name}}（{{title}}）"
       }
     },
     "dates": {

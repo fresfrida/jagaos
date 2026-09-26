@@ -93,9 +93,15 @@ def summaries_for(conn: sqlite3.Connection, document_ids: list[int]) -> dict[int
 
 def history_for(conn: sqlite3.Connection, lifecycle_id: str, company_id: int) -> list[dict]:
     """A document's events, oldest first. Scoped to the company as well as the lifecycle id, so one company's history can never be read
-    through another's document. The internal user id is not returned: the name snapshot is what a reader is shown."""
+    through another's document. The internal user id is not returned: the name snapshot is what a reader is shown.
+
+    `actor_title` (round 7, S3, DECISIONS #136) is the business title the actor holds in THIS company NOW (membership.title, joined on the
+    actor's user id AND this company, so a person's title in another company never appears here); None when the actor is not a user (an
+    operator, a non-web source), holds no title, or the title is blank. Like the name it is shown as it is today, not as it was then."""
     rows = conn.execute(
-        "SELECT action, actor_name, at FROM document_activity WHERE lifecycle_id = ? AND company_id = ? ORDER BY id",
+        "SELECT a.action, a.actor_name, a.at, m.title AS actor_title FROM document_activity a "
+        "LEFT JOIN membership m ON m.user_id = a.actor_user_id AND m.company_id = a.company_id "
+        "WHERE a.lifecycle_id = ? AND a.company_id = ? ORDER BY a.id",
         (lifecycle_id, company_id),
     ).fetchall()
-    return [{"action": r["action"], "actor_name": r["actor_name"], "at": r["at"]} for r in rows]
+    return [{"action": r["action"], "actor_name": r["actor_name"], "actor_title": (r["actor_title"] or "").strip() or None, "at": r["at"]} for r in rows]

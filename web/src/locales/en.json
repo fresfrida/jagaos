@@ -420,7 +420,8 @@
         "purgeRequested": "Purge requested by {{name}}",
         "purgeCancelled": "Purge cancelled by {{name}}",
         "deleted": "Deleted by {{name}}",
-        "unknownAction": "Activity by {{name}}"
+        "unknownAction": "Activity by {{name}}",
+        "nameWithTitle": "{{name}} ({{title}})"
       }
     },
     "dates": {

@@ -147,10 +147,12 @@ export interface DocumentRow {
 export type DocumentActivityAction = 'uploaded' | 'edited' | 'purge_requested' | 'purge_cancelled' | 'deleted'
 
 /** One entry of a document's history: what was done, the NAME the person had at the time (a snapshot; null for an action with no
- * person to name), and when, as a stored UTC timestamp. */
+ * person to name), the business title they hold in this company now (round 7, S3, DECISIONS #136: free text such as "Corp Sec", null for
+ * an operator or a person with none, and ABSENT from an older backend, hence optional), and when, as a stored UTC timestamp. */
 export interface DocumentActivityEntry {
   action: DocumentActivityAction
   actor_name: string | null
+  actor_title?: string | null
   at: string
 }
 

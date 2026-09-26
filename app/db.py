@@ -280,6 +280,9 @@ CREATE INDEX IF NOT EXISTS idx_trace_run ON trace(run_id);
 # whole "migrations" story for now, and it's fine at this scale — each
 # statement is idempotent (ignores "duplicate column" if already applied).
 _MIGRATIONS = [
+    # Round 7, S3 (DECISIONS #136): the business title a person holds IN THIS company (Corp Sec, HR and Finance), free text, NULL when none.
+    # Per membership, so one person can hold different titles in different companies. Not a role: nothing in auth reads it.
+    "ALTER TABLE membership ADD COLUMN title TEXT",
     "ALTER TABLE extraction ADD COLUMN source TEXT NOT NULL DEFAULT 'llm'",
     "ALTER TABLE review_item ADD COLUMN action TEXT",
     "ALTER TABLE review_item ADD COLUMN resolved_json TEXT",

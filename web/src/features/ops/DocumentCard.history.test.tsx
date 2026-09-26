@@ -191,3 +191,60 @@ describe('HistoryPanel on its own', () => {
     expect(row).not.toContain('renamed')
   })
 })
+
+describe('the business title beside the name (round 7, S3, DECISIONS #136)', () => {
+  const titled = (over: Partial<DocumentActivityEntry> = {}): DocumentActivityEntry => ({
+    action: 'uploaded', actor_name: 'Rachel Tan', actor_title: 'Corp Sec', at: '2026-09-23 06:14:00', ...over,
+  })
+  const rows = () => within(screen.getByTestId('history-panel')).getAllByRole('listitem').map((li) => li.textContent ?? '')
+
+  it('shows the title in brackets after the name, in the sentence: "Uploaded by Rachel Tan (Corp Sec)"', () => {
+    render(<HistoryPanel entries={[titled()]} />)
+    expect(rows()[0]).toContain('Uploaded by Rachel Tan (Corp Sec)')
+  })
+
+  it('shows the title exactly as stored: free text, an ampersand is not escaped, and it is not translated in any language', async () => {
+    for (const lang of ['en', 'ms', 'zh', 'ta']) {
+      await i18n.changeLanguage(lang)
+      const { unmount } = render(<HistoryPanel entries={[titled({ actor_title: 'HR & Finance Manager' })]} />)
+      expect(rows()[0], lang).toContain('HR & Finance Manager')
+      expect(rows()[0], lang).not.toMatch(/&amp;|\{\{|history\./)
+      unmount()
+    }
+  })
+
+  it('uses the language\'s own brackets around it (full-width in Chinese)', async () => {
+    await i18n.changeLanguage('zh')
+    render(<HistoryPanel entries={[titled()]} />)
+    expect(rows()[0]).toContain('Rachel Tan（Corp Sec）')
+  })
+
+  it('shows just the name when there is no title: null, blank, or the field missing altogether (an older backend)', () => {
+    const noField = { action: 'edited', actor_name: 'Jonathan Ong', at: '2026-09-24 01:05:00' } as DocumentActivityEntry
+    render(<HistoryPanel entries={[titled({ actor_title: null }), titled({ actor_title: '   ' }), noField]} />)
+    const text = rows()
+    expect(text[0]).toContain('Uploaded by Rachel Tan')
+    expect(text[0]).not.toContain('(')
+    expect(text[1]).not.toContain('(')
+    expect(text[2]).toContain('Edited by Jonathan Ong')
+    expect(text[2]).not.toContain('(')
+  })
+
+  it('never puts a title on an unknown actor, and never prints "null" or "undefined"', () => {
+    render(<HistoryPanel entries={[titled({ actor_name: null, actor_title: 'Corp Sec' }), titled({ actor_name: '  ', actor_title: 'Corp Sec' })]} />)
+    for (const row of rows()) {
+      expect(row).toContain('Uploaded by an unknown user')
+      expect(row).not.toMatch(/Corp Sec|null|undefined/)
+    }
+  })
+
+  it('reaches the card: an expanded History carries the title the API returned', async () => {
+    getHistory.mockResolvedValue({ entries: [titled(), titled({ action: 'edited', actor_name: 'Jonathan Ong', actor_title: 'HR & Finance Manager', at: '2026-09-24 01:05:00' })] })
+    show()
+    fireEvent.click(trigger())
+    const panel = await screen.findByTestId('history-panel')
+    const text = within(panel).getAllByRole('listitem').map((li) => li.textContent)
+    expect(text[0]).toContain('Uploaded by Rachel Tan (Corp Sec)')
+    expect(text[1]).toContain('Edited by Jonathan Ong (HR & Finance Manager)')
+  })
+})

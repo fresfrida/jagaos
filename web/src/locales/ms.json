@@ -419,7 +419,8 @@
         "purgeRequested": "Hapus kekal diminta oleh {{name}}",
         "purgeCancelled": "Hapus kekal dibatalkan oleh {{name}}",
         "deleted": "Dipadam oleh {{name}}",
-        "unknownAction": "Aktiviti oleh {{name}}"
+        "unknownAction": "Aktiviti oleh {{name}}",
+        "nameWithTitle": "{{name}} ({{title}})"
       }
     },
     "dates": {
