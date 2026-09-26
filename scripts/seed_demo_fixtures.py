@@ -164,6 +164,7 @@ class Seeder:
             cid = self.company_id[ckey]
             for p in people:
                 if p["key"] == "owner":
+                    self._set_title(cid, p)
                     continue
                 with self.get_conn(self.db_path) as conn:
                     member = conn.execute("SELECT m.role FROM membership m JOIN app_user u ON u.id = m.user_id WHERE m.company_id = ? AND u.email = ?",
@@ -175,8 +176,16 @@ class Seeder:
                     print(f"  WARNING: {p['email']} already has role {member['role']} in {ckey}, not {p['role']}; left as it is")
                 with self.get_conn(self.db_path) as conn:
                     conn.execute("UPDATE app_user SET name = ? WHERE email = ?", (p["name"], p["email"]))
+                self._set_title(cid, p)
         with self.get_conn(self.db_path) as conn:
             self.user_ids = {r["email"]: r["id"] for r in conn.execute("SELECT id, email FROM app_user")}
+
+    def _set_title(self, company_id: int, person: dict) -> None:
+        """The business title this person holds IN THIS company (membership.title, S3, DECISIONS #136), from the same manifest data that
+        docs/DEMO-PEOPLE.md is generated from. A title is display text: nothing in the app reads it to decide what anyone may do."""
+        with self.get_conn(self.db_path) as conn:
+            conn.execute("UPDATE membership SET title = ? WHERE company_id = ? AND user_id = (SELECT id FROM app_user WHERE email = ?)",
+                         (person["title"], company_id, person["email"]))
 
     def uid(self, ckey: str, persona: str) -> int:
         return self.user_ids[next(p["email"] for p in self.manifest["people"][ckey] if p["key"] == persona)]
@@ -318,16 +327,17 @@ class Seeder:
             pid, cid_ = self.doc_ids[pend["file"]], self.doc_ids[canc["file"]]
             if not self._has(pid, "purge_requested"):
                 self.client.post(f"/api/documents/{pid}/request-purge", headers=owner).raise_for_status()
-                when = "2026-09-14 11:20"
+                when = later(pend, 1, 3, 11)  # always AFTER the document's own upload
                 self._backdate(pid, "purge_requested", when)
                 with self.get_conn(self.db_path) as conn:
                     conn.execute("UPDATE document SET purge_requested_at = ? WHERE id = ?", (_utc(when), pid))
                 report["purge_pending"] = pend["file"]
             if not self._has(cid_, "purge_requested"):
                 self.client.post(f"/api/documents/{cid_}/request-purge", headers=owner).raise_for_status()
-                self._backdate(cid_, "purge_requested", "2026-08-03 16:05")
+                asked = later(canc, 1, 3, 10)
+                self._backdate(cid_, "purge_requested", asked)
                 self.client.post(f"/api/documents/{cid_}/cancel-purge-request", headers=owner).raise_for_status()
-                self._backdate(cid_, "purge_cancelled", "2026-08-04 09:40")
+                self._backdate(cid_, "purge_cancelled", asked[:11] + "16:40")  # the same day, later
                 report["purge_cancelled"] = canc["file"]
         return report
 

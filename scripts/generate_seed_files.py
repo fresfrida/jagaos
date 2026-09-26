@@ -55,7 +55,7 @@ PEOPLE = {
     "c0": [
         ("owner", "owner@try-demo.test", "Priya Ramanathan", "owner", "Managing Director"),
         ("admin", "admin@try-demo.test", "Jonathan Ong", "admin", "HR & Finance Manager"),
-        ("user", "user@try-demo.test", "Rachel Tan Hui Min", "user", "Company Secretary (Corp Sec)"),
+        ("user", "user@try-demo.test", "Rachel Tan Hui Min", "user", "Corp Sec"),
         ("user1", "user1@try-demo.test", "Nur Aisyah Rahman", "user", "Operations Executive"),
         ("user2", "user2@try-demo.test", "Kavitha Subramaniam", "user", "Sales & Admin Coordinator"),
         ("viewer", "viewer@try-demo.test", "Marcus Lee Kok Wai", "viewer", "External Auditor"),
@@ -63,13 +63,13 @@ PEOPLE = {
     "c1": [
         ("owner", "owner@try-demo.test", "Priya Ramanathan", "owner", "Group Managing Director"),
         ("admin", "hafiz.ismail@pasirkelana.test", "Hafiz Ismail", "admin", "HR & Finance Manager"),
-        ("user", "grace.lim@pasirkelana.test", "Grace Lim Siew Ling", "user", "Company Secretary (Corp Sec)"),
+        ("user", "grace.lim@pasirkelana.test", "Grace Lim Siew Ling", "user", "Corp Sec"),
         ("user1", "ravi.chandran@pasirkelana.test", "Ravi Chandran", "user", "Dispatch Coordinator"),
     ],
     "c2": [
         ("owner", "owner@try-demo.test", "Priya Ramanathan", "owner", "Group Managing Director"),
         ("admin", "beehong.ng@cendanawharf.test", "Ng Bee Hong", "admin", "Finance & HR Manager"),
-        ("user", "farah.yusof@cendanawharf.test", "Farah Yusof", "user", "Company Secretary (Corp Sec)"),
+        ("user", "farah.yusof@cendanawharf.test", "Farah Yusof", "user", "Corp Sec"),
         ("user1", "daniel.chia@cendanawharf.test", "Daniel Chia", "user", "Purchasing Executive"),
     ],
 }
@@ -283,6 +283,35 @@ EVENTS = [
 
 # ---------------------------------------------------------------- content
 
+# Four phrasings of the quarterly GST return and its payment receipt. They use DIFFERENT words on purpose: 38 returns sharing one wording made
+# the search word cloud read "return, acknowledgement, filed, giro, input, output, payable, period" (round 7, S1b). The choice is a pure function
+# of the quarter (never the generator's random stream), so no date, amount, count or vendor moves when the wording does.
+def gst_pages(company: str, end: date, filed: date, out_tax: float, in_tax: float, net: float, ref: str, variant: int) -> tuple[list[str], list[str]]:
+    d = lambda x: x.strftime("%d %b %Y")  # noqa: E731
+    quarter = f"{end.strftime('%b %Y')}"
+    if variant == 0:
+        return (["GST F5 RETURN ACKNOWLEDGEMENT", FIXTURE_LINE, "", company, f"Period end: {d(end)}", f"Filed: {d(filed)}",
+                 f"Output tax: SGD {money(out_tax)}", f"Input tax: SGD {money(in_tax)}", f"Net GST payable: SGD {money(net)}", f"Ref: {ref}"],
+                ["GST PAYMENT RECEIPT", FIXTURE_LINE, "", company, f"Payment date: {d(filed)}", f"Amount paid: SGD {money(net)}",
+                 f"Payment reference: PAY-{ref}", "Method: GIRO"])
+    if variant == 1:
+        return (["IRAS GST FILING CONFIRMATION", FIXTURE_LINE, "", company, f"Reporting quarter to {quarter}", f"Submitted online {d(filed)}",
+                 f"Tax collected on sales: SGD {money(out_tax)}", f"Tax claimed on purchases: SGD {money(in_tax)}", f"Settled with IRAS: SGD {money(net)}",
+                 f"Confirmation code {ref}"],
+                ["PAYNOW TRANSFER SLIP", FIXTURE_LINE, "", company, f"Transferred on {d(filed)}", f"Sum remitted: SGD {money(net)}",
+                 f"Bank trace PAY-{ref}", "Channel: PayNow Corporate"])
+    if variant == 2:
+        return (["GOODS AND SERVICES TAX FILING, PROOF OF SUBMISSION", FIXTURE_LINE, "", company, f"Taxable quarter closing {quarter}",
+                 f"Lodged {d(filed)}", f"GST charged to customers: SGD {money(out_tax)}", f"GST paid to suppliers: SGD {money(in_tax)}",
+                 f"Net remittance: SGD {money(net)}", f"Lodgement number {ref}"],
+                ["TAX REMITTANCE ADVICE", FIXTURE_LINE, "", company, f"Value date {d(filed)}", f"Remitted: SGD {money(net)}",
+                 f"Trace number PAY-{ref}", "Route: internet banking"])
+    return (["F5 SUBMITTED TO THE TAX AUTHORITY", FIXTURE_LINE, "", company, f"Quarter closing {quarter}", f"Sent to IRAS {d(filed)}",
+             f"Supplies made, tax due: SGD {money(out_tax)}", f"Business purchases, tax recoverable: SGD {money(in_tax)}", f"To pay IRAS: SGD {money(net)}",
+             f"Case reference {ref}"],
+            ["GST PAYMENT ADVICE", FIXTURE_LINE, "", company, f"Settled on {d(filed)}", f"Value SGD {money(net)}", f"Advice number PAY-{ref}", "Mode: eNETS"])
+
+
 def build(g: Gen) -> None:
     c0, c1, c2 = COMPANIES
     inc = {c["key"]: date.fromisoformat(c["incorporated_on"]) for c in COMPANIES}
@@ -347,11 +376,7 @@ def build(g: Gen) -> None:
                 in_tax = round(out_tax * g.rng.uniform(0.35, 0.6), 2)
                 net = round(out_tax - in_tax, 2)
                 ref = f"GST-{end.strftime('%Y%m')}-{g.rng.randint(1000, 9999)}"
-                ack = ["GST F5 RETURN ACKNOWLEDGEMENT", FIXTURE_LINE, "", comp["name"], f"Period end: {end.strftime('%d %b %Y')}",
-                       f"Filed: {filed.strftime('%d %b %Y')}", f"Output tax: SGD {money(out_tax)}", f"Input tax: SGD {money(in_tax)}",
-                       f"Net GST payable: SGD {money(net)}", f"Ref: {ref}"]
-                rec = ["GST PAYMENT RECEIPT", FIXTURE_LINE, "", comp["name"], f"Payment date: {filed.strftime('%d %b %Y')}",
-                       f"Amount paid: SGD {money(net)}", f"Payment reference: PAY-{ref}", "Method: GIRO"]
+                ack, rec = gst_pages(comp["name"], end, filed, out_tax, in_tax, net, ref, variant=(end.year * 4 + end.month) % 4)
                 g.add(company=key, cluster="gst", uploader=uploader, occurred=filed, delta_days=g.rng.randint(0, 1), pages=[ack, rec],
                       filename=f"GST_F5_{end.strftime('%Y_%m')}.pdf", lane="statutory", doc_type="GST F5 Return", bucket="Statutory",
                       vendor="IRAS (fixture)", description=f"GST F5 return acknowledgement and payment receipt for the quarter ended {end.strftime('%d %b %Y')}, net GST payable SGD {money(net)}",
@@ -510,8 +535,9 @@ def write_people_doc() -> None:
         "`scripts/seed_demo_fixtures.py` (DECISIONS #133). Names were chosen to be plausible and are not real people. Emails end in `.test`. "
         "There are no NRIC numbers or other real personal data anywhere.", "",
         "**Business titles are not app roles.** The app has four roles (`owner`, `admin`, `user`, `viewer`; `app/auth.py`), and the user ruled "
-        "that role labels are names only: no new column, no migration, no title inside a display name. A person's business title lives in "
-        "this file only. A later item (S3, not built) will show it next to the name in History, reading this table.", "",
+        "that role labels are names only: no title inside a display name, and nothing in the app reads a title to decide what a person may do. A person's business title lives in "
+        "this file and, per company, in `membership.title` (S3, DECISIONS #136), which `scripts/seed_demo_fixtures.py` writes from the same data as this "
+        "table. History shows it next to the name.", "",
         f"The group is **{GROUP_NAME}**. The picker owner (`owner@try-demo.test`, Priya Ramanathan) owns all three companies; the six emails "
         "in the demo login picker (`web/src/config/demo.ts`) are all members of the FIRST company. People with other emails are members of "
         "one company each and are not in the picker.", "",

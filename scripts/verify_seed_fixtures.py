@@ -101,12 +101,14 @@ def main(argv: list[str] | None = None) -> int:
             out["checklist"][c["key"]] = {"satisfied": statuses.count("satisfied"), "missing": statuses.count("missing"), "rows": len(statuses)}
         edited = db.execute("SELECT DISTINCT d.id FROM document d JOIN document_activity a ON a.lifecycle_id = d.lifecycle_id WHERE a.action = 'edited' "
                             "AND d.company_id = ?", (c0,)).fetchall()
-        actors, samples = set(), []
+        actors, samples, titles = set(), [], set()
         for e in edited:
             entries = client.get(f"/api/documents/{e['id']}/history", headers=owner).json()["entries"]
             actors.update(x["actor_name"] for x in entries)
-            samples.append([f"{x['action']} by {x['actor_name']}" for x in entries])
-        out["history"] = {"distinct_actors": sorted(a for a in actors if a), "edited_documents": len(edited), "sample": samples[:3]}
+            samples.append([f"{x['action']} by {x['actor_name']}" + (f" ({x['actor_title']})" if x.get("actor_title") else "") for x in entries])
+            titles.update(x.get("actor_title") for x in entries)
+        out["history"] = {"distinct_actors": sorted(a for a in actors if a), "edited_documents": len(edited), "sample": samples[:3],
+                          "titles_shown": sorted(t for t in titles if t)}
         summary = client.get("/api/documents", headers=owner).json()
         out["history"]["purge_requested_visible_to_owner"] = sum(1 for d in summary if d.get("status") == "purge_requested")
 
@@ -202,6 +204,14 @@ def main(argv: list[str] | None = None) -> int:
     check("every_seeded_upload_has_an_uploaded_event_by_its_uploader", db.execute(
         "SELECT COUNT(*) FROM document d WHERE d.source_identity = 'seed-fixture' AND NOT EXISTS (SELECT 1 FROM document_activity a WHERE a.lifecycle_id = d.lifecycle_id "
         "AND a.action = 'uploaded' AND a.actor_user_id = d.uploaded_by_user_id)").fetchone()[0] == 0)
+    early_events = db.execute(
+        "SELECT COUNT(*) FROM document_activity e JOIN document_activity u ON u.lifecycle_id = e.lifecycle_id AND u.action = 'uploaded' "
+        "WHERE e.action != 'uploaded' AND e.at < u.at").fetchone()[0]
+    check("no_history_event_precedes_its_documents_upload", early_events == 0, f"{early_events} event(s) dated before the upload")
+    order = db.execute(
+        "SELECT COUNT(*) FROM document_activity c JOIN document_activity r ON r.lifecycle_id = c.lifecycle_id AND r.action = 'purge_requested' "
+        "WHERE c.action = 'purge_cancelled' AND c.at < r.at").fetchone()[0]
+    check("a_purge_is_never_cancelled_before_it_was_requested", order == 0)
     check("no_trace_row_pretends_to_be_a_model_call", db.execute("SELECT COUNT(*) FROM trace t JOIN document d ON d.id = t.document_id WHERE d.source_identity = 'seed-fixture' AND t.model IS NOT NULL").fetchone()[0] == 0)
 
     out["ok"] = not fails

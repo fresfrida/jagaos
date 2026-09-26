@@ -222,6 +222,12 @@ def test_history_has_varied_actors_and_a_pending_purge_request(seeded):
     assert cancelled == "filed"  # restored
 
 
+def test_no_history_event_is_dated_before_its_documents_upload_and_a_cancel_never_precedes_its_request(seeded):
+    inv = seeded["report"]["invariants"]
+    assert inv["no_history_event_precedes_its_documents_upload"]["ok"], inv["no_history_event_precedes_its_documents_upload"]["detail"]
+    assert inv["a_purge_is_never_cancelled_before_it_was_requested"]["ok"]
+
+
 def test_a_viewer_cannot_see_only_me_files(seeded):
     assert seeded["report"]["invariants"]["viewer_cannot_see_only_me"]["ok"]
 
@@ -255,3 +261,19 @@ def test_no_login_session_is_left_behind(seeded):
 def test_thumbnails_were_pre_generated_for_the_seeded_pdfs(seeded):
     thumbs = Path(seeded["docs"]).parent / "thumbnails"
     assert len(list(thumbs.glob("*"))) >= 250
+
+
+def test_every_person_holds_the_manifests_business_title_in_that_company_and_history_shows_it(seeded):
+    """S3 (DECISIONS #136): the title comes from the same data docs/DEMO-PEOPLE.md is generated from, per company (membership.title)."""
+    con = sqlite3.connect(seeded["db"])
+    got = {(r[0], r[1]): r[2] for r in con.execute(
+        "SELECT c.name, u.email, m.title FROM membership m JOIN company c ON c.id = m.company_id JOIN app_user u ON u.id = m.user_id")}
+    for company in MANIFEST["companies"]:
+        for person in MANIFEST["people"][company["key"]]:
+            assert got[(company["name"], person["email"])] == person["title"], (company["name"], person["email"])
+    assert got[("Tembusu Row Engineering Pte Ltd", "user@try-demo.test")] == "Corp Sec"
+    assert got[("Pasir Kelana Logistics Pte Ltd", "owner@try-demo.test")] == "Group Managing Director"   # the same person, another title, another company
+    titles = seeded["report"]["history"]["titles_shown"]
+    assert titles and set(titles) <= {p["title"] for p in MANIFEST["people"]["c0"]}
+    docs = (REPO / "docs" / "DEMO-PEOPLE.md").read_text()
+    assert all(p["title"] in docs and p["email"] in docs for k in MANIFEST["people"] for p in MANIFEST["people"][k])

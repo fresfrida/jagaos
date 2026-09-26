@@ -73,7 +73,7 @@
     "email": "user@try-demo.test",
     "name": "Rachel Tan Hui Min",
     "role": "user",
-    "title": "Company Secretary (Corp Sec)"
+    "title": "Corp Sec"
    },
    {
     "key": "user1",
@@ -117,7 +117,7 @@
     "email": "grace.lim@pasirkelana.test",
     "name": "Grace Lim Siew Ling",
     "role": "user",
-    "title": "Company Secretary (Corp Sec)"
+    "title": "Corp Sec"
    },
    {
     "key": "user1",
@@ -147,7 +147,7 @@
     "email": "farah.yusof@cendanawharf.test",
     "name": "Farah Yusof",
     "role": "user",
-    "title": "Company Secretary (Corp Sec)"
+    "title": "Corp Sec"
    },
    {
     "key": "user1",
@@ -325,7 +325,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2017, net GST payable SGD 3,461.49",
    "gst_quarter_end": "2017-03-31",
-   "sha256": "230cec4ec38bba51a3491c0769ce8d84a40d7375a7eaff5a95ff640304c962d9"
+   "sha256": "020fdfa6ed4d49be49e7a65f8db665bb810fb5a1e105d0a407242fc10a743b77"
   },
   {
    "file": "c0/2017-05-31_AGM_Minutes_FY2016.pdf",
@@ -428,7 +428,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2017, net GST payable SGD 6,867.51",
    "gst_quarter_end": "2017-06-30",
-   "sha256": "b31656f58d71aab4107e8f3682d1a83c39b92328d82517c1c326e53794ba030b"
+   "sha256": "214890d58922124a82e06cdf5c1b4943803f3d060f2a76b6a0e49d7a7925b436"
   },
   {
    "file": "c0/2017-09-26_DiyaSweetsSavouries_DSS-2017-0059.pdf",
@@ -472,7 +472,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Sep 2017, net GST payable SGD 5,318.65",
    "gst_quarter_end": "2017-09-30",
-   "sha256": "88cea6be367e53826019b8cb92da6d129d7c8f197fb4aa609395706e3512517d"
+   "sha256": "450f2db5d81d032f544a6b75350cf12d318d15dcf7a04dc1af20b3b981b74d37"
   },
   {
    "file": "c0/2017-12-03_SunbeamCateringServices_SCS-2017-0017.pdf",
@@ -700,7 +700,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2018, net GST payable SGD 5,125.72",
    "gst_quarter_end": "2018-03-31",
-   "sha256": "e718e44a62a468778c4abfc0f1ff3b7d5a990811bcf522f292b0ba0e9e9cf61d"
+   "sha256": "f1d5b8596026b9a400119ed3db5468f62aa36f04da74a837f25f70f757deb6f3"
   },
   {
    "file": "c0/2018-05-21_PandanLeafHampers_PLH-2018-0012.pdf",
@@ -787,7 +787,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2018, net GST payable SGD 5,489.70",
    "gst_quarter_end": "2018-06-30",
-   "sha256": "2e3f04c25cfbd88ade13450da419545661e773b40c33e46f8835094cdb4151f1"
+   "sha256": "2947985deb7b92b7133460ee2b8428a63ed69eca13f2f8cde7c836cb22807b60"
   },
   {
    "file": "c0/2018-07-17_Annual_Return_FY2017.pdf",
@@ -890,7 +890,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Sep 2018, net GST payable SGD 4,507.39",
    "gst_quarter_end": "2018-09-30",
-   "sha256": "b5e8a0d5ad14ed353b341c3897aa94e84ea30e18a9a82c7b47cd32717c28e606"
+   "sha256": "95c02ee2cacdea130586a90f661a64fabea10163f0472d080a1c5b19c329d3bf"
   },
   {
    "file": "c0/2018-10-25_MarigoldGiftsFlorist_MGF-2018-0020.pdf",
@@ -1172,7 +1172,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2019, net GST payable SGD 5,711.08",
    "gst_quarter_end": "2019-03-31",
-   "sha256": "4540ad645c46503ef391743e2ce58bf37127658b01a6e4a7f1a71e579f30e565"
+   "sha256": "41c5ee96e8bb26ee4ba16f0d5352588df504898cbb52158b0940e763653b4186"
   },
   {
    "file": "c0/2019-05-21_WarungSedapCatering_WSC-2019-0055.pdf",
@@ -1259,7 +1259,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2019, net GST payable SGD 5,063.69",
    "gst_quarter_end": "2019-06-30",
-   "sha256": "00ed603c6f7f486dbccfc1e632303c370b5014d0fb04e43d17aaaf967c192896"
+   "sha256": "881b95d987c27ec4f4f3a3958b3f4f6b8a1fa8fc3230e7b516bc988fd5a7f3f5"
   },
   {
    "file": "c0/2019-07-13_Annual_Return_FY2018.pdf",
@@ -1364,7 +1364,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Sep 2019, net GST payable SGD 6,265.30",
    "gst_quarter_end": "2019-09-30",
-   "sha256": "bea35b9a21a7351ff66dd33770cd3d5d4c3f57017f6a0f909ccf0024c3bd618b"
+   "sha256": "af3199ef045c1c8588a1200b671113399fbd85ff13556ae01b74672ea5b3a952"
   },
   {
    "file": "c0/2019-11-28_Auditor_Engagement_FY2019.pdf",
@@ -1662,7 +1662,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2020, net GST payable SGD 5,743.32",
    "gst_quarter_end": "2020-03-31",
-   "sha256": "e58632729699dd9e93c7b2cbcba64552d18d425617f739c99a2ecee9bc3f4dd3"
+   "sha256": "bf671a1ecc9c57cd973b6bea13327bf0f2e162e3e5c4cc7e9bd68097d766e4f5"
   },
   {
    "file": "c0/2020-04-28_PandanLeafHampers_PLH-2020-0018.pdf",
@@ -1765,7 +1765,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2020, net GST payable SGD 5,796.75",
    "gst_quarter_end": "2020-06-30",
-   "sha256": "3937a4503c1a286224a1c63cb57c47c7b1a0ae416c05446551283f1dbe0c152a"
+   "sha256": "6ef7d240012e59289eab177964018aa6dd4b66b8d4aebcd037d0dabb66a5e3c1"
   },
   {
    "file": "c0/2020-10-17_GST_F5_2020_09.pdf",
@@ -1782,7 +1782,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Sep 2020, net GST payable SGD 6,858.12",
    "gst_quarter_end": "2020-09-30",
-   "sha256": "685bf573ac33b2757fab5f9a8f929fb201c93cb6601119e66a21feb261266f62"
+   "sha256": "7edcae749047d4ef079bbb7a0e4e5c5a6da69c26f6798cefd259d7df7ba6aa80"
   },
   {
    "file": "c0/2020-10-27_MarigoldGiftsFlorist_MGF-2020-0020.pdf",
@@ -2080,7 +2080,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2021, net GST payable SGD 5,800.86",
    "gst_quarter_end": "2021-03-31",
-   "sha256": "beb39d8de6bdf1d0f40f4b0170a47764afdef74c7b31fa691fd6bdc6a46b24c7"
+   "sha256": "756e261c052d6e741f43d94852e393bb7beb1a5b66b7698beb10774c80558131"
   },
   {
    "file": "c0/2021-04-18_PandanLeafHampers_PLH-2021-0033.pdf",
@@ -2167,7 +2167,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2021, net GST payable SGD 7,244.49",
    "gst_quarter_end": "2021-06-30",
-   "sha256": "c171cdd72996d6b93655f5d98fcf82594a1b94e95cd27032a4385c7f38fbdb1f"
+   "sha256": "56469916c503e5204a24623d22c5f0f9f1a072b3b7e4dc73cacc20205d6756d4"
   },
   {
    "file": "c0/2021-07-18_Annual_Return_FY2020.pdf",
@@ -2200,7 +2200,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Sep 2021, net GST payable SGD 6,586.30",
    "gst_quarter_end": "2021-09-30",
-   "sha256": "46381055c2c64c47f959568a673736c919fac68b333898de1eee88a564e4f52b"
+   "sha256": "ea6c579af582be6e16cdce6cdf71a0b9f0490fb801b03a7cc6b9de1dc0c09871"
   },
   {
    "file": "c0/2021-10-23_DiyaSweetsSavouries_DSS-2021-0022.pdf",
@@ -2552,7 +2552,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2022, net GST payable SGD 7,309.47",
    "gst_quarter_end": "2022-03-31",
-   "sha256": "5b7384730fafac8100d49751e2b405ef3c378b35cd4b7df7bb9e12951373b467"
+   "sha256": "5363891e625cc952e6b1cca868419ce6484940209b081691efd5018439ce58f4"
   },
   {
    "file": "c0/2022-06-13_AGM_Minutes_FY2021.pdf",
@@ -2585,7 +2585,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2022, net GST payable SGD 5,395.87",
    "gst_quarter_end": "2022-06-30",
-   "sha256": "2d7a85b2568cf59ec11e30d59e6a12574587c019645129fefc7bfc122fc65d3c"
+   "sha256": "f003b8b6409a0722e53a7d290b5a7ec848730964e6d381ccbb0656846e8a5c27"
   },
   {
    "file": "c0/2022-07-11_Annual_Return_FY2021.pdf",
@@ -2645,7 +2645,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Sep 2022, net GST payable SGD 5,307.05",
    "gst_quarter_end": "2022-09-30",
-   "sha256": "ffc49cbf0b31acc6a0e9c8a35c590d9839e72238cf5fd7c059c7c4b5c838a193"
+   "sha256": "6e1edd2d6b628621e6b93c1911fa2c270adc909af17be196347c5b1cc1e9e742"
   },
   {
    "file": "c0/2022-11-25_Auditor_Engagement_FY2022.pdf",
@@ -2927,7 +2927,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2023, net GST payable SGD 5,112.86",
    "gst_quarter_end": "2023-03-31",
-   "sha256": "f36730e85af822953bcf509889489d016153d2f1dabf976e6e5b7de1f6a00b21"
+   "sha256": "3356035c032d83a342de2bab5ae331c90a289bff9c8c1b32a7d458fd37575eb1"
   },
   {
    "file": "c0/2023-05-22_AGM_Minutes_FY2022.pdf",
@@ -2976,7 +2976,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2023, net GST payable SGD 6,637.32",
    "gst_quarter_end": "2023-06-30",
-   "sha256": "6fc60d457bea3553e09b59f1857a60d18d074ff8abdb1fe0f14eccae9e8807e3"
+   "sha256": "3ca3644e9d6546eb5ac5fce407ee551c747269d41b68c1261a133c7d655a2b58"
   },
   {
    "file": "c0/2023-09-04_Master_Supply_Agreement.pdf",
@@ -3063,7 +3063,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Sep 2023, net GST payable SGD 7,823.24",
    "gst_quarter_end": "2023-09-30",
-   "sha256": "e58beda4d3b1da2dc3ae766c29906d1f4979622081b3a316f59193976248e50c"
+   "sha256": "e440c2f3322c462e3af923f5d1c558a0b0c1c0757070f361cb2d89956c9039d5"
   },
   {
    "file": "c0/2023-10-23_DiyaSweetsSavouries_DSS-2023-0015.pdf",
@@ -3451,7 +3451,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2024, net GST payable SGD 7,648.43",
    "gst_quarter_end": "2024-03-31",
-   "sha256": "1c71121071edbe82eb9804fccd9f08d38f723b0352cf4c4a33b5fb5902cec65c"
+   "sha256": "f9e7c763b80ac2aa4833297560ec046a0c79bd4f5ef5214ddac3d1971a1da7c9"
   },
   {
    "file": "c0/2024-05-26_AGM_Minutes_FY2023.pdf",
@@ -3484,7 +3484,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2024, net GST payable SGD 6,509.38",
    "gst_quarter_end": "2024-06-30",
-   "sha256": "6c6f3323de058c01e03ddeaf49080975d07b3444f326b8f44b55c592fae66ef0"
+   "sha256": "a426f7f6a82a5c1eee1c25bdd72d35a08636e3390389b7a320fc66dcee303b59"
   },
   {
    "file": "c0/2024-07-20_Annual_Return_FY2023.pdf",
@@ -3571,7 +3571,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Sep 2024, net GST payable SGD 7,110.17",
    "gst_quarter_end": "2024-09-30",
-   "sha256": "9a65f20ccc12b2dc8cfd41dfde483f0cc320939cff90995ba0b22be5bd80f39d"
+   "sha256": "186c02880aab9d9acea125441ae13848ce0a41663057423d09d0e53ade45d1f4"
   },
   {
    "file": "c0/2024-11-21_Auditor_Engagement_FY2024.pdf",
@@ -3853,7 +3853,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2025, net GST payable SGD 5,887.68",
    "gst_quarter_end": "2025-03-31",
-   "sha256": "1a647c6f074aec18e4b795ea6591a5e12ebf78599b9ecd535df77fcb5eddc27b"
+   "sha256": "23a7c4a03e0aaeea6fda2d02d7a4a92c480a06ebbb893aa147e18fd569b40f59"
   },
   {
    "file": "c0/2025-05-23_AGM_Minutes_FY2024.pdf",
@@ -3886,7 +3886,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2025, net GST payable SGD 4,819.70",
    "gst_quarter_end": "2025-06-30",
-   "sha256": "cdf1ac6236ae05f142fcddbcc132b73a91d210746756de839a39e925fab42cbc"
+   "sha256": "7958bed4bcf4bbf9b5ab19033657d56a483353bfa3b8ba90ee493a9a74197c6f"
   },
   {
    "file": "c0/2025-07-15_Annual_Return_FY2024.pdf",
@@ -4027,7 +4027,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Sep 2025, net GST payable SGD 7,664.58",
    "gst_quarter_end": "2025-09-30",
-   "sha256": "4fed111cd3687bc229c25e6c93bb917af7a3f2a92a282cf173fe2ad41e823e41"
+   "sha256": "bf9a027f2e61216ce1dcf666bf6b249c5c4e1993434380daafac4de2287785fd"
   },
   {
    "file": "c0/2025-11-03_Flat_Renewal_Quote.pdf",
@@ -4320,7 +4320,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Mar 2026, net GST payable SGD 5,250.88",
    "gst_quarter_end": "2026-03-31",
-   "sha256": "06fef308b3b52a5ecd254a580a127b6babd27311cfa9994cd3d80a470890ad5f"
+   "sha256": "29d763834e4e92072a56384c990f430985fdbcc1150ce097b79c92b44b5161df"
   },
   {
    "file": "c0/2026-05-10_PrimelinkStationerySuppl_PSS-2026-0025.pdf",
@@ -4380,7 +4380,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 30 Jun 2026, net GST payable SGD 5,781.77",
    "gst_quarter_end": "2026-06-30",
-   "sha256": "742cf4f17e2fabb2b1906afa994f3a5568607451c6073f66fdcc130173be32a1"
+   "sha256": "1d553242b82c34b10a1ff20f70e98c48483a9d9e1bca3060b74c5b73c5f31769"
   },
   {
    "file": "c0/2026-07-15_Annual_Return_FY2025.pdf",
@@ -5184,7 +5184,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Jul 2022, net GST payable SGD 5,394.84",
    "gst_quarter_end": "2022-07-31",
-   "sha256": "4dd37abc65c70755801cfc96a5d07ab0b5047c463ec5aaa805d4d46847a9377a"
+   "sha256": "c0c6f9dbf6453d7b752a4c2a3bb35601a1c8398b4ff5583c5e23a20d79606c5a"
   },
   {
    "file": "c1/2022-09-19_SwiftlinkBroadbandPteLtd_SBP-2022-0016.pdf",
@@ -5244,7 +5244,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Oct 2022, net GST payable SGD 4,317.26",
    "gst_quarter_end": "2022-10-31",
-   "sha256": "7898df64296d305c9c083547f3691f8feecc9b7b2c78296a3c2d00ba8c0a6692"
+   "sha256": "3bf77603ce3a3ee5e98686fbd8be2a041d60e9f3c8b8c8c69e37579a802dd83f"
   },
   {
    "file": "c1/2022-12-08_SunbeamCateringServices_SCS-2022-0016.pdf",
@@ -5331,7 +5331,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Jan 2023, net GST payable SGD 4,626.63",
    "gst_quarter_end": "2023-01-31",
-   "sha256": "f730b2fce2810c89d97cf82b0ad6e2d811520719c505b9ab61a7b307ae3f6bae"
+   "sha256": "9d4475be6b30e3513f528f37fe2cffdea589685ae68f6892a55d25c5f0ad4596"
   },
   {
    "file": "c1/2023-04-10_PandanLeafHampers_PLH-2023-0013.pdf",
@@ -5419,7 +5419,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Jul 2023, net GST payable SGD 6,999.55",
    "gst_quarter_end": "2023-07-31",
-   "sha256": "7e388a8d2b5276eb850630f37e0e1057665a2ee74879d2c011165d1446e45a9b"
+   "sha256": "e6b4e7c47b843c432d5bd6ef7332c39a28ccc6ed86a0492e12e874ab250a7820"
   },
   {
    "file": "c1/2023-11-13_GST_F5_2023_10.pdf",
@@ -5436,7 +5436,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Oct 2023, net GST payable SGD 6,992.21",
    "gst_quarter_end": "2023-10-31",
-   "sha256": "7ddc8332472a7d489b58a97793740768543b5ce1e6d3efea15326de3c5af43e3"
+   "sha256": "20997bcd45a9446a61b30bf5679d9113a62850d7779f5f27f1401b96c368c1a7"
   },
   {
    "file": "c1/2023-11-22_AGM_Minutes_FY2023.pdf",
@@ -5539,7 +5539,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Jan 2024, net GST payable SGD 6,684.24",
    "gst_quarter_end": "2024-01-31",
-   "sha256": "f3ebb3c157e8c49f752679134722e32940fef00c3c80caffd0b4c962cb6a9cb5"
+   "sha256": "b4f59754cf8f36c64dac859d3d57b117d5fb1a22fec7130ed91436c408ee35c5"
   },
   {
    "file": "c1/2024-04-02_PandanLeafHampers_PLH-2024-0039.pdf",
@@ -5627,7 +5627,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Jul 2024, net GST payable SGD 7,422.29",
    "gst_quarter_end": "2024-07-31",
-   "sha256": "819ae8ed00e61d84a6fbe139d50f482cb63d4261b41a5179a2aeb3c21e8ba836"
+   "sha256": "4cdacf9bf33135ba42710b21ba6ac91a5e7fb1d5714b2fc2cc68397a4ede3048"
   },
   {
    "file": "c1/2024-11-14_GST_F5_2024_10.pdf",
@@ -5644,7 +5644,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Oct 2024, net GST payable SGD 4,999.17",
    "gst_quarter_end": "2024-10-31",
-   "sha256": "9e90254cf78c7844b947e819c047b388b699ffeccc5260a025e882d091b1dc5e"
+   "sha256": "a41244a0577088ce3ae4b15ec882ddb1051cef22a5126984aab0e5b4ac2c6aad"
   },
   {
    "file": "c1/2024-11-23_SwiftlinkBroadbandPteLtd_SBP-2024-0045.pdf",
@@ -5774,7 +5774,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Jan 2025, net GST payable SGD 4,722.46",
    "gst_quarter_end": "2025-01-31",
-   "sha256": "1730e1a5247e94950ed3f2e0e9b138d8def866b7ca93a386c7536c6523acf5a2"
+   "sha256": "c5cd3658bb574baadfd2e5d84e63366df7e4f16c9ba7cac086c6e8bd7e28c71d"
   },
   {
    "file": "c1/2025-03-16_PandanLeafHampers_PLH-2025-0056.pdf",
@@ -5862,7 +5862,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Jul 2025, net GST payable SGD 5,182.03",
    "gst_quarter_end": "2025-07-31",
-   "sha256": "e1a20cc00bf9042e7b1b03e250c45940012f591f240044eec25e1b568d1be7c4"
+   "sha256": "78dd857549bfa3eaaf126469b9a039363e211e970d6b262802c2e54cadccfe1f"
   },
   {
    "file": "c1/2025-11-10_GST_F5_2025_10.pdf",
@@ -5879,7 +5879,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Oct 2025, net GST payable SGD 5,066.08",
    "gst_quarter_end": "2025-10-31",
-   "sha256": "852d433fe2aaf54e4eba26a2e7e780a0158a977fda85dfcf3014f8e22fcc6d43"
+   "sha256": "97f21032634a19f9e1b178035f8b0315f76f35b5d4c7b4db40638bdb153ff2f8"
   },
   {
    "file": "c1/2025-11-12_GreenlineCouriersPteLtd_GCP-2025-0021.pdf",
@@ -6009,7 +6009,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Jan 2026, net GST payable SGD 6,089.38",
    "gst_quarter_end": "2026-01-31",
-   "sha256": "ca4c52d2d12342f367d0d1a43a8e50ac7db0883690ad20bf69a5ae74480495f3"
+   "sha256": "c95db0115581422d7494fc4090f888b9650510ed4f461d46a29e28177e89a987"
   },
   {
    "file": "c1/2026-03-01_PandanLeafHampers_PLH-2026-0040.pdf",
@@ -6124,7 +6124,7 @@
    "vendor": "IRAS (fixture)",
    "description": "GST F5 return acknowledgement and payment receipt for the quarter ended 31 Jul 2026, net GST payable SGD 7,475.30",
    "gst_quarter_end": "2026-07-31",
-   "sha256": "b1da955ccab834265728f74466de065d3dd2facdfeb55a1a4c5588ed128a3773"
+   "sha256": "d7dae6edd351ce53c901680ae67b7c4caff3a87eb0976531931b9b9637740585"
   },
   {
    "file": "c2/2020-01-06_Certificate_of_Incorporation.pdf",
