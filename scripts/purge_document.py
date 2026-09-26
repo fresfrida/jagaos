@@ -59,6 +59,7 @@ load_dotenv()
 
 # The implementation moved to app/purge.py in round 20 (DECISIONS #99) so the API can use it too; these names are
 # re-exported because scripts/reset_demo_data.py and the tests import them from here.
+from app import activity  # noqa: E402
 from app.db import DB_PATH  # noqa: E402
 from app.purge import (  # noqa: E402,F401
     ACTOR,
@@ -81,8 +82,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--apply", action="store_true", help="actually delete (default: dry run)")
     parser.add_argument("--expect", metavar="TEXT", help="refuse unless each document's filename or description contains TEXT")
     parser.add_argument("--vacuum", action="store_true", help="checkpoint the WAL and VACUUM afterwards")
+    parser.add_argument(
+        "--actor", metavar="NAME",
+        help="who is deleting (required with --apply): recorded in the document's history as the person who deleted it, exactly as typed",
+    )
     args = parser.parse_args(argv)
-    return purge_documents(args.ids, apply=args.apply, expect=args.expect, vacuum=args.vacuum)
+    actor = activity.operator(args.actor) if args.actor and args.actor.strip() else None
+    return purge_documents(args.ids, apply=args.apply, expect=args.expect, vacuum=args.vacuum, actor=actor)
 
 
 if __name__ == "__main__":

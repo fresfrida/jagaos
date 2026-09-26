@@ -13,6 +13,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app import activity
 from app.db import DB_PATH, get_conn, parse_description
 from app.graph.derive_expectations import reconcile_expectations
 from app.rules.transitions import reopen_expectation
@@ -134,11 +135,17 @@ def plan_purge(conn: sqlite3.Connection, document_id: int, expect: str | None = 
     )
 
 
-def execute_purge(conn: sqlite3.Connection, plan: PurgePlan) -> None:
+def execute_purge(conn: sqlite3.Connection, plan: PurgePlan, actor: activity.Actor) -> None:
     """Deletes the rows in dependency order, inside the caller's transaction (the
     caller commits, or rolls everything back if anything here raises: foreign keys
-    are ON, so a reference this missed is an IntegrityError, never a dangling row)."""
+    are ON, so a reference this missed is an IntegrityError, never a dangling row).
+
+    `actor` is who is deleting it, and is REQUIRED (round 6, DECISIONS #129): the "Deleted" event is written first, in this same
+    transaction and BEFORE the document row goes, so it is committed with the deletion or not at all. That event lives in
+    `document_activity`, which has no foreign key to anything and is not in HANDLED_REFERENCES on purpose: it is not a reference
+    to be satisfied here, it is the record that must survive this function."""
     document_id = plan.document["id"]
+    activity.record_for_document(conn, document_id, activity.DELETED, actor)
     if plan.obligations:
         m = _marks(plan.obligations)
         conn.execute(f"DELETE FROM notification WHERE obligation_id IN ({m})", plan.obligations)
@@ -205,7 +212,7 @@ def _checkpoint(vacuum: bool) -> None:
         conn.close()
 
 
-def apply_plans(plans: list[PurgePlan], *, vacuum: bool = False, out=print) -> list[str]:
+def apply_plans(plans: list[PurgePlan], *, actor: activity.Actor, vacuum: bool = False, out=print) -> list[str]:
     """Carry out planned purges, one transaction each, then the clean-up that must follow: remove the stored
     file (unless another row shares it) and a PDF's cached thumbnail, re-check the compliance checklist, merge
     the search index and checkpoint the WAL. Returns the stored files that could not be removed (their rows are
@@ -215,7 +222,7 @@ def apply_plans(plans: list[PurgePlan], *, vacuum: bool = False, out=print) -> l
     for plan in plans:
         with get_conn(DB_PATH) as conn:
             conn.execute("PRAGMA secure_delete = ON")  # overwrite deleted content instead of leaving it in free pages
-            execute_purge(conn, plan)
+            execute_purge(conn, plan, actor)
         companies.add(plan.document["company_id"])
         out(f"purged document {plan.document['id']}: rows deleted")
         if plan.file_shared:
@@ -240,21 +247,26 @@ def apply_plans(plans: list[PurgePlan], *, vacuum: bool = False, out=print) -> l
     return failed_files
 
 
-def purge_now(document_id: int, *, expect: str | None = None) -> list[str]:
+def purge_now(document_id: int, *, actor: activity.Actor, expect: str | None = None) -> list[str]:
     """The API's entry (POST /api/documents/{id}/purge): one document, planned and applied. Returns the stored
     files that could not be removed (empty when everything went). Raises PurgeRefused, with nothing changed, when
     the document is gone or the schema has a reference this code does not handle."""
     with get_conn(DB_PATH) as conn:
         plan = plan_purge(conn, document_id, expect)
-    return apply_plans([plan], out=lambda _line: None)
+    return apply_plans([plan], actor=actor, out=lambda _line: None)
 
 
 def purge_documents(
     ids: list[int], *, apply: bool = False, expect: str | None = None, vacuum: bool = False, out=print,
+    actor: activity.Actor | None = None,
 ) -> int:
     """Plan every id first (any refusal stops everything, nothing changed), then,
     with `apply`, purge them one transaction each. Returns the exit code."""
     ids = list(dict.fromkeys(ids))
+    if apply and actor is None:
+        # A hard delete must say who did it (round 6, DECISIONS #129): the audit trail records a truthful operator, never a made-up one.
+        out("REFUSED: --apply needs --actor NAME (who is deleting this). Nothing was changed.")
+        return 2
     out(f"Database: {Path(DB_PATH).resolve()}")
     try:
         with get_conn(DB_PATH) as conn:
@@ -269,7 +281,7 @@ def purge_documents(
         out("\nDRY RUN: nothing was changed. Re-run with --apply to delete the above for good.")
         return 0
 
-    failed_files = apply_plans(plans, vacuum=vacuum, out=out)
+    failed_files = apply_plans(plans, actor=actor, vacuum=vacuum, out=out)
     if failed_files:
         out("ROWS DELETED BUT FILE(S) NOT REMOVED, delete them by hand: " + "; ".join(failed_files))
         return 4

@@ -117,10 +117,11 @@ def extract(state: PipelineState) -> PipelineState:
 
     model_cls, tool_name, description = tool_info
     tool = to_tool(model_cls, tool_name, description)
-    user = untrusted_prompt(state.get("text", ""))
+    user = untrusted_prompt(state.get("text", ""), state.get("text_char_limit"))
 
     llm_result = call(MODEL_NAME, SYSTEM, user, tools=[tool],
-                       tool_choice={"type": "function", "function": {"name": tool_name}})
+                       tool_choice={"type": "function", "function": {"name": tool_name}},
+                       purpose="extract", document_id=state["document_id"], run_id=state.get("run_id"))
     # 2026-09-24: confirmed live (adversarial invoice-shaped text) that the
     # model can return zero tool calls despite tool_choice forcing one —
     # indexing tool_calls[0] unconditionally raised a raw TypeError (500),

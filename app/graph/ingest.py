@@ -7,9 +7,11 @@ import os
 import shutil
 from pathlib import Path
 
+from app import activity
 from app.db import DB_PATH, get_conn, reindex_document_search
-from app.extract import exif, ocr, pdf
+from app.extract import exif, image_prep, ocr, pdf
 from app.graph.state import PipelineState
+from app.guards.injection import IMAGE_TEXT_CHAR_LIMIT, LLM_TEXT_CHAR_LIMIT
 
 # 2026-09-24 (item 7, lifecycle audit): .env.example has declared
 # JAGA_DOCS_PATH="./data/docs" since this project's very first commit, but
@@ -30,13 +32,18 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _local_text(path: Path, media_type: str) -> tuple[str, str]:
+def _local_text(path: Path, media_type: str, ocr_max_edge: int | None = None) -> tuple[str, str]:
+    """The ONE place a document's pixels are read, and read once (round 6, DECISIONS #129): the text is returned here, stored in
+    `document.extracted_text` by ingest(), and every later step (classify, extract, derive_events) works from that stored string.
+    Nothing downstream re-opens the image, and nothing ever sends one to the gateway (it is text-only, MDs/GAPS.md §8)."""
     if media_type == "application/pdf":
         if pdf.has_extractable_text(str(path)):
             return pdf.extract_text(str(path)), "pdfplumber"
-        return ocr.extract_pdf_text(str(path)), "ocr"
+        return ocr.extract_pdf_text(str(path), max_edge=ocr_max_edge), "ocr"
     if media_type.startswith("image/"):
-        text = ocr.extract_text(str(path))
+        # A normalized WORKING COPY, deleted right after: the uploaded file, its hash and its stored copy are untouched.
+        with image_prep.working_copy(str(path)) as prepared:
+            text = ocr.extract_text(prepared)
         if len(text.strip()) >= 10:
             return text, "ocr"
         return "", "exif"
@@ -53,6 +60,7 @@ def ingest(
     db_path: str = DB_PATH,
     visibility: str = "company",
     read_content: bool = True,
+    ocr_max_edge: int | None = None,
 ) -> PipelineState:
     """Not a LangGraph node itself (it runs before we have a document_id to
     key state on) — called from app/main.py to create the document row,
@@ -83,7 +91,7 @@ def ingest(
         # file with no document row — confirmed live, 67 to 68 files in
         # data/docs. Nothing below needs the stored copy to exist yet.
         if read_content:
-            text, text_source = _local_text(src, media_type)
+            text, text_source = _local_text(src, media_type, ocr_max_edge)
             exif_data = exif.read_exif(str(src)) if media_type.startswith("image/") else {}
         else:
             text, text_source, exif_data = "", "none", {}
@@ -110,11 +118,17 @@ def ingest(
                     exif_data.get("occurred_on"), text, text_source, visibility,
                 ),
             )
+            document_id = cur.lastrowid
+            # Round 6 (DECISIONS #129): the row exists, so "Uploaded" is true now, written in this same transaction (both commit or
+            # neither does). By the uploader's name as it is today, else their email; a non-web source names itself, else no name.
+            activity.record_for_document(
+                conn, document_id, activity.UPLOADED,
+                activity.actor_for_user(conn, uploaded_by_user_id, fallback=source_identity),
+            )
         except Exception:
             if created_copy:
                 stored_path.unlink(missing_ok=True)
             raise
-        document_id = cur.lastrowid
 
     # First time extracted_text exists for this document — index it so
     # search works even before classify.py adds description/bucket/
@@ -129,4 +143,7 @@ def ingest(
         "document_id": document_id,
         "text": text,
         "text_source": text_source,
+        # A single photo's text is capped far below a document's (guards/injection.py); the file was normalized above, this bounds
+        # what the model is sent from it.
+        "text_char_limit": IMAGE_TEXT_CHAR_LIMIT if media_type.startswith("image/") else LLM_TEXT_CHAR_LIMIT,
     }

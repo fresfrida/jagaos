@@ -40,6 +40,8 @@ _TABLES = [
     # reset here too, so a prior test's rows for a reused rowid never leak
     # into the next test.
     "document_search",
+    # document_activity has no foreign keys at all (round 6, DECISIONS #129): it must survive a purge, so nothing points at it or from it.
+    "document_activity",
     # download_link points at document and app_user (round 4, DECISIONS #122), so it goes before both.
     "download_link",
     "document", "session", "membership",

@@ -64,8 +64,9 @@ def derive_events(state: PipelineState) -> PipelineState:
         _trace_skip(state, "personal_file")
         return {"events": []}
 
-    user = untrusted_prompt(state.get("text", ""))
-    llm_result = call(MODEL_NAME, SYSTEM, user, tools=[TOOL], tool_choice="auto")
+    user = untrusted_prompt(state.get("text", ""), state.get("text_char_limit"))
+    llm_result = call(MODEL_NAME, SYSTEM, user, tools=[TOOL], tool_choice="auto",
+                      purpose="derive_events", document_id=state["document_id"], run_id=state.get("run_id"))
 
     with get_conn(DB_PATH) as conn:
         conn.execute(

@@ -25,6 +25,7 @@ from PIL import Image
 from app.auth import CurrentMembership, may_cancel_purge_request, may_request_purge, may_see_purge_requested
 from app.db import get_conn
 from app.main import app
+from app.activity import operator
 from app.purge import purge_now
 from app.rules.transitions import InvalidTransition, restore_document_after_purge_request, transition_document
 
@@ -231,7 +232,7 @@ def test_a_purge_requested_document_cannot_be_deleted_or_asked_for_again_and_the
     assert _ask(team, "owner", doc).status_code == 409
     assert doc in _ids(team["tokens"]["owner"])                # still there, still marked
 
-    purge_now(doc)                                             # the team removes the row
+    purge_now(doc, actor=operator("test-operator"))                                             # the team removes the row
 
     assert doc not in _ids(team["tokens"]["owner"])
     assert client.get(f"/api/documents/{doc}/file", headers=_headers(team["tokens"]["owner"])).status_code == 404
@@ -389,7 +390,7 @@ def test_a_request_stops_being_listed_once_the_team_has_purged_the_document(team
     _ask(team, "owner", doc)
     assert [r["id"] for r in _requests(team["tokens"]["owner"]).json()] == [doc]
 
-    purge_now(doc)                                               # what scripts/purge_document.py does
+    purge_now(doc, actor=operator("test-operator"))                                               # what scripts/purge_document.py does
 
     assert _requests(team["tokens"]["owner"]).json() == []
 

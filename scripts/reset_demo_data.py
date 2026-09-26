@@ -56,6 +56,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # seed_dev_db and purge_document
 
 import purge_document  # noqa: E402  (loads .env before app.db is imported)
 import seed_dev_db  # noqa: E402
+from app import activity  # noqa: E402
 from app.db import DB_PATH, get_conn  # noqa: E402
 from app.thumbnails import remove_thumbnail  # noqa: E402
 
@@ -154,7 +155,9 @@ def wipe(conn: sqlite3.Connection, plan: WipePlan) -> None:
     the end rolls the whole thing back rather than leave a dangling row."""
     conn.execute("PRAGMA secure_delete = ON")
     for document_id in plan.document_ids:
-        purge_document.execute_purge(conn, purge_document.plan_purge(conn, document_id))
+        purge_document.execute_purge(
+            conn, purge_document.plan_purge(conn, document_id), activity.operator("system: reset_demo_data"),
+        )
     ids = [c["id"] for c in plan.companies]
     if ids:
         m = _marks(ids)

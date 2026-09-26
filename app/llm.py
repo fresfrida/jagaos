@@ -6,6 +6,8 @@ OpenAI-compatible gateway, native tool calling verified working (GAPS.md
 alongside the trace row the caller writes.
 """
 
+import json
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -35,15 +37,34 @@ PRICE_PER_M_TOKENS = {
 }
 
 
+# The service journal's logger (main.py's `_audit` writes to it too), so a usage line reaches the box's journal.
+_log = logging.getLogger("uvicorn.error")
+
+# One call whose PROMPT alone is this large gets a WARNING as well as its usual line (round 6, DECISIONS #129). Three graph nodes
+# each send the document's text, so a single very large prompt is the first thing to look at when a document's cost surprises.
+INPUT_TOKEN_WARN = int(os.environ.get("LLM_INPUT_TOKEN_WARN", "20000"))
+
+
 @dataclass
 class LLMResult:
     content: str
     tool_calls: list[dict[str, Any]] | None
     model: str
-    input_tokens: int
-    output_tokens: int
-    cost_usd: float
+    # None means the gateway did not report it, NOT zero (round 6, DECISIONS #129): a response with no `usage` object used to
+    # be recorded as 0 tokens and $0, indistinguishable from a real free call. A trace row now stores NULL for it.
+    input_tokens: int | None
+    output_tokens: int | None
+    cost_usd: float | None
     latency_ms: int
+    # Input tokens served from a prompt cache, when the gateway reports such a field at all; None = not reported (which is what
+    # has been observed so far, see docs/DECISIONS.md #129), 0 = reported and nothing was cached.
+    cached_input_tokens: int | None = None
+
+    @property
+    def total_tokens(self) -> int | None:
+        if self.input_tokens is None or self.output_tokens is None:
+            return None
+        return self.input_tokens + self.output_tokens
 
 
 def _client() -> OpenAI:
@@ -56,9 +77,52 @@ def _client() -> OpenAI:
     return OpenAI(base_url=BASE_URL, api_key=API_KEY, max_retries=0)
 
 
-def _cost(model: str, input_tokens: int, output_tokens: int) -> float:
+def _cost(model: str, input_tokens: int | None, output_tokens: int | None) -> float | None:
+    if input_tokens is None or output_tokens is None:
+        return None
     rate = PRICE_PER_M_TOKENS.get(model, PRICE_PER_M_TOKENS["sonnet4.5"])
     return (input_tokens * rate["input"] + output_tokens * rate["output"]) / 1_000_000
+
+
+def _reported_int(value: Any) -> int | None:
+    """A token count the gateway reported, or None when the field is absent or not a whole number."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _cached_input_tokens(usage: Any) -> int | None:
+    """Cached input tokens, from whichever field the gateway uses to say so: the OpenAI-style
+    `prompt_tokens_details.cached_tokens`, or an Anthropic-style `cache_read_input_tokens`. None when NEITHER is present:
+    "not reported" is not "zero", and a cache is never inferred from a request having been accepted (this gateway accepted an
+    image block and silently discarded it, MDs/GAPS.md §8, so acceptance proves nothing)."""
+    details = getattr(usage, "prompt_tokens_details", None)
+    cached = _reported_int(getattr(details, "cached_tokens", None)) if details is not None else None
+    if cached is not None:
+        return cached
+    extra = getattr(usage, "model_extra", None) or {}
+    return _reported_int(extra.get("cache_read_input_tokens", getattr(usage, "cache_read_input_tokens", None)))
+
+
+def _log_usage(
+    *, purpose: str, document_id: int | None, run_id: str | None, model: str, usage: Any, input_chars: int, latency_ms: int,
+    result: "LLMResult",
+) -> None:
+    """ONE structured line per paid call, numbers only. Deliberately never the prompt, the document text, an image, a credential
+    or any response content: `input_chars` is a COUNT of the characters sent, which is what lets an oversized OCR text be spotted
+    without the text being in a log. A missing usage object is logged as unknown, not as 0."""
+    record = {
+        "purpose": purpose, "document_id": document_id, "run_id": run_id, "model": model,
+        "usage": "reported" if usage is not None else "unknown",
+        "input_tokens": result.input_tokens, "output_tokens": result.output_tokens, "total_tokens": result.total_tokens,
+        "cached_input_tokens": result.cached_input_tokens, "input_chars": input_chars, "latency_ms": latency_ms,
+        # Which fields the gateway's usage object carries (names only), so whether it reports any cache field is visible.
+        "usage_fields": sorted(usage.model_dump().keys()) if usage is not None and hasattr(usage, "model_dump") else None,
+    }
+    _log.info("LLM_USAGE %s", json.dumps(record, sort_keys=True))
+    if result.input_tokens is not None and result.input_tokens >= INPUT_TOKEN_WARN:
+        _log.warning(
+            "LLM_USAGE_LARGE purpose=%s document_id=%s input_tokens=%s input_chars=%s (threshold %s)",
+            purpose, document_id, result.input_tokens, input_chars, INPUT_TOKEN_WARN,
+        )
 
 
 def call(
@@ -68,6 +132,9 @@ def call(
     tools: list[dict[str, Any]] | None = None,
     tool_choice: dict[str, Any] | str | None = None,
     max_tokens: int = 2048,
+    purpose: str = "unspecified",
+    document_id: int | None = None,
+    run_id: str | None = None,
 ) -> LLMResult:
     """One chat-completion call. Raises on transport/API error — callers
     (graph nodes) decide whether that becomes a review_item or a 5xx.
@@ -100,10 +167,10 @@ def call(
         else None
     )
     usage = resp.usage
-    input_tokens = usage.prompt_tokens if usage else 0
-    output_tokens = usage.completion_tokens if usage else 0
+    input_tokens = _reported_int(getattr(usage, "prompt_tokens", None)) if usage is not None else None
+    output_tokens = _reported_int(getattr(usage, "completion_tokens", None)) if usage is not None else None
 
-    return LLMResult(
+    result = LLMResult(
         content=choice.message.content or "",
         tool_calls=tool_calls,
         model=model,
@@ -111,4 +178,10 @@ def call(
         output_tokens=output_tokens,
         cost_usd=_cost(model, input_tokens, output_tokens),
         latency_ms=latency_ms,
+        cached_input_tokens=_cached_input_tokens(usage) if usage is not None else None,
     )
+    _log_usage(
+        purpose=purpose, document_id=document_id, run_id=run_id, model=model, usage=usage,
+        input_chars=len(system) + len(user), latency_ms=latency_ms, result=result,
+    )
+    return result

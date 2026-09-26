@@ -1,6 +1,6 @@
 /** The row of text actions on a document card (DECISIONS #108): still text, but real tap targets, evenly spaced. Purge was a fourth action
- * set apart from the rest until DECISIONS #109 folded it into Delete's confirmation, so the row is View, Edit and Delete, with the AI-trace
- * accordion (round 5, items 3/6, DECISIONS #125) as its own always-visible block below, no longer an overflow menu at the row's far end.
+ * set apart from the rest until DECISIONS #109 folded it into Delete's confirmation, so the row is View, Edit and Delete, with the History
+ * accordion (round 5 as the AI trace, DECISIONS #125; round 6 swapped its content, DECISIONS #129) as its own always-visible block below, no longer an overflow menu at the row's far end.
  * jsdom has no layout, so this pins what makes it true; the measured widths, and the Malay row, are checked in a real browser. */
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -42,9 +42,9 @@ describe('document card actions: tap targets', () => {
     }
   })
 
-  it('the AI-trace accordion trigger is its own full-width row, separate from View/Edit/Delete', () => {
+  it('the History accordion trigger is its own full-width row, separate from View/Edit/Delete', () => {
     show()
-    const trigger = screen.getByRole('button', { name: /ai trace/i })
+    const trigger = screen.getByRole('button', { name: /^history/i })
     expect(trigger.className).toContain('w-full')
     expect(action(/^view$/i).parentElement).not.toBe(trigger.parentElement)
   })

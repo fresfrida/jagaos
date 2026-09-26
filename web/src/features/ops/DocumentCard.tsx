@@ -28,9 +28,9 @@ import {
   docTypeLabel,
   useDocumentBlobUrl,
 } from './opsShared'
-import { downloadHref, opsApi, type Bucket, type DocumentRow, type TraceReport } from './opsApi'
+import { downloadHref, opsApi, type Bucket, type DocumentActivityEntry, type DocumentRow } from './opsApi'
 import { isPurgeRequested, isRejectedDocument } from './documentStatus'
-import { TracePanel } from './TracePanel'
+import { HistoryPanel } from './HistoryPanel'
 import { useEditableDescription } from './useEditableDescription'
 
 /** Small preview next to each row in the Documents list (2026-09-22, doc
@@ -216,9 +216,9 @@ export function DocumentCard({
   const [alsoPurge, setAlsoPurge] = useState(false)
   // The owner's purge request, still shown to them until the team removes the row (round 21, DECISIONS #102; round 5,
   // item 2, DECISIONS #125): read-only and marked, but Edit and Delete stay in place, disabled, rather than
-  // disappearing — a document mid-request is not the same as one with nothing left to do, and hiding the "···" menu
-  // this card used to have made AI trace a dead end for exactly the documents someone had just acted on. View and AI
-  // trace both stay fully live either way.
+  // disappearing — a document mid-request is not the same as one with nothing left to do. View and History both stay fully live
+  // either way (round 5 found a "···" menu that was hidden while pending made what it held unreachable for exactly the documents
+  // someone had just acted on; that menu is gone, and History is never gated on this).
   const purgePending = isPurgeRequested(doc)
   // The owner's "also remove it permanently" option in Delete's confirmation: the existing rule (canRequestPurge, never on a personal file), and
   // never on a document already waiting to be purged.
@@ -227,27 +227,28 @@ export function DocumentCard({
   const isPictureLane = doc.lane === 'memory'
   const isPendingCaption = isPictureLane && doc.description === null
 
-  // AI trace (round 5, items 3/6, DECISIONS #125): a per-card accordion, not a menu item or a sibling block a parent
-  // list renders after the card. The collapsed "AI trace · N steps · $X" summary comes from `doc.trace_summary`,
-  // already on the list response (no per-card fetch just to show it, `app/main.py::_trace_summaries`); the full
-  // node-by-node detail is fetched lazily, once, only when a card's own accordion is actually opened.
-  const [traceExpanded, setTraceExpanded] = useState(false)
-  const [traceReport, setTraceReport] = useState<TraceReport | null>(null)
-  const [traceLoading, setTraceLoading] = useState(false)
-  const [traceError, setTraceError] = useState<string | null>(null)
+  // History (round 6, DECISIONS #129; the same per-card expandable panel round 5 built for the AI trace, in the same place, with
+  // different content): what people did to this document. The collapsed "History · N activities" line comes from
+  // `doc.activity_summary`, already on the list response, so showing it costs no fetch; the entries themselves are fetched lazily,
+  // once, only when this card's own panel is opened. Never gated on `purgePending`: the owner keeps their History on a document
+  // with a purge request pending.
+  const [historyExpanded, setHistoryExpanded] = useState(false)
+  const [history, setHistory] = useState<DocumentActivityEntry[] | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
 
-  const toggleTrace = async () => {
-    const opening = !traceExpanded
-    setTraceExpanded(opening)
-    if (opening && traceReport === null && !traceLoading) {
-      setTraceLoading(true)
-      setTraceError(null)
+  const toggleHistory = async () => {
+    const opening = !historyExpanded
+    setHistoryExpanded(opening)
+    if (opening && history === null && !historyLoading) {
+      setHistoryLoading(true)
+      setHistoryError(null)
       try {
-        setTraceReport(await opsApi.getTrace(doc.id))
+        setHistory((await opsApi.getDocumentHistory(doc.id)).entries)
       } catch (e) {
-        setTraceError(e instanceof Error ? e.message : String(e))
+        setHistoryError(e instanceof Error ? e.message : String(e))
       } finally {
-        setTraceLoading(false)
+        setHistoryLoading(false)
       }
     }
   }
@@ -408,10 +409,8 @@ export function DocumentCard({
          with padding either side (a 13px label with no padding was about 16px tall). Round 5, item 2 (DECISIONS #125):
          while a purge is pending, Edit and Delete stay in their normal places, DISABLED (greyed, `aria-disabled`, their
          own handlers refuse to run) rather than disappearing — a document mid-request still needs to be found in the
-         same spot a person looks for it in. The "···" overflow menu this row used to end in is gone: AI trace was its
-         only item, and hiding that whole menu whenever a purge was pending (the old rule) made trace unreachable for
-         exactly the documents someone had just acted on — item 6 replaces it with the always-visible accordion below,
-         never gated on purgePending at all. */}
+         same spot a person looks for it in. The "···" overflow menu this row used to end in is gone (round 5): its
+         only item became the always-visible expandable panel below, which is never gated on purgePending at all. */}
       <div className="mt-1 flex flex-wrap items-center justify-between">
         <div className="-ml-2 mr-6 flex flex-wrap items-center gap-x-1">
           <button onClick={onView} className={ACTION_CLASS}>
@@ -468,28 +467,27 @@ export function DocumentCard({
         </div>
       </div>
 
-      {/* AI trace (round 5, items 3/6, DECISIONS #125): a small, always-visible collapsed summary — never gated on
-         purgePending, so it is never a dead end for a document someone just acted on — that expands the full detail
-         IN PLACE on a second tap, collapsing back on a third. */}
+      {/* History (round 6, DECISIONS #129; round 5, items 3/6, DECISIONS #125 built this panel for the AI trace): a small,
+         always-visible collapsed summary, never gated on purgePending, that expands IN PLACE on a tap and collapses on the next. */}
       <div className="mt-2 border-t border-line pt-2">
         <button
           type="button"
-          onClick={() => void toggleTrace()}
-          aria-expanded={traceExpanded}
+          onClick={() => void toggleHistory()}
+          aria-expanded={historyExpanded}
           className="flex w-full items-center justify-between gap-2 py-1 text-left text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink"
         >
           <span>
-            {doc.trace_summary
-              ? t('ops.documents.traceSummary', { steps: doc.trace_summary.steps, cost: doc.trace_summary.cost_usd.toFixed(4) })
-              : t('ops.documents.traceSummaryEmpty')}
+            {doc.activity_summary
+              ? t('ops.documents.history.summary', { count: doc.activity_summary.count })
+              : t('ops.documents.history.summaryEmpty')}
           </span>
-          <ChevronDown size={16} className={traceExpanded ? 'rotate-180 transition-transform' : 'transition-transform'} aria-hidden="true" />
+          <ChevronDown size={16} className={historyExpanded ? 'rotate-180 transition-transform' : 'transition-transform'} aria-hidden="true" />
         </button>
-        {traceExpanded && (
+        {historyExpanded && (
           <div className="mt-2">
-            {traceLoading && <p className="text-[14px] text-muted">{t('ops.documents.traceLoading')}</p>}
-            {traceError && <p className="text-[14px] text-red-700" role="alert">{traceError}</p>}
-            {traceReport && <TracePanel report={traceReport} />}
+            {historyLoading && <p className="text-[14px] text-muted">{t('ops.documents.history.loading')}</p>}
+            {historyError && <p className="text-[14px] text-red-700" role="alert">{t('ops.documents.history.loadFailed')}</p>}
+            {history && <HistoryPanel entries={history} />}
           </div>
         )}
       </div>

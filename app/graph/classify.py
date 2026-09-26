@@ -249,14 +249,15 @@ def classify(state: PipelineState) -> PipelineState:
                    "description_en": "Untitled photo",
                    "bucket": "Memory Lane", "vendor_name": None}
     else:
-        user = untrusted_prompt(text)
+        user = untrusted_prompt(text, state.get("text_char_limit"))
         system = render_system_prompt(language_name, hint_label(state.get("doc_type_hint")))
         # "haiku" is rejected by the gateway for this team's key — confirmed
         # live 2026-09-21 (GAPS.md's new §11): "Only the approved model is
         # allowed". sonnet4.5 is the only callable model; no cheap-routing
         # cost split is available.
         llm_result = call(MODEL_NAME, system, user, tools=[TOOL],
-                           tool_choice={"type": "function", "function": {"name": "classify_document"}})
+                           tool_choice={"type": "function", "function": {"name": "classify_document"}},
+                           purpose="classify", document_id=state["document_id"], run_id=state.get("run_id"))
         # 2026-09-24: same guard as app/graph/extract.py's identical call
         # site (see its comment) — confirmed live the model can return zero
         # tool calls despite tool_choice forcing one, which raised a raw

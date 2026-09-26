@@ -136,10 +136,27 @@ export interface DocumentRow {
   // GET /api/personal-files (the "Only me" section) and every row there says
   // 'only_me'. Absent from an older backend, which has no personal files.
   visibility?: Visibility
-  // Round 5, item 6 (DECISIONS #125): a collapsed "AI trace · N steps · $X" summary needs no per-card fetch — this
-  // rides along on the same list/search/personal-files response the card already has. `null`/absent (an older
-  // backend, or a document with no trace row at all) both mean the same thing: nothing to summarize yet.
-  trace_summary?: { steps: number; cost_usd: number } | null
+  // Round 6 (DECISIONS #129), replacing round 5's `trace_summary`: the card's collapsed "History · N activities" line needs no
+  // per-card fetch, so the count rides on the same list/search/personal-files response the card already has. `null`/absent (an
+  // older backend, or a document with no recorded activity) both mean the same thing: nothing to count yet.
+  activity_summary?: { count: number } | null
+}
+
+/** The five things a person can do to a document that its history records (app/activity.py). Internal codes: the UI never renders
+ * one, it maps each to localized plain language (features/ops/HistoryPanel.tsx). */
+export type DocumentActivityAction = 'uploaded' | 'edited' | 'purge_requested' | 'purge_cancelled' | 'deleted'
+
+/** One entry of a document's history: what was done, the NAME the person had at the time (a snapshot; null for an action with no
+ * person to name), and when, as a stored UTC timestamp. */
+export interface DocumentActivityEntry {
+  action: DocumentActivityAction
+  actor_name: string | null
+  at: string
+}
+
+/** GET /api/documents/{id}/history: oldest first. */
+export interface DocumentHistory {
+  entries: DocumentActivityEntry[]
 }
 
 /** One word of the Search page's word cloud (round 21, A8, DECISIONS #101): `count` is how many documents contain it. */
@@ -236,32 +253,6 @@ export interface ResolveResult {
   status: string
   events: unknown[] | null
   obligations_created: number | null
-}
-
-export interface TraceReport {
-  nodes: Array<{
-    node: string
-    model: string | null
-    input_tokens: number | null
-    output_tokens: number | null
-    cost_usd: number | null
-    latency_ms: number | null
-    decision: string | null
-    at: string
-  }>
-  total_cost_usd: number
-  // Round 5, item 3c-i (DECISIONS #125): the document's own extracted result, folded to the latest value per field
-  // (a human correction on Accept outlives the model's original guess, same "last wins" rule the company-profile
-  // pre-fill already uses over this table) — so a person can check the AI's actual work against the source, not
-  // just see that "extract" ran. Empty for a document with nothing extracted (a picture, a duplicate, ...).
-  extraction: Array<{
-    field: string
-    value_text: string | null
-    value_num: number | null
-    value_date: string | null
-    confidence: number
-    source: 'llm' | 'human'
-  }>
 }
 
 /** What a caller may attach to an upload beyond the file itself. */
@@ -376,7 +367,8 @@ export const opsApi = {
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
     ),
 
-  getTrace: (documentId: number) => request<TraceReport>(`/api/trace/${documentId}`),
+  // What people did to a document, oldest first (round 6, DECISIONS #129). Fetched lazily, when a card's History is opened.
+  getDocumentHistory: (documentId: number) => request<DocumentHistory>(`/api/documents/${documentId}/history`),
 
   // Deliberately named archiveDocument, not deleteDocument (2026-09-23):
   // this calls the existing /archive endpoint and sets status='archived'

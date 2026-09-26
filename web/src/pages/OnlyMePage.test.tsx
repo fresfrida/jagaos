@@ -13,7 +13,7 @@ vi.mock('../router/navigate', () => ({ navigate: vi.fn() }))
 vi.mock('../lib/imageNormalize', () => ({ normalizeImageForUpload: vi.fn(async (f: File) => f) }))
 vi.mock('../features/ops/opsApi', async (importActual) => ({
   ...(await importActual<typeof import('../features/ops/opsApi')>()),
-  opsApi: { listPersonalFiles: vi.fn(), uploadDocument: vi.fn(), uploadPages: vi.fn(), getTrace: vi.fn(), editDocument: vi.fn(), archiveDocument: vi.fn(), fetchDocumentThumbnail: vi.fn(), getLimits: vi.fn(), purgeDocument: vi.fn() },
+  opsApi: { listPersonalFiles: vi.fn(), uploadDocument: vi.fn(), uploadPages: vi.fn(), getDocumentHistory: vi.fn(), editDocument: vi.fn(), archiveDocument: vi.fn(), fetchDocumentThumbnail: vi.fn(), getLimits: vi.fn(), purgeDocument: vi.fn() },
 }))
 
 import { ApiError } from '../lib/apiClient'
@@ -491,7 +491,7 @@ describe('Only me: a file card', () => {
     for (const hidden of ['Expenses', 'ACME', 'invoice', 'Needs review', 'needs_review', 'Trace', 'Document date']) {
       expect(card.textContent).not.toContain(hidden)
     }
-    expect(within(card).queryByRole('button', { name: /more actions|trace/i })).toBeNull()
+    expect(within(card).queryByRole('button', { name: /more actions|history/i })).toBeNull()
   })
 
   it('Edit changes the name and the caption only, and sends the caption in the person\'s language', async () => {

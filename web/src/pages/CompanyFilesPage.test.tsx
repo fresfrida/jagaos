@@ -15,7 +15,7 @@ vi.mock('../features/ops/useOpsData', () => ({
 }))
 vi.mock('../features/ops/opsApi', async (importActual) => ({
   ...(await importActual<typeof import('../features/ops/opsApi')>()),
-  opsApi: { requestPurge: vi.fn(), cancelPurgeRequest: vi.fn(), archiveDocument: vi.fn(), getTrace: vi.fn() },
+  opsApi: { requestPurge: vi.fn(), cancelPurgeRequest: vi.fn(), archiveDocument: vi.fn(), getDocumentHistory: vi.fn() },
 }))
 
 import { opsApi, type DocumentRow } from '../features/ops/opsApi'
@@ -312,7 +312,7 @@ describe('Company Files: a purge the owner asked for stays visible to them until
     expect(within(card).getByRole('button', { name: /^view$/i })).toBeTruthy()
     expect(within(card).getByRole('button', { name: 'Cancel purge' })).toBeTruthy() // round 3, item 9b
     const deleteButton = within(card).getByRole('button', { name: /^delete$/i })
-    expect(deleteButton.hasAttribute('disabled')).toBe(true) // present, not gone — the fix for the old "AI trace unreachable" dead end
+    expect(deleteButton.hasAttribute('disabled')).toBe(true) // present, not gone — the fix for the old "panel unreachable" dead end
     for (const name of [/^edit$/i, /^purge$/i, /more actions/i]) expect(within(card).queryByRole('button', { name }), String(name)).toBeNull()
   })
 

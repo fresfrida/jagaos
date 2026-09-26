@@ -1,7 +1,7 @@
 /** A document the owner asked to have purged, still shown to them until the team removes it (round 21, DECISIONS #102).
- * Round 5, item 2 (DECISIONS #125): the card used to hide Edit, Delete and its whole "···" menu (which is where AI
- * trace lived) outright — Edit and Delete now stay in their normal places, DISABLED, and AI trace is its own
- * always-visible accordion that is never gated on this at all, so a pending document is never a dead end for it. */
+ * Round 5, item 2 (DECISIONS #125): the card used to hide Edit, Delete and its whole "···" menu outright. Edit and
+ * Delete now stay in their normal places, DISABLED, and the expandable panel below (round 6, DECISIONS #129: now "History",
+ * formerly the AI trace) is always visible and never gated on this at all, so a pending document is never a dead end for it. */
 
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -35,9 +35,9 @@ describe('DocumentCard for a purge the owner asked for', () => {
     expect(deleteButton.getAttribute('aria-disabled')).toBe('true')
   })
 
-  it('the AI-trace accordion trigger stays live even while pending — the real fix for the old menu-gated dead end', () => {
+  it('the History accordion trigger stays live even while pending: the real fix for the old menu-gated dead end', () => {
     show('purge_requested')
-    const trigger = screen.getByRole('button', { name: /ai trace/i })
+    const trigger = screen.getByRole('button', { name: /^history/i })
     expect(trigger.hasAttribute('disabled')).toBe(false)
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
   })

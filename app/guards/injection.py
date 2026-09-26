@@ -13,6 +13,8 @@ Layered, because the prompt alone is not a control:
 4. Least privilege — enforced in app/main.py (read-only store, env secrets).
 """
 
+import logging
+import os
 import re
 
 from app.db import DB_PATH, get_conn
@@ -36,12 +38,27 @@ injection_suspected=true.
 LLM_TEXT_CHAR_LIMIT = 50_000
 
 
-def untrusted_prompt(document_text: str) -> str:
+# Round 6 (DECISIONS #129): how much text one call is given when the document is a SINGLE PHOTO. A photographed page has, at
+# the most, a dense typed page's worth of text (~4,500 characters, the figure LLM_TEXT_CHAR_LIMIT above is built from), so 8,000 is
+# well past any real one; but OCR of a photo that is not a document, or a noisy one, can return tens of thousands of characters
+# of fragments, and three nodes each send whatever text there is. At ~0.5 tokens per OCR character that is the difference between
+# ~6k and ~75k tokens for ONE document, so the whole pipeline of a single photo is bounded here, deterministically, instead of at
+# 50,000. Multi-page and PDF documents keep LLM_TEXT_CHAR_LIMIT: their length is real content, capped by the page limit.
+IMAGE_TEXT_CHAR_LIMIT = int(os.environ.get("LLM_IMAGE_TEXT_CHAR_LIMIT", "8000"))
+
+_log = logging.getLogger("uvicorn.error")
+
+
+def untrusted_prompt(document_text: str, limit: int | None = None) -> str:
     """The user message for a node that reads a document: the text, cut to
-    LLM_TEXT_CHAR_LIMIT, inside the untrusted wrapper. The one place that cut
+    `limit` (LLM_TEXT_CHAR_LIMIT unless the document says otherwise, see
+    IMAGE_TEXT_CHAR_LIMIT), inside the untrusted wrapper. The one place that cut
     happens, so classify/extract/derive_events cannot disagree about how much
-    of a document they saw."""
-    return UNTRUSTED_TEMPLATE.format(document_text=document_text[:LLM_TEXT_CHAR_LIMIT])
+    of a document they saw. A cut is logged as numbers only, never text."""
+    cap = LLM_TEXT_CHAR_LIMIT if limit is None else limit
+    if len(document_text) > cap:
+        _log.warning("TEXT_CAP characters=%s limit=%s", len(document_text), cap)
+    return UNTRUSTED_TEMPLATE.format(document_text=document_text[:cap])
 
 
 # Imperative / system-ish phrasing aimed at an LLM reading the document.

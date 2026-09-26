@@ -22,6 +22,7 @@ from reportlab.pdfgen import canvas
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 import app.graph.classify as classify_module  # noqa: E402
+from app.activity import operator  # noqa: E402
 import app.graph.derive_events as derive_events_module  # noqa: E402
 import app.graph.extract as extract_module  # noqa: E402
 import purge_document  # noqa: E402
@@ -104,6 +105,8 @@ def _row_counts() -> dict[str, int]:
 
 def purge(ids, **kwargs) -> tuple[int, str]:
     lines: list[str] = []
+    if kwargs.get("apply"):
+        kwargs.setdefault("actor", operator("test-operator"))  # a hard delete must say who did it (round 6, DECISIONS #129)
     code = purge_document.purge_documents(list(ids), out=lines.append, **kwargs)
     return code, "\n".join(lines)
 

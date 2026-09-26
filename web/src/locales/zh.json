@@ -374,44 +374,9 @@
       "noBucketOption": "无分类",
       "editForbidden": "您没有编辑此文件的权限。",
       "view": "查看",
-      "trace": "AI 追踪",
       "edit": "编辑",
       "delete": "删除",
       "deleteConfirmMessage": "删除 {{filename}}？此操作无法撤销。",
-      "traceHeading": "AI 追踪 · 共 ${{cost}}",
-      "traceSummary": "AI 追踪 · {{steps}} 个步骤 · ${{cost}}",
-      "traceSummaryEmpty": "AI 追踪 · 未记录任何步骤",
-      "traceLoading": "正在加载追踪记录…",
-      "traceViewRaw": "查看原始追踪记录",
-      "traceHideRaw": "隐藏原始追踪记录",
-      "traceExtractedHeading": "提取结果",
-      "traceFieldCorrected": "已由人工更正",
-      "traceNoAiCall": "无 AI 调用：基于规则的步骤",
-      "traceStep": {
-        "classify": "已检查文件类型",
-        "classifyGrounding": "已核对文件中的名称",
-        "extract": "已读取关键信息",
-        "verify": "已检查提取的信息",
-        "archive": "已归档文件",
-        "deriveEvents": "已查找相关日期",
-        "caption": "已描述照片内容",
-        "rules": "已应用归档规则"
-      },
-      "traceStatus": {
-        "done": "已完成",
-        "skipped": "已跳过",
-        "failed": "失败"
-      },
-      "traceTable": {
-        "step": "步骤",
-        "status": "状态",
-        "node": "节点",
-        "model": "模型",
-        "tokens": "输入/输出 Token 数",
-        "cost": "费用",
-        "decision": "结果",
-        "confidence": "置信度"
-      },
       "noDocumentDate": "无文件日期",
       "purge": {
         "message": "这将永久删除该文件及从中读取的全部内容，且无法撤销。",
@@ -442,7 +407,20 @@
       },
       "rejectedTitle": "已拒绝的文件",
       "deleteAlsoPurge": "同时彻底清除",
-      "traceEmpty": "此文件没有记录任何 AI 步骤。"
+      "history": {
+        "summary_other": "历史记录 · {{count}} 项活动",
+        "summaryEmpty": "历史记录 · 暂无活动",
+        "loading": "正在加载历史记录…",
+        "loadFailed": "无法加载历史记录。请收起后重试。",
+        "empty": "此文件尚未记录任何活动。",
+        "unknownActor": "未知用户",
+        "uploaded": "{{name}} 上传了",
+        "edited": "{{name}} 编辑了",
+        "purgeRequested": "{{name}} 请求了清除",
+        "purgeCancelled": "{{name}} 撤销了清除请求",
+        "deleted": "{{name}} 删除了",
+        "unknownAction": "{{name}} 进行了操作"
+      }
     },
     "dates": {
       "uploadDate": "上传日期",

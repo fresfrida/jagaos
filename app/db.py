@@ -74,6 +74,26 @@ CREATE TABLE IF NOT EXISTS download_link (
     used_at TEXT
 );
 
+-- The durable human history of a document: who uploaded, edited, asked to purge, cancelled a purge, or deleted it (round 6, DECISIONS
+-- #129; app/activity.py). Deliberately NOT tied to the row it describes:
+--   * keyed by `lifecycle_id`, an immutable identifier minted once per document, NOT by document.id, because document.id is an
+--     INTEGER PRIMARY KEY that SQLite hands out again after the highest row is deleted, and a reused id must never inherit another
+--     file's history;
+--   * NO foreign key to anything (not document, not app_user, not company): a hard purge deletes the document, its extraction, its
+--     trace and its search row (app/purge.py), and a foreign key here would either block that or, with a cascade, erase the very
+--     record that says who deleted it. The actor is a NAME SNAPSHOT taken at the time, so it also survives the person leaving.
+-- `at` is UTC, in the same 'YYYY-MM-DD HH:MM:SS' form as every other timestamp in this file.
+CREATE TABLE IF NOT EXISTS document_activity (
+    id INTEGER PRIMARY KEY,
+    lifecycle_id TEXT NOT NULL,
+    company_id INTEGER NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('uploaded', 'edited', 'purge_requested', 'purge_cancelled', 'deleted')),
+    actor_user_id INTEGER,
+    actor_name TEXT,
+    at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_document_activity_lifecycle ON document_activity(lifecycle_id, id);
+
 CREATE TABLE IF NOT EXISTS document (
     id INTEGER PRIMARY KEY,
     company_id INTEGER NOT NULL REFERENCES company(id),
@@ -322,6 +342,29 @@ _MIGRATIONS = [
     # finds the requests here. NULL = never requested.
     "ALTER TABLE document ADD COLUMN purge_requested_at TEXT",
     "ALTER TABLE document ADD COLUMN purge_requested_by TEXT",
+    # Round 6 (DECISIONS #129): the immutable identifier document_activity is keyed by. Nullable here because ALTER TABLE cannot add a
+    # column with a non-constant default; `_LIFECYCLE_STATEMENTS` below fills it for every new row (a trigger) and every old one.
+    "ALTER TABLE document ADD COLUMN lifecycle_id TEXT",
+]
+
+# Run after the column exists, on every start, and safe to repeat. Every INSERT path gets a lifecycle_id from the trigger,
+# including the raw-SQL fixtures in tests and any future ingestion route, so nothing has to remember to set one.
+_LIFECYCLE_STATEMENTS = [
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_document_lifecycle_id ON document(lifecycle_id) WHERE lifecycle_id IS NOT NULL",
+    """CREATE TRIGGER IF NOT EXISTS document_lifecycle_id_fill AFTER INSERT ON document WHEN NEW.lifecycle_id IS NULL
+       BEGIN UPDATE document SET lifecycle_id = lower(hex(randomblob(16))) WHERE id = NEW.id; END""",
+    """CREATE TRIGGER IF NOT EXISTS document_lifecycle_id_immutable BEFORE UPDATE OF lifecycle_id ON document
+       WHEN OLD.lifecycle_id IS NOT NULL AND NEW.lifecycle_id IS NOT OLD.lifecycle_id
+       BEGIN SELECT RAISE(ABORT, 'document.lifecycle_id is immutable'); END""",
+    "UPDATE document SET lifecycle_id = lower(hex(randomblob(16))) WHERE lifecycle_id IS NULL",
+    # Existing documents get ONE Uploaded event, dated when the row was received, by the uploader's CURRENT name (or email; no name at
+    # all for an upload with no user) since no earlier name was ever recorded. Idempotent: only a document with no Uploaded event yet.
+    """INSERT INTO document_activity (lifecycle_id, company_id, action, actor_user_id, actor_name, at)
+       SELECT d.lifecycle_id, d.company_id, 'uploaded', d.uploaded_by_user_id,
+              COALESCE(NULLIF(TRIM(u.name), ''), u.email), d.received_at
+       FROM document d LEFT JOIN app_user u ON u.id = d.uploaded_by_user_id
+       WHERE d.lifecycle_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM document_activity a WHERE a.lifecycle_id = d.lifecycle_id AND a.action = 'uploaded')""",
 ]
 
 
@@ -370,6 +413,8 @@ def init_db(db_path: str = DB_PATH) -> None:
     # database that already has the table in its old shape, so upgrading
     # it needs an explicit drop + recreate + full backfill — not just
     # another idempotent ALTER-style statement in _MIGRATIONS.
+    for stmt in _LIFECYCLE_STATEMENTS:
+        conn.execute(stmt)
     needs_rebuild = _document_search_needs_rebuild(conn)
     if needs_rebuild:
         conn.execute("DROP TABLE document_search")

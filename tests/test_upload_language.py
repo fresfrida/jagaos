@@ -53,7 +53,7 @@ def _upload(token: str, language: str | None, monkeypatch, sent_prompts: list[st
         )
 
     monkeypatch.setattr(classify_module, "call", fake_call)
-    monkeypatch.setattr(ingest_module, "_local_text", lambda path, media_type: (DOCUMENT_TEXT, "pdfplumber"))
+    monkeypatch.setattr(ingest_module, "_local_text", lambda path, media_type, ocr_max_edge=None: (DOCUMENT_TEXT, "pdfplumber"))
 
     suffix = f"?language={language}" if language else ""
     resp = client.post(

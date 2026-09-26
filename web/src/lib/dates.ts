@@ -104,6 +104,19 @@ export function dayInTimezone(raw: string, timezone: string): string {
   }).format(parseUtcTimestamp(raw))
 }
 
+/** The company timezone to fall back on until the session's company has loaded: the backend's own default for a new company. */
+export const DEFAULT_COMPANY_TIMEZONE = 'Asia/Singapore'
+
+/** A stored UTC timestamp as a date AND time, in the language's locale and the COMPANY's timezone (round 6, DECISIONS #129), e.g.
+ * "23 Sept 2026, 2:14 pm". Same rule as dayInTimezone above: the stored value is UTC, and reading it in the viewing device's own
+ * zone would put an entry on the wrong day for a company in another zone. 12-hour clock in every language, as the brief's examples
+ * are; Intl supplies each language's own am/pm words. */
+export function formatDateTime(raw: string, locale: string = 'en-GB', timezone: string = DEFAULT_COMPANY_TIMEZONE): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(parseUtcTimestamp(raw))
+}
+
 /** "Today" in the company's own timezone, independent of the viewing
  * device's local clock — used for Calendar's "today" highlight
  * (MonthGrid.tsx) so an admin traveling still sees the company's today,

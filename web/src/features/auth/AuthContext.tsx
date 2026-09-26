@@ -104,6 +104,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
+/** The session if there is a provider, `null` if not: for a small presentational piece that only wants the company's timezone and is
+ * rendered on its own in tests, where `useAuth` would throw. */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext)
+}
+
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')

@@ -27,6 +27,7 @@ from langgraph.types import Command
 
 load_dotenv()
 
+from app import activity  # noqa: E402
 from app.auth import (  # noqa: E402
     CurrentMembership,
     get_current_membership,
@@ -54,6 +55,7 @@ from app.db import (  # noqa: E402
     parse_description,
     reindex_document_search,
 )
+from app.extract.image_prep import MAX_EDGE as PHOTO_OCR_MAX_EDGE  # noqa: E402
 from app.extract.merge import PageImageError, merge_images_to_pdf  # noqa: E402
 from app.extract.ocr import MAX_PDF_OCR_PAGES  # noqa: E402
 from app.graph.classify import is_company_profile_doc_type  # noqa: E402
@@ -512,7 +514,7 @@ def _caption_document_background(document_id: int, stored_path: str) -> None:
 def _process_upload(
     membership: CurrentMembership, background_tasks: BackgroundTasks, tmp_path: str, filename: str,
     source_channel: str, is_picture: bool, language: str, visibility: str,
-    doc_type_hint: str | None = None, name: str = "", caption: str | None = None,
+    doc_type_hint: str | None = None, name: str = "", caption: str | None = None, from_photos: bool = False,
 ) -> dict:
     """Run one already-written temp file through ingest and the pipeline and
     build the upload response. A PERSONAL file (visibility other than 'company') does not take the pipeline at all: it is
@@ -524,6 +526,9 @@ def _process_upload(
         company_id=membership.company_id, source_path=tmp_path, filename=filename,
         source_channel=source_channel, uploaded_by_user_id=membership.user_id,
         visibility=visibility, read_content=visibility == "company",
+        # A PDF the server merged from several photos is read at the photo cap (app/extract/image_prep.py, DECISIONS #129); a scanned
+        # PDF a person uploaded is not, and a single image is normalized inside ingest itself.
+        ocr_max_edge=PHOTO_OCR_MAX_EDGE if from_photos else None,
     )
     if ingest_state.get("text_source") == "duplicate":
         # The duplicate check is on the file's hash across the whole database,
@@ -782,7 +787,7 @@ async def upload_document_pages(
         stem = Path(files[0].filename or "scan").stem
         return _process_upload(
             membership, background_tasks, merged.name, f"{stem}-{len(files)}-pages.pdf", "web", False, language,
-            visibility, doc_type_hint, personal_name, personal_caption,
+            visibility, doc_type_hint, personal_name, personal_caption, from_photos=True,
         )
     finally:
         for path in temp_paths:
@@ -867,17 +872,21 @@ def resolve_review(
         # dismiss the open review_item), reached from this endpoint
         # because that's what the UI already calls for this card
         # (ReviewQueueCard.tsx hides Accept, offers only Reject/Delete).
+        archived_now = True
         try:
             transition_document(item["document_id"], "archived", actor=membership.email, db_path=DB_PATH)
         except InvalidTransition:
-            pass  # already archived by a concurrent/earlier request — resolving again is a no-op success
+            archived_now = False  # already archived by a concurrent/earlier request — resolving again is a no-op success
         with get_conn(DB_PATH) as conn:
             conn.execute(
                 "UPDATE review_item SET status = 'dismissed' WHERE id = ?",
                 (review_item_id,),
             )
+            if archived_now and item["visibility"] == "company":
+                # The card's own button says Delete (round 6, DECISIONS #129). A private file is recorded by its purge instead.
+                activity.record_for_document(conn, item["document_id"], activity.DELETED, activity.actor_of(membership))
         if item["visibility"] != "company":
-            _purge_a_rejected_private_file(item["document_id"], membership.email)
+            _purge_a_rejected_private_file(item["document_id"], membership)
         return {"status": "archived", "events": None, "obligations_created": None}
 
     # thread_id is client-supplied and is what actually gets resumed, so it must
@@ -917,7 +926,11 @@ def resolve_review(
     if final_status == "archived" and item["visibility"] != "company":
         # A reject chains through to archived (human_review.py). For a private file that would leave a soft-deleted
         # row nobody can see and that still counts toward the 15-file cap, so it is deleted for good instead.
-        _purge_a_rejected_private_file(item["document_id"], membership.email)
+        _purge_a_rejected_private_file(item["document_id"], membership)
+    elif final_status == "archived":
+        # A rejected company upload is archived: to the person it is a Delete (round 6, DECISIONS #129).
+        with get_conn(DB_PATH) as conn:
+            activity.record_for_document(conn, item["document_id"], activity.DELETED, activity.actor_of(membership))
 
     return {
         "status": final_status,
@@ -1027,25 +1040,7 @@ def list_obligations(
         return [dict(r) for r in rows]
 
 
-def _trace_summaries(conn: sqlite3.Connection, document_ids: list[int]) -> dict[int, dict]:
-    """{document_id: {"steps": n, "cost_usd": total}} for every id that has at least one trace row — round 5, item 6
-    (DECISIONS #125): the list/search/personal-files responses carry this so a card's collapsed "AI trace · N steps ·
-    $X" summary needs no per-card fetch (the full node-by-node detail is still fetched lazily, only when a card's
-    accordion is actually opened, exactly as before). ONE grouped query for the whole page, never N: every caller
-    collects its document ids first and calls this once. A document with no row at all (a duplicate, a personal file
-    still pending, anything that never reached a pipeline step) is simply absent from the returned dict, not a zero."""
-    if not document_ids:
-        return {}
-    marks = ",".join("?" * len(document_ids))
-    rows = conn.execute(
-        f"SELECT document_id, COUNT(*) AS steps, SUM(cost_usd) AS cost_usd FROM trace "
-        f"WHERE document_id IN ({marks}) GROUP BY document_id",
-        document_ids,
-    ).fetchall()
-    return {r["document_id"]: {"steps": r["steps"], "cost_usd": round(r["cost_usd"] or 0, 6)} for r in rows}
-
-
-def _document_row_for(membership: CurrentMembership, row: sqlite3.Row, trace_summaries: dict[int, dict] | None = None) -> dict:
+def _document_row_for(membership: CurrentMembership, row: sqlite3.Row, activity_summaries: dict[int, dict] | None = None) -> dict:
     """A document as list/search return it: the row minus the uploader's
     user id (the client never needs it), plus `can_edit` — the caller's own
     answer from auth.may_edit_document, so the UI does not offer an Edit
@@ -1076,9 +1071,10 @@ def _document_row_for(membership: CurrentMembership, row: sqlite3.Row, trace_sum
         # `get_document_file` and `get_trace` already enforce), so a curl PATCH to a purge-requested row was never
         # actually safe before this and is refused now.
         doc["status"] = "purge_requested"
-    # Round 5, item 6 (DECISIONS #125): absent (None) for an older caller that never fetched trace summaries, and for a
-    # document trace never touched — the card renders its zero-state either way, never a crash on a missing key.
-    doc["trace_summary"] = (trace_summaries or {}).get(doc["id"])
+    # Round 6 (DECISIONS #129) replaced round 5's `trace_summary`: the card's collapsed line is now "History · N activities", and
+    # the count rides on the list, search and personal-files responses (`activity.summaries_for`, ONE grouped query per response)
+    # so a card needs no fetch to show it. None when a document has no recorded activity, and for an older caller that passed none.
+    doc["activity_summary"] = (activity_summaries or {}).get(doc["id"])
     return doc
 
 
@@ -1122,7 +1118,7 @@ def list_documents(
         # absent from Company Files, from Search and from the Calendar (which
         # reads this same list), not merely hidden by the UI.
         visible = [r for r in rows if _can_see(membership, r) and _in_company_files(r)]
-        summaries = _trace_summaries(conn, [r["id"] for r in visible])
+        summaries = activity.summaries_for(conn, [r["id"] for r in visible])
         return [_document_row_for(membership, r, summaries) for r in visible]
 
 
@@ -1149,7 +1145,7 @@ def list_personal_files(
             (membership.company_id, membership.user_id),
         ).fetchall()
         visible = [r for r in rows if _can_see(membership, r)]
-        summaries = _trace_summaries(conn, [r["id"] for r in visible])
+        summaries = activity.summaries_for(conn, [r["id"] for r in visible])
         return [_document_row_for(membership, r, summaries) for r in visible]
 
 
@@ -1230,7 +1226,7 @@ def search_documents(
         # MATCHES on its text — this join-back is where it stops being
         # returned, which is the same place archived documents are dropped.
         visible = [d for d in docs if _can_see(membership, d) and _in_company_files(d)]
-        summaries = _trace_summaries(conn, [d["id"] for d in visible])
+        summaries = activity.summaries_for(conn, [d["id"] for d in visible])
         docs_by_id = {d["id"]: _document_row_for(membership, d, summaries) for d in visible}
     # FTS5's rank order (relevance), not the IN-clause's arbitrary order.
     return [docs_by_id[doc_id] for doc_id in ordered_ids if doc_id in docs_by_id]
@@ -1345,16 +1341,29 @@ def edit_document(
         updates["doc_type"] = "photo"
         updates["bucket"] = "Memory Lane"
 
-    if updates:
+    # Round 6 (DECISIONS #129): only what REALLY changes is applied and recorded. A save that sends the values already stored (an
+    # untouched form, a repeated request) is not an edit, and must not put a fake "Edited by" in a document's history. The comparison
+    # is against the stored row, and for a description it is the decoded per-language text, not the JSON string, so a re-save that
+    # renders identically is still nothing.
+    with get_conn(DB_PATH) as conn:
+        current = conn.execute(
+            "SELECT filename, description, bucket, vendor_name, doc_type, lane FROM document WHERE id = ?", (document_id,),
+        ).fetchone()
+    changed = {
+        col: value for col, value in updates.items()
+        if (parse_description(current[col]) != parse_description(value) if col == "description" else current[col] != value)
+    }
+    if changed:
         # Column names come from a fixed set of hardcoded keys above,
         # never from request data — safe to interpolate into the SET
         # clause; only the bound values (?) come from the request body.
-        set_clause = ", ".join(f"{col} = ?" for col in updates)
+        set_clause = ", ".join(f"{col} = ?" for col in changed)
         with get_conn(DB_PATH) as conn:
             conn.execute(
                 f"UPDATE document SET {set_clause} WHERE id = ?",
-                (*updates.values(), document_id),
+                (*changed.values(), document_id),
             )
+            activity.record_for_document(conn, document_id, activity.EDITED, activity.actor_of(membership))
         reindex_document_search(document_id, DB_PATH)
     return {"status": "updated"}
 
@@ -1404,11 +1413,32 @@ def _readable_file_row(membership: CurrentMembership, document_id: int) -> sqlit
     cannot disagree about who may have the bytes."""
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
-            "SELECT company_id, stored_path, media_type, filename, status, uploaded_by_user_id, visibility "
+            "SELECT company_id, stored_path, media_type, filename, status, uploaded_by_user_id, visibility, lifecycle_id "
             f"FROM document WHERE id = ? AND {_LIVE_OR_PURGE_REQUESTED}",
             (document_id, _owner_flag(membership)),
         ).fetchone()
     return None if _hidden_or_missing(membership, doc) else doc
+
+
+@app.get("/api/documents/{document_id}/history")
+def get_document_history(
+    document_id: int,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+) -> dict:
+    """What people did to this document, oldest first (round 6, DECISIONS #129; app/activity.py): uploaded, edited, purge requested,
+    purge cancelled, deleted, each with the name the person had at the time and a UTC timestamp.
+
+    The rule is the file's own, by construction (`_readable_file_row`, the same function GET .../file and the download link use), so
+    it can never disagree with who can see the card: another company's document, a colleague's pending upload and someone's personal
+    file are all the same 404 as a missing one, and the owner still gets it for a document with a pending purge request (they still
+    see the card). A document that has been deleted for good is not browsable here at all, because there is no row to authorize
+    against; its history is retained in `document_activity` and read at the database level."""
+    doc = _readable_file_row(membership, document_id)
+    if doc is None:
+        raise HTTPException(404, "document not found")
+    with get_conn(DB_PATH) as conn:
+        entries = activity.history_for(conn, doc["lifecycle_id"], doc["company_id"]) if doc["lifecycle_id"] else []
+    return {"entries": entries}
 
 
 @app.post("/api/documents/{document_id}/download-link")
@@ -1588,6 +1618,8 @@ def archive_document(
             "UPDATE review_item SET status = 'dismissed' WHERE document_id = ? AND status = 'open'",
             (document_id,),
         )
+        # The user-facing action is "Delete" even though the row is archived, not removed (round 6, DECISIONS #129).
+        activity.record_for_document(conn, document_id, activity.DELETED, activity.actor_of(membership))
     return {"status": "archived"}
 
 
@@ -1595,17 +1627,17 @@ def archive_document(
 _audit = logging.getLogger("uvicorn.error")
 
 
-def _purge_a_rejected_private_file(document_id: int, actor: str) -> None:
+def _purge_a_rejected_private_file(document_id: int, membership: CurrentMembership) -> None:
     """A private file whose uploader REJECTED it is deleted for good, not left archived (round 20, DECISIONS #99):
     a soft-deleted private row is invisible to its owner yet counts toward the private-file cap, and only an operator
     could ever clear it. Company documents are unaffected (a reject still archives them). The answer to the reject
     is unchanged (`archived`); a purge that could not run is logged, and the row stays archived."""
     try:
-        failed_files = purge_now(document_id)
+        failed_files = purge_now(document_id, actor=activity.actor_of(membership))
     except PurgeRefused as e:
         _audit.error("AUDIT purge: rejected private document %s could not be deleted for good: %s", document_id, e)
         return
-    _audit.info("AUDIT purge: %s rejected private document %s, deleted for good", actor, document_id)
+    _audit.info("AUDIT purge: %s rejected private document %s, deleted for good", membership.email, document_id)
     if failed_files:
         _audit.error("AUDIT purge: rows of document %s deleted but the stored file was not removed: %s", document_id, failed_files)
 
@@ -1646,6 +1678,9 @@ def request_document_purge(
         conn.execute(
             "UPDATE review_item SET status = 'dismissed' WHERE document_id = ? AND status = 'open'", (document_id,),
         )
+        # Round 6 (DECISIONS #129): what the person DID is a purge request. The archive `transition_document` performed just above is
+        # the mechanism, an engineering row in `trace`, and is deliberately not recorded as a "Deleted" in the document's history.
+        activity.record_for_document(conn, document_id, activity.PURGE_REQUESTED, activity.actor_of(membership))
     _audit.info("AUDIT purge-request: %s asked for document %s (%r) to be removed permanently", membership.email, document_id, doc["filename"])
     return {"status": "purge_requested"}
 
@@ -1681,6 +1716,8 @@ def cancel_document_purge_request(
         restored = restore_document_after_purge_request(document_id, actor=membership.email, db_path=DB_PATH)
     except InvalidTransition as e:
         raise HTTPException(409, str(e)) from None
+    with get_conn(DB_PATH) as conn:  # only after the restore has actually succeeded (round 6, DECISIONS #129)
+        activity.record_for_document(conn, document_id, activity.PURGE_CANCELLED, activity.actor_of(membership))
     _audit.info(
         "AUDIT purge-request-cancel: %s took back the request for document %s (%r); it is %s again",
         membership.email, document_id, doc["filename"], restored,
@@ -1741,7 +1778,7 @@ def purge_document_endpoint(
             "message": "The name you typed does not match the file's name. Nothing was deleted.",
         })
     try:
-        failed_files = purge_now(document_id)
+        failed_files = purge_now(document_id, actor=activity.actor_of(membership))
     except PurgeRefused as e:
         raise HTTPException(409, str(e)) from None
     _audit.info(

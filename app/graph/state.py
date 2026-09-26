@@ -10,6 +10,9 @@ class PipelineState(TypedDict, total=False):
     document_id: int
     text: str
     text_source: str  # pdfplumber | ocr | exif | none
+    # Round 6 (DECISIONS #129): how many characters of `text` one paid call may carry (guards/injection.py). Set by ingest, read by
+    # classify/extract/derive_events. Declared here for the same LangGraph reason as `language`: an undeclared key is dropped.
+    text_char_limit: int
     # 2026-09-23: set from the upload-time "is this a picture?" toggle
     # (app/main.py) — when true, classify.py skips its LLM call entirely
     # and sets lane/doc_type/bucket deterministically (see its docstring).

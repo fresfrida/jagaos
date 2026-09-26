@@ -375,44 +375,9 @@
       "editForbidden": "You don't have permission to edit this document.",
       "noDocumentDate": "No document date",
       "view": "View",
-      "trace": "AI trace",
       "edit": "Edit",
       "delete": "Delete",
       "deleteConfirmMessage": "Delete {{filename}}? This can't be undone.",
-      "traceHeading": "AI trace · ${{cost}} total",
-      "traceSummary": "AI trace · {{steps}} steps · ${{cost}}",
-      "traceSummaryEmpty": "AI trace · no steps recorded",
-      "traceLoading": "Loading trace…",
-      "traceViewRaw": "View raw trace",
-      "traceHideRaw": "Hide raw trace",
-      "traceExtractedHeading": "Extracted result",
-      "traceFieldCorrected": "corrected by a person",
-      "traceNoAiCall": "No AI call: a rule-based step",
-      "traceStep": {
-        "classify": "Checked the document type",
-        "classifyGrounding": "Checked names against the document",
-        "extract": "Read the key details",
-        "verify": "Checked the extracted details",
-        "archive": "Archived the file",
-        "deriveEvents": "Looked for related dates",
-        "caption": "Described the photo",
-        "rules": "Applied the filing rules"
-      },
-      "traceStatus": {
-        "done": "Done",
-        "skipped": "Skipped",
-        "failed": "Failed"
-      },
-      "traceTable": {
-        "step": "Step",
-        "status": "Status",
-        "node": "Node",
-        "model": "Model",
-        "tokens": "Tokens in/out",
-        "cost": "Cost",
-        "decision": "Decision",
-        "confidence": "Confidence"
-      },
       "purge": {
         "message": "This deletes the file and everything read from it for good. It can't be undone.",
         "prompt": "Type the file name below to confirm.",
@@ -442,7 +407,21 @@
       },
       "rejectedTitle": "Rejected document",
       "deleteAlsoPurge": "Also remove it permanently",
-      "traceEmpty": "No AI steps were recorded for this document."
+      "history": {
+        "summary_one": "History · {{count}} activity",
+        "summary_other": "History · {{count}} activities",
+        "summaryEmpty": "History · no activity",
+        "loading": "Loading history…",
+        "loadFailed": "Couldn't load the history. Close it and try again.",
+        "empty": "No activity has been recorded for this document.",
+        "unknownActor": "an unknown user",
+        "uploaded": "Uploaded by {{name}}",
+        "edited": "Edited by {{name}}",
+        "purgeRequested": "Purge requested by {{name}}",
+        "purgeCancelled": "Purge cancelled by {{name}}",
+        "deleted": "Deleted by {{name}}",
+        "unknownAction": "Activity by {{name}}"
+      }
     },
     "dates": {
       "uploadDate": "Upload date",

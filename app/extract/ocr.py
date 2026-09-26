@@ -4,6 +4,7 @@ import pdfplumber
 import pytesseract
 from PIL import Image, ImageOps
 
+from app.extract.image_prep import normalize_image
 from app.extract.pdfium_lock import PDFIUM_LOCK
 
 # 2026-09-24: an image-only ("scanned") PDF has no text layer, so
@@ -58,7 +59,7 @@ def extract_text(path: str) -> str:
     return pytesseract.image_to_string(image, config=OCR_CONFIG).strip()
 
 
-def extract_pdf_text(path: str) -> str:
+def extract_pdf_text(path: str, max_edge: int | None = None) -> str:
     """OCR of an image-only PDF: rasterize each page (up to
     MAX_PDF_OCR_PAGES), OCR it, join with a blank line between pages — the
     same shape app/extract/pdf.py produces for a born-digital PDF.
@@ -69,13 +70,21 @@ def extract_pdf_text(path: str) -> str:
     being meaningless across a merged document. A single page is returned
     exactly as before, and a page with no text gets no marker — a blank scan
     must still come back empty, or classify would take the "has text" path
-    for a document nobody could read."""
+    for a document nobody could read.
+
+    `max_edge` (round 6, DECISIONS #129) cuts each RASTERIZED page's longest edge before Tesseract reads it, and is passed ONLY for
+    a PDF the server built out of several photos (app/extract/merge.py): those pages are phone photos of whatever size the sender
+    chose, so the working copy is bounded like a single photo's is. A scanned PDF a person uploaded is left at PDF_OCR_DPI (200):
+    on an A4 page 1500px is only about 128 dpi, and the measurement above found 100 dpi already missing lines, so applying it there
+    would trade OCR accuracy for nothing. The stored PDF is never touched either way; this is the copy Tesseract reads."""
     texts = []
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages[:MAX_PDF_OCR_PAGES]:
             with PDFIUM_LOCK:  # PDFium is not thread-safe: two renders at once abort the process (pdfium_lock.py)
                 image = page.to_image(resolution=PDF_OCR_DPI).original
             image = image.convert("RGB")
+            if max_edge is not None:
+                image = normalize_image(image, max_edge)
             texts.append(pytesseract.image_to_string(image, config=OCR_CONFIG).strip())
     if len(texts) == 1:
         return texts[0]
