@@ -51,6 +51,14 @@ _TABLES = [
 
 
 @pytest.fixture(autouse=True)
+def _gateway_calls_switched_on(monkeypatch):
+    """LLM_CALLS_DISABLED (round 7, DECISIONS #132) must never leak into a test. app.main runs load_dotenv() when it is imported, so a
+    developer who put the flag in their real .env would otherwise switch calls off for the whole suite, and a process that sets it in
+    the environment would do the same. Every test starts with it removed; a test that wants it on sets it itself."""
+    monkeypatch.delenv("LLM_CALLS_DISABLED", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_test_db():
     from app.db import get_conn, init_db
 

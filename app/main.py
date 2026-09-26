@@ -62,6 +62,7 @@ from app.graph.classify import is_company_profile_doc_type  # noqa: E402
 from app.graph.derive_expectations import backfill_expectation_evidence  # noqa: E402
 from app.graph.ingest import ingest  # noqa: E402
 from app.graph.pipeline import PIPELINE  # noqa: E402
+from app.llm import LLMUnavailable, calls_disabled  # noqa: E402
 from app.rules.company_profile import (  # noqa: E402
     company_settings_from_profile,
     extraction_values,
@@ -148,6 +149,11 @@ def startup() -> None:
     # Round 16 (DECISIONS #90): an expectation satisfied before evidence_document_id
     # existed gets the document that satisfies it. Idempotent; a no-op once done.
     backfill_expectation_evidence(DB_PATH)
+    if calls_disabled():
+        # Round 7 (DECISIONS #132): loud, once, at boot, so nobody wonders why every upload is refused.
+        _audit.warning(
+            "LLM_CALLS_DISABLED is on: every gateway call is refused before a client is built, and an upload that would need one gets a 503"
+        )
 
 
 def _can_see(membership: CurrentMembership, row: sqlite3.Row | dict) -> bool:
@@ -522,6 +528,14 @@ def _process_upload(
     multi-page upload below (2026-09-24, round 12, DECISIONS #78), so a merged
     scan takes exactly the path any other document takes. Does not delete
     tmp_path — the caller owns its lifetime (see the try/finally in each)."""
+    # Round 7 (DECISIONS #132): with gateway calls switched off, refuse an upload that would reach one BEFORE ingest() runs, so nothing
+    # is left behind (no row, no stored file, no history event, no thumbnail). It reaches the gateway when it is a company document (an
+    # Only me file never enters the pipeline, below) that is not a picture (classify.py skips its call for one, a picture's lane has no
+    # extractor, and only the statutory lane derives events). Whether the OCR finds text is known only after ingest, so a file with no
+    # readable text, or an exact duplicate, is refused too while the switch is on: a false positive on a machine that opted in, never spend.
+    if visibility == "company" and not is_picture and calls_disabled():
+        raise _ai_unavailable()
+
     ingest_state = ingest(
         company_id=membership.company_id, source_path=tmp_path, filename=filename,
         source_channel=source_channel, uploaded_by_user_id=membership.user_id,
@@ -562,7 +576,13 @@ def _process_upload(
         ingest_state["doc_type_hint"] = doc_type_hint
 
     thread_id = ingest_state["run_id"]
-    result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
+    try:
+        result = PIPELINE.invoke(ingest_state, config={"configurable": {"thread_id": thread_id}})
+    except LLMUnavailable:
+        # A real gateway failure part-way through (a 429, a timeout, a 5xx) reaches here AFTER ingest() committed the row (status
+        # 'received', or already classified if only extract failed). It is NOT cleaned up here yet: whether to roll it back or route it
+        # to review is an open question in DECISIONS #132 (a re-upload of the same bytes is a "duplicate" and never reprocesses it).
+        raise _ai_unavailable() from None
     document_id = ingest_state["document_id"]
 
     # Confirmed live 2026-09-21: langgraph 0.2.60's invoke() does NOT return
@@ -625,6 +645,14 @@ def _process_upload(
         # upload, clean ones included.
         "review": {"reason": review_item["reason"], "question": review_item["question"]} if review_item else None,
     }
+
+
+def _ai_unavailable() -> HTTPException:
+    """The one answer for "the gateway cannot be used right now" (round 7, DECISIONS #132): a 503 in the same {code, message} shape as
+    _clean_personal_details, which the web client already reads (apiClient.ts ApiError, uploadErrorMessage.ts), instead of a bare 500."""
+    return HTTPException(503, detail={
+        "code": "ai_unavailable", "message": "AI is temporarily unavailable. Please try again shortly.",
+    })
 
 
 def _clean_personal_details(name: str | None, caption: str | None) -> tuple[str, str | None]:

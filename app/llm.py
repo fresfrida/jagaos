@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+import openai
 from openai import OpenAI
 
 BASE_URL = os.environ.get("LLM_GATEWAY_BASE_URL", "https://api.softwaresystems.app/v1")
@@ -43,6 +44,25 @@ _log = logging.getLogger("uvicorn.error")
 # One call whose PROMPT alone is this large gets a WARNING as well as its usual line (round 6, DECISIONS #129). Three graph nodes
 # each send the document's text, so a single very large prompt is the first thing to look at when a document's cost surprises.
 INPUT_TOKEN_WARN = int(os.environ.get("LLM_INPUT_TOKEN_WARN", "20000"))
+
+
+class LLMUnavailable(RuntimeError):
+    """The gateway cannot be used right now, and a caller may say so plainly instead of failing with a bare 500 (round 7,
+    DECISIONS #132). Raised for exactly two reasons: the operator switched calls off (LLM_CALLS_DISABLED), or the gateway refused or
+    could not be reached in a transient way (rate limit, timeout, connection failure, a 5xx). Anything else the SDK raises (a 400, an
+    auth error, our own bug) is NOT converted: it stays what it was. The message never carries the SDK's own text, which can echo
+    a response body."""
+
+
+_TRUTHY = {"1", "true", "yes"}
+
+
+def calls_disabled() -> bool:
+    """True when the operator has switched every gateway call off (env LLM_CALLS_DISABLED = 1, true or yes, any case). Read from the
+    environment at call time, not import time, so flipping it never needs a restart of anything but the process that reads it. Unset,
+    empty or any other value means off, which is the default: production on the box is unchanged unless someone opts in. It exists
+    because DECISIONS #130 bans spending the gateway budget on seeding, resets and evals and nothing in code enforced it."""
+    return os.environ.get("LLM_CALLS_DISABLED", "").strip().lower() in _TRUTHY
 
 
 @dataclass
@@ -143,7 +163,13 @@ def call(
     live 2026-09-21 that a tool call filling a multi-field schema
     (InvoiceFields) silently truncates mid-JSON at ~256 output tokens
     without this, producing what looks like "dropped fields" rather than an
-    error (GAPS.md new §11)."""
+    error (GAPS.md new §11).
+
+    Raises LLMUnavailable (never a bare SDK error) when calls are switched off or the gateway is transiently unavailable; see
+    that class. The switch is checked FIRST, before a client is built, so with it on nothing is constructed and nothing is sent."""
+    if calls_disabled():
+        _log.warning("LLM_UNAVAILABLE reason=disabled purpose=%s document_id=%s", purpose, document_id)
+        raise LLMUnavailable("LLM calls are switched off (LLM_CALLS_DISABLED)")
     client = _client()
     start = time.monotonic()
     kwargs: dict[str, Any] = {
@@ -157,7 +183,18 @@ def call(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice or "required"
-    resp = client.chat.completions.create(**kwargs)
+    try:
+        resp = client.chat.completions.create(**kwargs)
+    except (openai.RateLimitError, openai.APIConnectionError, openai.InternalServerError) as e:
+        # APITimeoutError is an APIConnectionError. openai maps every 5xx to InternalServerError. One numbers-only line: the class
+        # and the HTTP status, never the prompt or the response. No other status is mapped: what this gateway sends when the team's
+        # budget runs out has never been recorded (MDs/GAPS.md has only the 400 "Only the approved model is allowed"), so a guess
+        # would be a guess.
+        status = getattr(e, "status_code", None)
+        _log.warning(
+            "LLM_UNAVAILABLE reason=%s status=%s purpose=%s document_id=%s", type(e).__name__, status, purpose, document_id,
+        )
+        raise LLMUnavailable(f"gateway unavailable ({type(e).__name__}, status {status})") from e
     latency_ms = int((time.monotonic() - start) * 1000)
 
     choice = resp.choices[0]
