@@ -133,16 +133,38 @@ def test_the_owner_can_ask_for_a_filed_company_document_to_be_purged_and_nothing
     assert stored.exists()                                  # nothing is deleted: the file is still on disk
 
 
-def test_the_owner_still_sees_it_marked_purge_requested_and_read_only_and_can_still_open_the_file(team):
+def test_the_owner_still_sees_it_marked_purge_requested_and_can_still_open_the_file(team):
     doc = _filed_company_doc(team)
     _ask(team, "owner", doc)
 
     listed = next(d for d in client.get("/api/documents", headers=_headers(team["tokens"]["owner"])).json() if d["id"] == doc)
 
     assert listed["status"] == "purge_requested"            # what the pill reads
-    assert listed["can_edit"] is False                       # read-only
+    # `can_edit` (round 5, item 2, DECISIONS #126) is the plain ownership answer, same as any other document — an
+    # owner can always edit in their own company, purge-requested or not. It is NOT what makes this read-only: the
+    # test right after this one is what actually enforces that, server-side.
+    assert listed["can_edit"] is True
     assert "purge_requested_at" not in listed                # the row has the same shape as every other
     assert client.get(f"/api/documents/{doc}/file", headers=_headers(team["tokens"]["owner"])).status_code == 200
+
+
+def test_a_purge_requested_document_really_is_read_only_a_direct_edit_is_refused_even_for_the_owner(team):
+    # Round 5, item 2 (DECISIONS #126): found live, after deploying, that Edit had simply vanished from the card
+    # instead of rendering disabled — traced to `can_edit` being force-set False for this row, which the frontend's
+    # round-5 change had started reading as "hide the button" again. Fixing that (the test just above) removes the
+    # ONLY thing that ever stopped an actual PATCH here: neither `may_see_document` nor `may_edit_document` has ever
+    # known about archived or purge-requested status at all. This is the real fix: the endpoint itself now refuses,
+    # matching `get_document_file`/`get_trace`'s own `status != 'archived'` rule, so a curl PATCH is refused exactly
+    # like the UI now implies, not just a button that happens not to be there.
+    doc = _filed_company_doc(team, tag="editrefused")
+    _ask(team, "owner", doc)
+
+    resp = client.patch(f"/api/documents/{doc}", json={"description": "trying to edit a purge-requested document"}, headers=_headers(team["tokens"]["owner"]))
+
+    assert resp.status_code == 404
+    with get_conn() as conn:
+        row = conn.execute("SELECT description FROM document WHERE id = ?", (doc,)).fetchone()
+    assert row["description"] is None or "trying to edit" not in row["description"]
 
 
 @pytest.mark.parametrize("actor", ["admin", "user1", "user2", "viewer"])

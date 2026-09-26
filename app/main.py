@@ -1060,8 +1060,22 @@ def _document_row_for(membership: CurrentMembership, row: sqlite3.Row, trace_sum
     if doc.get("status") == "archived" and requested:
         # Only the owner is ever sent an archived row (_LIVE_OR_PURGE_REQUESTED): it is one they asked to have purged,
         # shown as such and read-only until the team removes it (round 21, DECISIONS #102).
+        #
+        # `can_edit` is deliberately LEFT ALONE here (round 5, item 2, DECISIONS #126) — it stays the plain ownership
+        # answer `may_edit_document` gave two lines up, same as any other document. Forcing it to False here used to
+        # be the ONLY thing that made this document read-only, and it worked by omission: the frontend's Edit button
+        # simply never rendered (`documentIsEditable` reads this flag). Round 5 changed Edit/Delete to render
+        # DISABLED while pending rather than disappearing, which quietly broke that: `can_edit=False` made Edit
+        # disappear again instead of rendering disabled, and the peer session caught it live on a real purge-pending
+        # document after deploying. The actual fix is here, not in the frontend: `can_edit` now answers exactly one
+        # question, ownership, same as it does everywhere else in this app ("what the UI offers can never disagree
+        # with what the server allows" — may_edit_document's own docstring) — the frontend already combines it with
+        # its own `purgePending` check to decide render-disabled vs render-enabled, same pattern Delete already used
+        # and this document's `can_edit` never touched. Read-only itself is now a REAL server rule, not a UI
+        # omission: `edit_document` below refuses any archived document outright (a 404, matching the same rule
+        # `get_document_file` and `get_trace` already enforce), so a curl PATCH to a purge-requested row was never
+        # actually safe before this and is refused now.
         doc["status"] = "purge_requested"
-        doc["can_edit"] = False
     # Round 5, item 6 (DECISIONS #125): absent (None) for an older caller that never fetched trace summaries, and for a
     # document trace never touched — the card renders its zero-state either way, never a crash on a missing key.
     doc["trace_summary"] = (trace_summaries or {}).get(doc["id"])
@@ -1256,9 +1270,18 @@ def edit_document(
     fixtures, or any future non-web ingestion path) is deliberately *not*
     treated as unownable-by-everyone: there is no real uploader to protect
     it from, so a `user` account may edit it same as before this change."""
+    # `status != 'archived'` (round 5, DECISIONS #126) — this endpoint had NO archived exclusion at all before now:
+    # `may_see_document` (via `_hidden_or_missing` just below) never excludes archived documents itself (it only
+    # knows about personal-file and pending-review visibility), so an archived row — a purge-requested one included —
+    # was fetched, found "visible", and then edited if the caller merely owned it, with nothing checking its status.
+    # The one thing that ever stopped it in practice was the frontend simply not offering the button, driven by a
+    # `can_edit` the list endpoint force-set to False for a purge-requested row (removed just above, _document_row_for)
+    # — a real gap a direct PATCH could always have walked around. Matches `get_document_file`/`get_trace`'s own
+    # `status != 'archived'` exactly, so "archived is invisible, not forbidden, even to the owner on their own
+    # purge-requested document" is now one consistent rule, not three endpoints agreeing by coincidence.
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
-            "SELECT company_id, status, uploaded_by_user_id, visibility FROM document WHERE id = ?",
+            "SELECT company_id, status, uploaded_by_user_id, visibility FROM document WHERE id = ? AND status != 'archived'",
             (document_id,),
         ).fetchone()
     # 404 before the ownership 403 below: a document the caller may not see
