@@ -18,7 +18,9 @@ of exactly the kind of mistake point 1 (investigate first) is meant to prevent.
   #130, live incident-driven): no `scripts/seed_dev_db.py`, no
   `scripts/reset_demo_data.py --apply`, no `evals/demo_corpus/run.py`, no
   `RUN_LIVE_GATEWAY_TESTS=1`, no "let me just upload something to check." Plain `pytest tests/`
-  is fine — the 18 live-gateway tests skip by default. If a prompt would cause the coding agent
+  is free ONLY since DECISIONS #135 (2026-09-27): before that fix it ran four live tests and spent real tokens on every run
+  (the old "18 skipped" figure hid them). Now 22 live-gateway tests skip by default and a tripwire fails any test that tries a
+  non-local network request; check that the summary line says 22 skipped. If a prompt would cause the coding agent
   to do any of the above, it needs the user's explicit sign-off named IN the prompt, not implied.
 - **Two databases, not one**: `data/jaga.db` is local dev. The Lightsail box has its own
   separate, real production database, reachable only by SSH. A question about local code

@@ -189,7 +189,26 @@ def test_the_owner_finds_it_in_search_too_and_nobody_else_does(team):
         assert client.get("/api/search?q=findable", headers=_headers(team["tokens"][actor])).json() == [], actor
 
 
-def test_the_owners_thumbnail_of_a_purge_requested_pdf_still_works_and_others_get_404(team):
+def test_the_owners_thumbnail_of_a_purge_requested_pdf_still_works_and_others_get_404(team, monkeypatch):
+    # DECISIONS #135 (2026-09-27): this PDF has extractable text, so classify used to call the REAL gateway on every run (every other
+    # upload in this module is a random-pixel JPEG with no text, which never reaches it). The model is canned here, on a lane with no
+    # extractor, so nothing leaves the process (same pattern as tests/test_upload_doc_type_hint.py).
+    import json
+
+    import app.graph.classify as classify_module
+    from app.llm import LLMResult
+
+    def canned_classify(model, system, user, **kwargs):
+        return LLMResult(
+            content="", model=model, input_tokens=1, output_tokens=1, cost_usd=0.0, latency_ms=1,
+            tool_calls=[{"function": {"name": "classify_document", "arguments": json.dumps({
+                "lane": "important", "doc_type": "contract", "confidence": 0.9, "injection_suspected": False,
+                "bucket": "Contracts", "vendor_name": None, "description": "A thumbnail check document",
+                "description_en": "A thumbnail check document",
+            })}}],
+        )
+
+    monkeypatch.setattr(classify_module, "call", canned_classify)
     from reportlab.pdfgen import canvas
     buf = io.BytesIO()
     c = canvas.Canvas(buf)

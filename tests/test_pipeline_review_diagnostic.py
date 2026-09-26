@@ -10,8 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# DECISIONS #135 (2026-09-27): these four tests call the REAL gateway (classify and extract on real text) and were gated only by the
+# key being set. load_dotenv() above loads the real key from .env, so every plain `pytest tests/` on a machine with a .env spent real
+# tokens, unrecorded (the test DB is reset per test). They now need the same explicit opt-in as tests/test_gateway_live.py.
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("LLM_GATEWAY_API_KEY"), reason="needs LLM_GATEWAY_API_KEY"
+    not (os.environ.get("LLM_GATEWAY_API_KEY") and os.environ.get("RUN_LIVE_GATEWAY_TESTS") == "1"),
+    reason="set RUN_LIVE_GATEWAY_TESTS=1 (and LLM_GATEWAY_API_KEY) to run this — spends real gateway tokens",
 )
 
 BAD_GST_TEXT = """Marina Facilities Management Pte Ltd
