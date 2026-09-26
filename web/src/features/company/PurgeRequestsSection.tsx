@@ -44,10 +44,8 @@ export function PurgeRequestsSection({ enabled }: { enabled: boolean }) {
             <p className="p-6 text-sm text-muted">{t('companySettings.purgeRequests.empty')}</p>
           ) : (
             <ul className="divide-y divide-line">
-              {/* min-h-56/sm:min-h-40 shared with ComplianceChecklist's row (round 4, item 4, DECISIONS #122): this list's own
-                 content is the richer of the two (a title, sometimes a filename line, a status line, a "by X on Y" line and a
-                 button), so its real height IS the value both lists share; see that component for the measurements. A row here
-                 with no filename line (nothing to show under the title) is centred in the space instead of sitting at the top. */}
+              {/* min-h-56/sm:min-h-40 (DECISIONS #122); only the `sm:min-h-40` floor is still shared with ComplianceChecklist's
+                 row. A row here with no filename line is centred in the space instead of sitting at the top. */}
               {state.requests.map((request) => (
                 <li
                   key={request.id}

@@ -42,12 +42,8 @@ export function ComplianceChecklist({
           <p className="p-6 text-sm text-muted">{t('ops.gaps.empty')}</p>
         ) : (
           <ul className="divide-y divide-line">
-            {/* Shared min-height with PurgeRequestsSection's row (round 4, item 4, DECISIONS #122), so the two lists read as one
-               consistent grid rhythm even though a purge request's row (label, filename, status, "by X on Y", a button) is
-               inherently richer than this one (label, a status pill, sometimes a link or a button). Measured live against the
-               tallest real purge-request row at each width: 210px below `sm` (a wrapped title plus its filename line), 150px
-               at `sm` and up (the column is capped at `max-w-2xl`, so nothing changes above that). A shorter row here (most of
-               them: no link, no Upload button) is centred in the extra space rather than left sitting at the top. */}
+            {/* Natural row height below `sm`; from `sm` up a min-height floor with the content centred in it,
+               as in PurgeRequestsSection's rows. */}
             {expectations.map((exp) => {
               const evidence =
                 exp.status === 'satisfied' && exp.evidence_document_id != null
@@ -56,7 +52,7 @@ export function ComplianceChecklist({
               return (
                 <li
                   key={exp.id}
-                  className="flex min-h-56 flex-col justify-center px-4 py-3 sm:min-h-40"
+                  className="flex flex-col px-4 py-3 sm:min-h-40 sm:justify-center"
                   data-testid="checklist-row"
                 >
                   <div className="flex items-start justify-between gap-3">
