@@ -444,3 +444,69 @@ def test_on_that_database_the_view_only_and_picker_invariants_hold_and_a_second_
                  "the_login_picker_config_lists_exactly_the_four_manifest_logins_in_order", "the_external_auditor_is_a_non_picker_viewer_who_acts_nowhere"):
         assert inv[name]["ok"], (name, inv[name]["detail"])
     assert migrated["after_second"] == migrated["after_first"]
+
+
+# ---------------------------------------------------------------- S1e: every seeded picture shows a REAL Picture date (DECISIONS #138)
+
+PHOTOS = [d for d in MANIFEST["documents"] if d["lane"] == "memory" and d["doc_type"] == "photo"]
+
+
+def _photo_rows():
+    return [{"id": i, "lane": "memory", "doc_type": "photo", "sha256": d["sha256"], "occurred_on": d["occurred_on"]} for i, d in enumerate(PHOTOS, 1)]
+
+
+def test_the_verifier_proves_every_seeded_photo_has_an_exif_date_equal_to_its_occurred_on_and_the_card_data_carries_it(seeded):
+    inv = seeded["report"]["invariants"]["every_seeded_photo_has_an_exif_picture_date"]
+    assert inv["ok"], inv["detail"]
+    assert len(PHOTOS) == 3
+
+
+def test_the_picture_invariant_passes_on_the_real_fixtures_and_fails_on_a_corrupted_copy(tmp_path):
+    import shutil
+
+    import verify_seed_fixtures as v
+    from PIL import Image
+
+    by_sha = {d["sha256"]: d for d in MANIFEST["documents"]}
+    rows = _photo_rows()
+    listed = [{"id": r["id"], "occurred_on": r["occurred_on"]} for r in rows]
+    assert v.photo_date_problems(rows, by_sha, listed) == []
+    # mutation 1: a copy of the fixtures where one photo lost its EXIF (re-saved without it)
+    copy = tmp_path / "seed_files"
+    shutil.copytree(FILES, copy)
+    Image.open(copy / PHOTOS[0]["file"]).convert("RGB").save(copy / PHOTOS[0]["file"], "JPEG")
+    assert any("no EXIF DateTimeOriginal" in p for p in v.photo_date_problems(rows, by_sha, listed, copy))
+    # mutation 2: the row's occurred_on drifted from the file's EXIF
+    drifted = [dict(rows[0], occurred_on="2020-01-01")] + rows[1:]
+    assert any("!= EXIF" in p for p in v.photo_date_problems(drifted, by_sha, listed))
+    # mutation 3: the list the card is drawn from lost occurred_on (the card would show the upload-day fallback)
+    bare = [{"id": r["id"], "occurred_on": None} for r in rows]
+    assert any("card data" in p for p in v.photo_date_problems(rows, by_sha, bare))
+
+
+def test_the_generator_never_emits_a_picture_without_an_exif_date_and_stamps_a_deterministic_one():
+    import generate_seed_files as gen
+
+    a, b = gen.Gen(), gen.Gen()
+    da = a.photo("c0", "owner", None, "Office Chinese New Year decorations", 99)
+    db = b.photo("c0", "owner", None, "Office Chinese New Year decorations", 99)
+    assert da["occurred_on"] == db["occurred_on"] == gen.story_photo_date("base", "Office Chinese New Year decorations").isoformat()
+    assert gen.story_photo_date("base", "Year-end team dinner").month == 12  # the year-end story lands in December
+    cny = gen.story_photo_date("base", "Chinese New Year lion dance")
+    assert any(0 < (__import__("datetime").date.fromisoformat(h) - cny).days <= 20 for h in gen.HOLIDAYS["cny"].values())
+    fresh = gen.Gen()
+    before = fresh.rng.getstate()
+    gen.story_photo_date("base", "anything at all")
+    assert fresh.rng.getstate() == before  # the stamp never touches the random stream
+
+
+def test_regenerating_the_photos_is_byte_identical_to_the_committed_fixtures(tmp_path):
+    import datetime
+
+    import generate_seed_files as gen
+
+    for d in PHOTOS:
+        out = tmp_path / "x.jpg"
+        gen.render_jpeg(out, datetime.date.fromisoformat(d["occurred_on"]), d["photo_seed"])
+        assert out.read_bytes() == (FILES / d["file"]).read_bytes(), d["file"]
+        assert gen.exif_taken_on(out) == d["occurred_on"]

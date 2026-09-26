@@ -326,12 +326,18 @@ def test_it_needs_a_session(team, tmp_path):
     assert client.get(f"/api/documents/{doc}/thumbnail").status_code == 401
 
 
-def test_only_a_pdf_has_one_a_photo_is_a_404(team, tmp_path, monkeypatch):
-    monkeypatch.setattr("app.main.get_pdf_thumbnail", lambda *a, **k: pytest.fail("tried to render a photo"))
+def test_a_photo_has_one_too_since_s1e_and_never_through_the_pdf_renderer_but_another_type_is_a_404(team, tmp_path, monkeypatch):
+    """Was `only a PDF has one`; since round 7 S1e stage 1 (DECISIONS #138) a photo has a thumbnail too (tests/test_image_thumbnails.py). It is made by the
+    image path, never PDFium; a type that is neither is still a 404."""
+    monkeypatch.setattr("app.main.get_pdf_thumbnail", lambda *a, **k: pytest.fail("tried to render a photo with the PDF renderer"))
     photo = tmp_path / "photo.jpg"
     Image.new("RGB", (40, 40), (10, 200, 10)).save(photo)
     doc = _insert(team, photo, hashlib.sha256(photo.read_bytes() + b"x").hexdigest(), media_type="image/jpeg")
-    assert _get(team, "owner", doc).status_code == 404
+    assert _get(team, "owner", doc).status_code == 200
+    text = tmp_path / "note.txt"
+    text.write_text("words")
+    other = _insert(team, text, hashlib.sha256(text.read_bytes() + b"y").hexdigest(), media_type="text/plain")
+    assert _get(team, "owner", other).status_code == 404
 
 
 def test_a_missing_stored_file_and_an_unreadable_pdf_are_404s_and_cache_nothing(team, tmp_path, cache):

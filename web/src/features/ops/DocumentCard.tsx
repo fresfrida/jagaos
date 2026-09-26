@@ -12,7 +12,7 @@ import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { FileName } from '../../components/ui/FileName'
 import { ApiError } from '../../lib/apiClient'
-import { formatShortDate, localeFor } from '../../lib/dates'
+import { DEFAULT_COMPANY_TIMEZONE, formatShortDate, localeFor } from '../../lib/dates'
 import { startDownload } from '../../lib/download'
 import { middleEllipsis } from '../../lib/filename'
 import { canShowPdfInline } from '../../lib/pdfSupport'
@@ -30,23 +30,24 @@ import {
 } from './opsShared'
 import { downloadHref, opsApi, type Bucket, type DocumentActivityEntry, type DocumentRow } from './opsApi'
 import { isPurgeRequested, isRejectedDocument } from './documentStatus'
+import { useOptionalAuth } from '../auth/AuthContext'
+import { displayDates } from './documentDates'
 import { HistoryPanel } from './HistoryPanel'
 import { useEditableDescription } from './useEditableDescription'
 
-/** Small preview next to each row in the Documents list (2026-09-22, doc
- * 2's preview UX pass) — a photo is often more recognizable at a glance
- * than its filename. Images fetch the real file (small, via the shared
- * blob-URL hook). A PDF shows a picture of its first page since round 20 (item 5,
- * DECISIONS #97): a small JPEG the server renders on the first request and caches
- * (app/thumbnails.py). Until it arrives, and whenever there is none (it cannot be
- * rendered, or it is not the caller's to see), the generic file icon stays. Any other
- * type gets the icon and makes no request. */
+/** Small preview next to each row in the Documents list (2026-09-22, doc 2's preview UX pass) — a photo is often more recognizable at a glance
+ * than its filename. Both kinds now ask for a THUMBNAIL, never the whole file (round 7, S1e stage 1, DECISIONS #138): a PDF gets a picture of its
+ * first page (round 20, item 5, DECISIONS #97), a photo a small JPEG of about 400 px, both made by the server on the first request and cached
+ * (app/thumbnails.py). A list of photos used to download every photo in full to draw 48 px previews (12 photos, 6.36 MB); the full file is fetched
+ * ONLY by the viewer (DocumentViewerModal) when a person opens one. Until a PDF's thumbnail arrives, and whenever there is none (it cannot be made,
+ * or it is not the caller's to see), the generic file icon shows; a photo shows its frame while loading and the icon if it fails. Any other type
+ * gets the icon and makes no request. */
 export function DocumentThumbnail({ documentId, mediaType }: { documentId: number; mediaType: string }) {
   const isImage = mediaType.startsWith('image/')
   const isPdf = mediaType === 'application/pdf'
-  const { blobUrl } = useDocumentBlobUrl(documentId, isImage || isPdf, isPdf ? 'thumbnail' : 'file')
+  const { blobUrl, failed } = useDocumentBlobUrl(documentId, isImage || isPdf, 'thumbnail')
 
-  if (isImage || (isPdf && blobUrl)) {
+  if ((isImage && !failed) || (isPdf && blobUrl)) {
     return (
       <div className="h-12 w-12 shrink-0 overflow-hidden rounded-control border border-line bg-canvas">
         {/* The top of a page is what identifies it, so a portrait page is cropped from the top. */}
@@ -194,6 +195,8 @@ export function DocumentCard({
   onSaved: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const timezone = useOptionalAuth()?.company?.timezone ?? DEFAULT_COMPANY_TIMEZONE
+  const dates = displayDates(doc, timezone)
   const [editing, setEditing] = useState(false)
   // 2026-09-24 (items 5/6): doc.description is JSON-encoded
   // {"en": "...", "<language>": "..."} — descriptionFor() reads back
@@ -335,10 +338,13 @@ export function DocumentCard({
                locale-aware formatShortDate (lib/dates.ts) the Calendar
                page's own day heading already uses, not a second
                date-formatting approach. */}
-            <p className="mt-0.5 break-words text-[13px] text-muted">
-              {t('ops.dates.uploadDate')}: {formatShortDate(doc.received_at, localeFor(i18n.language))}
+            {/* Round 7, S1e (DECISIONS #138): both days come from documentDates.displayDates, the SAME rule the Calendar and the range filter use, and the
+               upload day is the company's own (it was the UTC day of the timestamp before). A picture says "Picture date", and when no date-taken was
+               ever known it shows its upload day there; every other document with no date still says "No document date". */}
+            <p className="mt-0.5 break-words text-[13px] text-muted" data-testid="document-dates">
+              {t('ops.dates.uploadDate')}: {dates.upload ? formatShortDate(dates.upload, localeFor(i18n.language)) : '-'}
               {' · '}
-              {t('ops.dates.documentDate')}: {doc.occurred_on ? formatShortDate(doc.occurred_on, localeFor(i18n.language)) : t('ops.documents.noDocumentDate')}
+              {dates.picture ? t('ops.dates.pictureDate') : t('ops.dates.documentDate')}: {dates.document ? formatShortDate(dates.document, localeFor(i18n.language)) : t('ops.documents.noDocumentDate')}
             </p>
             {doc.vendor_name && <p className="mt-0.5 break-words text-[13px] text-muted">{doc.vendor_name}</p>}
             {purgePending && (

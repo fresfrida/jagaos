@@ -6,6 +6,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { normalizeImageForUpload } from '../../lib/imageNormalize'
+import { readExifDate } from '../../lib/exifDate'
 import { opsApi, type UploadResult, type Visibility } from '../ops/opsApi'
 import { assertWithinFileLimit } from './fileLimit'
 import {
@@ -95,12 +96,15 @@ export function useUploadFlow({ language, refresh, onOutcome, onError, docTypeHi
     (file: File, isPicture: boolean, details?: PersonalDetails) =>
       run(
         async () => {
+          // The date the photo was TAKEN is read from the ORIGINAL file first: the re-encoding below drops EXIF (round 7, S1e, DECISIONS #138). A picture only.
+          const takenOn = isPicture ? await readExifDate(file) : null
           // A photo is downscaled first, so a 30 MB phone photo is judged as the small file it becomes.
           const prepared = await normalizeImageForUpload(file)
           await assertWithinFileLimit([prepared])
           return opsApi.uploadDocument(prepared, isPicture, language, {
             docTypeHint: isPicture ? null : docTypeHint,
             visibility,
+            takenOn: takenOn ?? undefined,
             ...details,
           })
         },

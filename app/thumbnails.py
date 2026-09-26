@@ -1,4 +1,4 @@
-"""First-page thumbnails of PDFs (2026-09-25, round 20, item 5).
+"""Thumbnails of PDFs (first page; 2026-09-25, round 20, item 5) and of PHOTOS (round 7, S1e stage 1, DECISIONS #138).
 
 WHEN: lazily, on the first request for one (GET /api/documents/{id}/thumbnail), not at
 ingest. Nothing in the upload pipeline changes, an existing document needs no backfill,
@@ -25,6 +25,12 @@ Any failure to render (a corrupt or password-protected PDF, no pages) is None, n
 so the caller answers 404 and the page keeps its generic icon. A failure is not cached; the next
 request tries once more.
 
+PHOTOS (S1e stage 1): the Company Files list used to download every photo in full to draw a 48 px preview (12 photos, 6.36 MB). An image now gets the
+same kind of thumbnail, IMAGE_THUMB_MAX_SIDE (400 px, its own constant; PDF thumbnails stay at 320 and are not regenerated): opened with Pillow, orientation
+applied (ImageOps.exif_transpose), fitted to 400 on the longest side, RGB, JPEG quality 80, written to the SAME cache file `<sha256>.jpg` by the SAME atomic
+write, so remove_thumbnail() (purge) already covers it. No PDFium lock: a photo is not PDFium's. Any failure (a corrupt or unsupported image, one Pillow
+refuses as a decompression bomb) is None and is not cached. The server never downscales or re-encodes the UPLOAD itself; that is out of scope by decision.
+
 WHO MAY SEE ONE is decided by the endpoint, with the rule that guards the file itself.
 """
 
@@ -41,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 THUMBS_PATH = Path(os.environ.get("JAGA_THUMBS_PATH", "./data/thumbnails"))
 THUMB_MAX_SIDE = 320
+IMAGE_THUMB_MAX_SIDE = 400  # photos only; a PDF thumbnail stays at THUMB_MAX_SIDE
 JPEG_QUALITY = 80
 RENDER_DPI = 72
 
@@ -64,6 +71,12 @@ def _render(pdf_path: str, destination: Path) -> bool:
             image = pdf.pages[0].to_image(resolution=RENDER_DPI).original
     image = image.convert("RGB")
     image.thumbnail((THUMB_MAX_SIDE, THUMB_MAX_SIDE))
+    _save_atomically(image, destination)
+    return True
+
+
+def _save_atomically(image, destination: Path) -> None:
+    """Write a finished thumbnail into the cache: a temp file, then a rename, so a reader never sees half of one and two racing writers are harmless."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     temp = destination.with_name(f"{destination.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
@@ -71,7 +84,29 @@ def _render(pdf_path: str, destination: Path) -> bool:
         os.replace(temp, destination)
     finally:
         temp.unlink(missing_ok=True)
+
+
+def _render_image(image_path: str, destination: Path) -> bool:
+    from PIL import Image, ImageOps
+
+    with Image.open(image_path) as source:
+        image = ImageOps.exif_transpose(source)   # a phone photo is stored sideways with an orientation flag: show it upright
+        image = image.convert("RGB")
+        image.thumbnail((IMAGE_THUMB_MAX_SIDE, IMAGE_THUMB_MAX_SIDE))
+    _save_atomically(image, destination)
     return True
+
+
+def get_image_thumbnail(sha256: str, image_path: str) -> Path | None:
+    """The cached thumbnail for this photo, making it first if there is none. None when the image cannot be read (never an exception, never cached)."""
+    destination = thumbnail_path(sha256)
+    if destination.is_file():
+        return destination
+    try:
+        return destination if _render_image(image_path, destination) else None
+    except Exception:  # a corrupt or unsupported image, a decompression bomb: no thumbnail, not a 500
+        logger.warning("could not make a thumbnail for %s", image_path, exc_info=True)
+        return None
 
 
 def get_pdf_thumbnail(sha256: str, pdf_path: str) -> Path | None:

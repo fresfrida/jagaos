@@ -435,7 +435,8 @@
       "nextYears": "Later years",
       "pickMonth": "{{label}}: choose a year and month",
       "backToDays": "{{label}}: back",
-      "today": "Today"
+      "today": "Today",
+      "pictureDate": "Picture date"
     },
     "gaps": {
       "heading": "Compliance checklist: {{satisfied}} of {{total}} held",

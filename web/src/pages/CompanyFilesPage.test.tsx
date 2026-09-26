@@ -8,7 +8,7 @@ import i18n from '../i18n'
 const auth = vi.hoisted(() => ({
   value: { status: 'signed-in', role: 'owner', company: { timezone: 'Asia/Singapore' } } as { status: string; role: string | null; company: { timezone: string } | null },
 }))
-vi.mock('../features/auth/AuthContext', () => ({ useAuth: () => auth.value }))
+vi.mock('../features/auth/AuthContext', () => ({ useAuth: () => auth.value, useOptionalAuth: () => auth.value }))
 const ops = vi.hoisted(() => ({ documents: [] as unknown[], refresh: vi.fn() }))
 vi.mock('../features/ops/useOpsData', () => ({
   useOpsData: () => ({ documents: ops.documents, apiUp: true, error: null, refresh: ops.refresh }),

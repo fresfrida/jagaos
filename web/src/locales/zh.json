@@ -434,7 +434,8 @@
       "nextYears": "更晚的年份",
       "pickMonth": "{{label}}：选择年份和月份",
       "backToDays": "{{label}}：返回",
-      "today": "今天"
+      "today": "今天",
+      "pictureDate": "照片日期"
     },
     "gaps": {
       "heading": "合规清单：已持有 {{satisfied}} / {{total}}",

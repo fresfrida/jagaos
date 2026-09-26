@@ -434,7 +434,8 @@
       "nextYears": "Tahun lebih lewat",
       "pickMonth": "{{label}}: pilih tahun dan bulan",
       "backToDays": "{{label}}: kembali",
-      "today": "Hari ini"
+      "today": "Hari ini",
+      "pictureDate": "Tarikh gambar"
     },
     "gaps": {
       "heading": "Senarai semak pematuhan: {{satisfied}} daripada {{total}} dipegang",

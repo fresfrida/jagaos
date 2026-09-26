@@ -277,10 +277,33 @@ class Gen:
                         filename=filename or f"{slug(title)}.pdf", lane=lane, doc_type=doc_type, bucket=bucket, vendor=vendor,
                         description=description, **meta)
 
-    def photo(self, company: str, uploader: str, occurred: date, caption: str, seed: int) -> dict | None:
+    def photo(self, company: str, uploader: str, occurred: date | None, caption: str, seed: int) -> dict | None:
+        """A Memory Lane picture. Its date lives in the file's own EXIF (render_jpeg) and is the row's occurred_on, so the card shows a real
+        Picture date, never the upload-day fallback (S1e, DECISIONS #138). A picture is never emitted without one: a missing date is stamped
+        with story_photo_date(), a pure function of the cluster and caption (never the random stream)."""
+        if occurred is None:
+            occurred = story_photo_date("base", caption)
         return self.add(company=company, cluster="base", uploader=uploader, occurred=occurred, delta_days=1, pages=[], media="jpg",
                         filename=f"{slug(caption)}.jpg", lane="memory", doc_type="photo", bucket="Memory Lane", vendor=None,
                         description=None, photo_seed=seed, caption=caption)
+
+
+def story_photo_date(cluster: str, caption: str) -> date:
+    """A deterministic EXIF date for a picture added without one, matching its place in the seasonal story: a festival caption lands in that
+    festival's window (the 20th to the 1st day before it), a year-end caption in mid-December, anything else on a fixed day of the year the
+    hash of (cluster, caption) picks. A pure function of its two arguments, so a regenerate never moves a byte."""
+    import zlib
+
+    h = zlib.crc32(f"{cluster}|{caption}".encode())
+    text = caption.lower()
+    years = [y for y in range(2019, 2026)]
+    year = years[h % len(years)]
+    for word, key in (("chinese new year", "cny"), ("hari raya", "raya"), ("deepavali", "deepavali")):
+        if word in text and year in HOLIDAYS[key]:
+            return date.fromisoformat(HOLIDAYS[key][year]) - timedelta(days=1 + h // 7 % 20)
+    if any(w in text for w in ("year-end", "year end", "christmas", "new year")):
+        return date(year, 12, 10 + h % 10)
+    return date(year, 1 + h % 12, 1 + h // 12 % 28)
 
 
 # Company events the checklist is built from (the seeder writes them, then runs the REAL expectation rule and reconcile). The mix
@@ -537,6 +560,15 @@ def render_jpeg(path: Path, occurred: date, seed: int) -> None:
     path.write_bytes(buf.getvalue())
 
 
+def exif_taken_on(path: Path) -> str | None:
+    """The EXIF DateTimeOriginal in a picture FILE as YYYY-MM-DD, or None when it has none (the guard main() checks after every render)."""
+    try:
+        raw = Image.open(path).getexif().get_ifd(0x8769).get(0x9003)
+        return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").date().isoformat()
+    except Exception:  # noqa: BLE001 - no EXIF, or a malformed one, is "no date"
+        return None
+
+
 def reassign_uploaders(docs: list[dict]) -> None:
     """Who uploaded each document, decided AFTER the content is fixed (S1d). Kavitha and Alvin are dropped and there is no `user` role, so
     everything that was theirs, and part of the load Jonathan carried, is spread over the active people: the owner and the admins. A pure
@@ -610,6 +642,7 @@ def main() -> None:
         path = OUT / d["file"]
         if d["media"] == "jpg":
             render_jpeg(path, date.fromisoformat(d["occurred_on"]), d["photo_seed"])
+            assert exif_taken_on(path) == d["occurred_on"], f"{d['file']}: the picture carries no EXIF date equal to its occurred_on"
         else:
             render_pdf(path, d["pages"])
         d["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()

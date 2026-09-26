@@ -427,15 +427,18 @@ class Seeder:
 
     # ------------------------------------------------------------ 6. thumbnails
     def apply_thumbnails(self) -> None:
-        from app.thumbnails import get_pdf_thumbnail
+        """Pre-generate the thumbnails of the seeded PDFs (first page) AND photos (about 400 px; S1e stage 1, DECISIONS #138), with the app's own thumbnail
+        code, so the first view of Company Files is not hundreds of lazy renders. Company documents only (a personal file's thumbnail is made on request)."""
+        from app.thumbnails import get_image_thumbnail, get_pdf_thumbnail
 
         with self.get_conn(self.db_path) as conn:
             # Only the documents this seeder made: a database it did not build may hold rows the thumbnail code refuses.
-            rows = conn.execute("SELECT sha256, stored_path FROM document WHERE source_identity = ? AND media_type = 'application/pdf' "
-                                "AND visibility = 'company'", (SOURCE_IDENTITY,)).fetchall()
+            rows = conn.execute("SELECT sha256, stored_path, media_type FROM document WHERE source_identity = ? AND visibility = 'company' "
+                                "AND (media_type = 'application/pdf' OR media_type LIKE 'image/%')", (SOURCE_IDENTITY,)).fetchall()
         for r in rows:
+            make = get_pdf_thumbnail if r["media_type"] == "application/pdf" else get_image_thumbnail
             try:
-                if get_pdf_thumbnail(r["sha256"], r["stored_path"]) is not None:
+                if make(r["sha256"], r["stored_path"]) is not None:
                     self.stats["thumbnails"] += 1
             except ValueError:
                 pass

@@ -31,14 +31,41 @@ export function parseBasis(raw: string | null | undefined): DateBasis {
   return raw === 'document' ? 'document' : 'upload'
 }
 
-/** The day a document falls on under `basis`, or null when the basis has no date for it. */
-export function documentDay(
-  doc: Pick<DocumentRow, 'received_at' | 'occurred_on'>,
-  basis: DateBasis,
-  timezone: string,
-): string | null {
-  if (basis === 'upload') return doc.received_at ? dayInTimezone(doc.received_at, timezone) : null
-  return doc.occurred_on ? doc.occurred_on.slice(0, 10) : null
+/** What a document needs to be placed on a day: the two dates, and its lane (a picture is `memory`). */
+export type DayFields = Pick<DocumentRow, 'received_at' | 'occurred_on'> & { lane?: string | null }
+
+/** A picture (a photo in Memory Lane, whatever its EXIF said) is the one kind of document whose date the person did not type and no model read. */
+export function isPicture(doc: { lane?: string | null }): boolean {
+  return doc.lane === 'memory'
+}
+
+/** The day a document was uploaded, in the COMPANY's timezone (`received_at` is a real UTC timestamp), or null. The one place that turns it into a day. */
+export function uploadDay(doc: Pick<DocumentRow, 'received_at'>, timezone: string): string | null {
+  return doc.received_at ? dayInTimezone(doc.received_at, timezone) : null
+}
+
+/** The day a document falls on under `basis`, or null when the basis has no date for it. ONE function for the Calendar, the range filter and the card
+ * (round 7, S1e, DECISIONS #138). A PICTURE with no `occurred_on` (a photo the browser's re-encoding stripped the EXIF from, and no date-taken came with)
+ * falls back to its UPLOAD day under the 'document' basis, so it is never left out of a range; nothing is written for that (occurred_on stays null:
+ * "the photo says" and "we guessed" are never mixed in the database). Every other document with no `occurred_on` still has no document day. */
+export function documentDay(doc: DayFields, basis: DateBasis, timezone: string): string | null {
+  if (basis === 'upload') return uploadDay(doc, timezone)
+  if (doc.occurred_on) return doc.occurred_on.slice(0, 10)
+  return isPicture(doc) ? uploadDay(doc, timezone) : null
+}
+
+/** The two dates a card shows, from the same rule. `fromUpload` is true when a picture's date is the fallback (no date-taken was known). */
+export interface DisplayDates {
+  upload: string | null
+  document: string | null
+  picture: boolean
+  fromUpload: boolean
+}
+
+export function displayDates(doc: DayFields, timezone: string): DisplayDates {
+  const picture = isPicture(doc)
+  const document = documentDay(doc, 'document', timezone)
+  return { upload: uploadDay(doc, timezone), document, picture, fromUpload: picture && !doc.occurred_on && document !== null }
 }
 
 export function rangeIsSet(range: DateRange): boolean {
@@ -53,7 +80,7 @@ export function rangeIsBackwards(range: DateRange): boolean {
 /** The documents whose day (under `basis`) is inside the range. An unset range keeps everything, including documents
  * with no date under `basis`; a set range drops those, since they cannot be placed in it. A backwards range keeps nothing: no day is
  * both on or after the start and on or before an earlier end, so it needs no rule of its own. */
-export function filterByDateRange<T extends Pick<DocumentRow, 'received_at' | 'occurred_on'>>(
+export function filterByDateRange<T extends DayFields>(
   documents: readonly T[],
   basis: DateBasis,
   range: DateRange,

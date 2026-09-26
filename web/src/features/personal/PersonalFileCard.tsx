@@ -12,9 +12,11 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { TypedConfirmDialog } from '../../components/ui/TypedConfirmDialog'
 import { ApiError } from '../../lib/apiClient'
-import { formatShortDate, localeFor } from '../../lib/dates'
+import { DEFAULT_COMPANY_TIMEZONE, formatShortDate, localeFor } from '../../lib/dates'
 import { middleEllipsis } from '../../lib/filename'
+import { useOptionalAuth } from '../auth/AuthContext'
 import { DocumentThumbnail } from '../ops/DocumentCard'
+import { uploadDay } from '../ops/documentDates'
 import { opsApi, type DocumentRow } from '../ops/opsApi'
 import { descriptionFor, FIELD_CLASS } from '../ops/opsShared'
 import { PERSONAL_CAPTION_MAX, PERSONAL_NAME_MAX } from './personalDetails'
@@ -33,6 +35,10 @@ export function PersonalFileCard({
   onSaved: () => void
 }) {
   const { t, i18n } = useTranslation()
+  // The upload day in the COMPANY's timezone, from the one shared function (documentDates.uploadDay), like the Company Files card, the Calendar and the range
+  // filter (round 7, S1e, DECISIONS #138). An Only me file shows no document date by design (nothing is read out of it), so there is no picture date here.
+  const timezone = useOptionalAuth()?.company?.timezone ?? DEFAULT_COMPANY_TIMEZONE
+  const uploadedOn = uploadDay(doc, timezone)
   const caption = descriptionFor(doc.description, i18n.language)
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(doc.filename)
@@ -72,7 +78,7 @@ export function PersonalFileCard({
           <p className="break-words text-sm font-medium text-ink" data-testid="personal-file-name">{middleEllipsis(doc.filename, 60)}</p>
           {caption && <p className="mt-0.5 break-words text-[13px] text-ink/80" data-testid="personal-file-caption">{caption}</p>}
           <p className="mt-0.5 text-[13px] text-muted">
-            {t('ops.dates.uploadDate')}: {formatShortDate(doc.received_at, localeFor(i18n.language))}
+            {t('ops.dates.uploadDate')}: {uploadedOn ? formatShortDate(uploadedOn, localeFor(i18n.language)) : '-'}
           </p>
         </div>
       </div>

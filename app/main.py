@@ -55,6 +55,7 @@ from app.db import (  # noqa: E402
     parse_description,
     reindex_document_search,
 )
+from app.extract.exif import valid_taken_on  # noqa: E402
 from app.extract.image_prep import MAX_EDGE as PHOTO_OCR_MAX_EDGE  # noqa: E402
 from app.extract.merge import PageImageError, merge_images_to_pdf  # noqa: E402
 from app.extract.ocr import MAX_PDF_OCR_PAGES  # noqa: E402
@@ -84,7 +85,7 @@ from app.limits import (  # noqa: E402
 )
 from app.downloads import DOWNLOAD_LINK_TTL_SECONDS, attachment_filename, issue_download_link, redeem_download_link  # noqa: E402
 from app.purge import PurgeRefused, purge_now  # noqa: E402
-from app.thumbnails import get_pdf_thumbnail  # noqa: E402
+from app.thumbnails import get_image_thumbnail, get_pdf_thumbnail  # noqa: E402
 from app.wordcloud import MAX_DOCUMENTS_SCANNED, top_terms  # noqa: E402
 from app.models import (  # noqa: E402
     PurgeRequest,
@@ -529,6 +530,7 @@ def _process_upload(
     membership: CurrentMembership, background_tasks: BackgroundTasks, tmp_path: str, filename: str,
     source_channel: str, is_picture: bool, language: str, visibility: str,
     doc_type_hint: str | None = None, name: str = "", caption: str | None = None, from_photos: bool = False,
+    taken_on: str | None = None,
 ) -> dict:
     """Run one already-written temp file through ingest and the pipeline and
     build the upload response. A PERSONAL file (visibility other than 'company') does not take the pipeline at all: it is
@@ -554,6 +556,10 @@ def _process_upload(
         # A PDF the server merged from several photos is read at the photo cap (app/extract/image_prep.py, DECISIONS #129); a scanned
         # PDF a person uploaded is not, and a single image is normalized inside ingest itself.
         ocr_max_edge=PHOTO_OCR_MAX_EDGE if from_photos else None,
+        # Round 7, S1e (DECISIONS #138): the browser's date-taken for a COMPANY PICTURE whose EXIF its re-encoding dropped. Validated here (a bad, out of range or
+        # future value is IGNORED, never an error); used by ingest() only when the server's own EXIF read found nothing. Not for Only me: that path reads
+        # nothing out of the file by decision (DECISIONS #101) and its card shows no document date.
+        occurred_on_hint=valid_taken_on(taken_on) if is_picture and visibility == "company" else None,
     )
     if ingest_state.get("text_source") == "duplicate":
         # The duplicate check is on the file's hash across the whole database,
@@ -778,6 +784,9 @@ async def upload_document(
     # (visibility=only_me), whose name and caption they are; ignored for a company document, which is named in review.
     name: str | None = None,
     caption: str | None = None,
+    # Round 7, S1e (DECISIONS #138): the date-taken the browser read from the ORIGINAL photo's EXIF before it re-encoded it (which drops EXIF), as YYYY-MM-DD.
+    # Used ONLY for a company picture and ONLY when this server's own EXIF read finds nothing; anything invalid is ignored (never a 400).
+    taken_on: str | None = None,
 ) -> dict:
     personal_name, personal_caption = _clean_personal_details(name, caption) if visibility != "company" else ("", None)
     data = _read_within_the_file_limit(await file.read())
@@ -800,7 +809,7 @@ async def upload_document(
     try:
         return _process_upload(
             membership, background_tasks, tmp_path, file.filename, source_channel, is_picture, language,
-            visibility, doc_type_hint, personal_name, personal_caption,
+            visibility, doc_type_hint, personal_name, personal_caption, taken_on=taken_on,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -1468,9 +1477,11 @@ def get_document_file(
     doc = _readable_file_row(membership, document_id)
     if doc is None:
         raise HTTPException(404, "document not found")
+    # `private, max-age=3600` (round 7, S1e stage 1, DECISIONS #138), the same as the thumbnail: the browser may reuse the bytes for an hour, a shared
+    # cache never. The trade-off: after a document is archived or purged its file can still be served from THAT browser's own cache for up to an hour.
     return FileResponse(
         doc["stored_path"], media_type=doc["media_type"],
-        filename=doc["filename"], content_disposition_type="inline",
+        filename=doc["filename"], content_disposition_type="inline", headers={"Cache-Control": "private, max-age=3600"},
     )
 
 
@@ -1551,9 +1562,9 @@ def get_document_thumbnail(
     `_hidden_or_missing` rule, so a personal file's thumbnail is its uploader's alone and a
     document the caller may not see is a 404 (never a 403, never a hint that it exists).
 
-    Only a PDF has one (a photo's own bytes are small enough to show directly): any other type is
-    a 404, and so is a PDF that cannot be rendered or whose stored file is missing, and the
-    page then keeps its generic icon. `Cache-Control: private` lets the browser reuse it for an
+    A PDF has one (its first page) and, since round 7 S1e stage 1 (DECISIONS #138), so does a PHOTO (about 400 px, so a list of photos does
+    not download every photo in full): any other type is a 404, and so is a file that cannot be rendered or whose stored file is missing, and
+    the page then keeps its generic icon. The access rules are identical for both. `Cache-Control: private` lets the browser reuse it for an
     hour without ever letting a shared cache keep it."""
     with get_conn(DB_PATH) as conn:
         doc = conn.execute(
@@ -1563,11 +1574,12 @@ def get_document_thumbnail(
         ).fetchone()
     if _hidden_or_missing(membership, doc):
         raise HTTPException(404, "document not found")
-    if doc["media_type"] != "application/pdf":
+    is_pdf = doc["media_type"] == "application/pdf"
+    if not is_pdf and not doc["media_type"].startswith("image/"):
         raise HTTPException(404, "no thumbnail for this file type")
     if not Path(doc["stored_path"]).is_file():
         raise HTTPException(404, "document file is missing")
-    thumbnail = get_pdf_thumbnail(doc["sha256"], doc["stored_path"])
+    thumbnail = (get_pdf_thumbnail if is_pdf else get_image_thumbnail)(doc["sha256"], doc["stored_path"])
     if thumbnail is None:
         raise HTTPException(404, "no thumbnail could be made for this file")
     return FileResponse(thumbnail, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})

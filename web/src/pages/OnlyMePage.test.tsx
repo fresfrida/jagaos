@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 
 const auth = vi.hoisted(() => ({ value: { status: 'signed-in', role: 'user' } as { status: string; role: string | null } }))
-vi.mock('../features/auth/AuthContext', () => ({ useAuth: () => auth.value }))
+vi.mock('../features/auth/AuthContext', () => ({ useAuth: () => auth.value, useOptionalAuth: () => auth.value }))
 vi.mock('../router/navigate', () => ({ navigate: vi.fn() }))
 vi.mock('../lib/imageNormalize', () => ({ normalizeImageForUpload: vi.fn(async (f: File) => f) }))
 vi.mock('../features/ops/opsApi', async (importActual) => ({

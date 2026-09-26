@@ -122,3 +122,70 @@ describe('rangeEcho (DECISIONS #110)', () => {
   })
 })
 
+
+// ---------------------------------------------------------------- round 7, S1e (DECISIONS #138): a picture's date
+
+import { displayDates, isPicture, uploadDay } from './documentDates'
+
+const pic = (received_at: string, occurred_on: string | null = null) => ({ received_at, occurred_on, lane: 'memory' })
+const invoice = (received_at: string, occurred_on: string | null = null) => ({ received_at, occurred_on, lane: 'invoice' })
+
+describe('a picture (lane memory) with no date-taken', () => {
+  it('falls back to its UPLOAD day, in the company timezone, under the document basis', () => {
+    expect(documentDay(pic('2026-09-24 20:30:00'), 'document', 'Asia/Singapore')).toBe('2026-09-25')   // 20:30 UTC is the next day in Singapore
+    expect(documentDay(pic('2026-09-24 20:30:00'), 'document', 'UTC')).toBe('2026-09-24')
+  })
+
+  it('a picture WITH a date-taken uses it, whatever day it was uploaded', () => {
+    expect(documentDay(pic('2026-09-24 20:30:00', '2019-08-08'), 'document', 'Asia/Singapore')).toBe('2019-08-08')
+  })
+
+  it('the upload basis is unchanged for a picture', () => {
+    expect(documentDay(pic('2026-09-24 20:30:00', '2019-08-08'), 'upload', 'Asia/Singapore')).toBe('2026-09-25')
+  })
+
+  it('every OTHER document with no date still has no document day (the fallback is for pictures only)', () => {
+    for (const lane of ['invoice', 'statutory', 'important', null, undefined]) {
+      expect(documentDay({ received_at: '2026-09-24 20:30:00', occurred_on: null, lane }, 'document', 'Asia/Singapore'), String(lane)).toBeNull()
+    }
+    expect(documentDay({ received_at: '2026-09-24 20:30:00', occurred_on: null }, 'document', 'Asia/Singapore')).toBeNull()   // a caller with no lane at all
+  })
+
+  it('the range filter agrees: the picture is inside a document-date range that holds its upload day, and a non-picture with no date is not', () => {
+    const docs = [pic('2026-09-24 05:00:00'), invoice('2026-09-24 05:00:00'), pic('2026-09-24 05:00:00', '2019-08-08')]
+    const range = { from: '2026-09-24', to: '2026-09-24' }
+    expect(filterByDateRange(docs, 'document', range, 'Asia/Singapore')).toEqual([docs[0]])
+    expect(filterByDateRange(docs, 'document', { from: '2019-08-01', to: '2019-08-31' }, 'Asia/Singapore')).toEqual([docs[2]])
+    expect(filterByDateRange(docs, 'upload', range, 'Asia/Singapore')).toEqual(docs)
+  })
+
+  it('an unset range still keeps every document, dated or not', () => {
+    const docs = [pic('2026-09-24 05:00:00'), invoice('2026-09-24 05:00:00')]
+    expect(filterByDateRange(docs, 'document', NO_RANGE, 'Asia/Singapore')).toEqual(docs)
+  })
+})
+
+describe('isPicture, uploadDay and displayDates: the one rule the card, the Calendar and the filter share', () => {
+  it('a picture is exactly lane memory', () => {
+    expect(isPicture({ lane: 'memory' })).toBe(true)
+    for (const lane of ['invoice', 'statutory', 'important', '', null, undefined]) expect(isPicture({ lane }), String(lane)).toBe(false)
+  })
+
+  it('uploadDay is the upload timestamp in the company timezone, or null with no timestamp', () => {
+    expect(uploadDay({ received_at: '2026-09-24 20:30:00' }, 'Asia/Singapore')).toBe('2026-09-25')
+    expect(uploadDay({ received_at: '' }, 'Asia/Singapore')).toBeNull()
+  })
+
+  it('a picture with a date-taken: both days, its own, and not the fallback', () => {
+    expect(displayDates(pic('2026-09-24 20:30:00', '2019-08-08'), 'Asia/Singapore')).toEqual({ upload: '2026-09-25', document: '2019-08-08', picture: true, fromUpload: false })
+  })
+
+  it('a picture without one: the document day IS the upload day, and it says so', () => {
+    expect(displayDates(pic('2026-09-24 20:30:00'), 'Asia/Singapore')).toEqual({ upload: '2026-09-25', document: '2026-09-25', picture: true, fromUpload: true })
+  })
+
+  it('a non-picture is unchanged: its own date, or none', () => {
+    expect(displayDates(invoice('2026-09-24 20:30:00', '2026-09-01'), 'Asia/Singapore')).toEqual({ upload: '2026-09-25', document: '2026-09-01', picture: false, fromUpload: false })
+    expect(displayDates(invoice('2026-09-24 20:30:00'), 'Asia/Singapore')).toEqual({ upload: '2026-09-25', document: null, picture: false, fromUpload: false })
+  })
+})

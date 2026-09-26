@@ -61,3 +61,21 @@ describe('upload calls carry the visibility of the Only me section (round 19)', 
     expect(new URL(urlOfCall()).pathname).toBe('/api/personal-files')
   })
 })
+
+describe('uploadDocument carries the date a picture was taken (round 7, S1e, DECISIONS #138)', () => {
+  it('sends taken_on only when it has one', async () => {
+    await opsApi.uploadDocument(file, true, 'en', { takenOn: '2024-02-05' })
+    expect(new URL(urlOfCall()).searchParams.get('taken_on')).toBe('2024-02-05')
+  })
+
+  it.each([undefined, null, ''])('sends no taken_on parameter for %j', async (value) => {
+    await opsApi.uploadDocument(file, true, 'en', { takenOn: value })
+    expect(new URL(urlOfCall()).searchParams.has('taken_on')).toBe(false)
+  })
+
+  it('leaves every other parameter as it was', async () => {
+    await opsApi.uploadDocument(file, true, 'ms', { takenOn: '2024-02-05', docTypeHint: null })
+    const params = new URL(urlOfCall()).searchParams
+    expect([params.get('is_picture'), params.get('language'), params.get('source_channel'), params.has('doc_type_hint')]).toEqual(['true', 'ms', 'web', false])
+  })
+})

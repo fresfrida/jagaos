@@ -5,12 +5,14 @@ import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../lib/imageNormalize', () => ({ normalizeImageForUpload: vi.fn(async (f: File) => f) }))
+vi.mock('../../lib/exifDate', () => ({ readExifDate: vi.fn(async () => null) }))
 vi.mock('../ops/opsApi', async (importActual) => ({
   ...(await importActual<typeof import('../ops/opsApi')>()),
   opsApi: { uploadDocument: vi.fn(), uploadPages: vi.fn(), getLimits: vi.fn() },
 }))
 
 import { ApiError } from '../../lib/apiClient'
+import { readExifDate } from '../../lib/exifDate'
 import { opsApi } from '../ops/opsApi'
 import { resetFileLimitCache } from './fileLimit'
 import { defaultPersonalName, useUploadFlow } from './useUploadFlow'
@@ -268,5 +270,39 @@ describe('useUploadFlow', () => {
 
       expect(onError.mock.calls.at(-1)![1]).toMatchObject({ code: 'personal_file_limit' })
     })
+  })
+})
+
+describe('a company picture carries the date it was taken (round 7, S1e, DECISIONS #138)', () => {
+  it('reads the date from the ORIGINAL file (before the canvas re-encode drops it) and sends it as takenOn', async () => {
+    vi.mocked(readExifDate).mockResolvedValueOnce('2024-02-05')
+    uploadDocument.mockResolvedValue({ document_id: 1, status: 'needs_review' })
+    const original = jpg('room.jpg')
+    const { result } = hook()
+
+    await act(async () => { result.current.uploadPhoto(original) })
+
+    expect(readExifDate).toHaveBeenCalledWith(original)
+    expect(uploadDocument).toHaveBeenCalledWith(expect.any(File), true, 'en', expect.objectContaining({ takenOn: '2024-02-05' }))
+  })
+
+  it('a picture with no date sends no takenOn', async () => {
+    vi.mocked(readExifDate).mockResolvedValueOnce(null)
+    uploadDocument.mockResolvedValue({ document_id: 1, status: 'needs_review' })
+    const { result } = hook()
+
+    await act(async () => { result.current.uploadPhoto(jpg('room.jpg')) })
+
+    expect(uploadDocument.mock.calls[0]![3]!.takenOn).toBeUndefined()
+  })
+
+  it('a document is never read for a date', async () => {
+    uploadDocument.mockResolvedValue({ document_id: 1, status: 'needs_review' })
+    const { result } = hook()
+
+    await act(async () => { result.current.chooseDocumentFiles([pdf]) })
+
+    expect(readExifDate).not.toHaveBeenCalled()
+    expect(uploadDocument.mock.calls[0]![3]!.takenOn).toBeUndefined()
   })
 })

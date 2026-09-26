@@ -134,3 +134,13 @@ describe('DocumentViewerModal, a PDF where the browser has no PDF viewer (a phon
     expect(makeLink).not.toHaveBeenCalled()
   })
 })
+
+
+describe('DocumentViewerModal, a photo (round 7, S1e stage 1, DECISIONS #138)', () => {
+  it('is the ONLY place the full file of a photo is fetched: opening the viewer asks for the file, and not for a thumbnail', async () => {
+    fetchFile.mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }))
+    show({ filename: 'holiday.jpg', media_type: 'image/jpeg' })
+    await waitFor(() => expect(fetchFile).toHaveBeenCalledWith(9))
+    expect(vi.mocked(opsApi.fetchDocumentThumbnail)).not.toHaveBeenCalled()
+  })
+})

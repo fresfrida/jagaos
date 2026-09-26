@@ -61,6 +61,7 @@ def ingest(
     visibility: str = "company",
     read_content: bool = True,
     ocr_max_edge: int | None = None,
+    occurred_on_hint: str | None = None,
 ) -> PipelineState:
     """Not a LangGraph node itself (it runs before we have a document_id to
     key state on) — called from app/main.py to create the document row,
@@ -68,7 +69,11 @@ def ingest(
 
     `read_content=False` (round 21, A3, DECISIONS #101) stores the file and records the row but reads nothing out of it: no
     text extraction, no OCR, no EXIF. A personal file is named by its owner and goes nowhere near the pipeline, so there is
-    no reason to spend an OCR pass (or hold the PDF renderer's lock) on it, or to keep text a person never asked to have read."""
+    no reason to spend an OCR pass (or hold the PDF renderer's lock) on it, or to keep text a person never asked to have read.
+
+    `occurred_on_hint` (round 7, S1e, DECISIONS #138): an already VALIDATED date-taken sent by the browser for a picture, whose EXIF the browser's re-encoding
+    dropped. It becomes `document.occurred_on` ONLY when this server's own EXIF read of the file found nothing (the file's own date always wins), exactly
+    where the EXIF value would have gone. The caller decides who may pass one (app/main.py: a company picture only)."""
     src = Path(source_path)
     sha = _sha256(src)
     media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
@@ -115,7 +120,7 @@ def ingest(
                 (
                     company_id, sha, filename, media_type, src.stat().st_size,
                     str(stored_path), source_channel, source_identity, uploaded_by_user_id,
-                    exif_data.get("occurred_on"), text, text_source, visibility,
+                    exif_data.get("occurred_on") or occurred_on_hint, text, text_source, visibility,
                 ),
             )
             document_id = cur.lastrowid

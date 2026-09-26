@@ -267,10 +267,14 @@ export interface UploadOptions {
    * an Only me upload and ignores them for a company one. */
   name?: string
   caption?: string
+  /** A picture's date-taken (YYYY-MM-DD), read from the ORIGINAL photo's EXIF before the browser re-encoded it (lib/exifDate.ts; round 7, S1e,
+   * DECISIONS #138). Sent as `taken_on` only when present; the server uses it only for a company picture whose own EXIF it could not read. */
+  takenOn?: string | null
 }
 
-function applyUploadOptions(params: URLSearchParams, { docTypeHint, visibility, name, caption }: UploadOptions): void {
+function applyUploadOptions(params: URLSearchParams, { docTypeHint, visibility, name, caption, takenOn }: UploadOptions): void {
   if (docTypeHint) params.set('doc_type_hint', docTypeHint)
+  if (takenOn) params.set('taken_on', takenOn)
   if (visibility && visibility !== 'company') {
     params.set('visibility', visibility)
     if (name) params.set('name', name)

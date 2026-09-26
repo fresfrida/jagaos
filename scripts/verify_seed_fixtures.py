@@ -27,6 +27,32 @@ def gst_rate(d: date) -> float:
     return 0.07 if d < date(2023, 1, 1) else 0.08 if d < date(2024, 1, 1) else 0.09
 
 
+def photo_date_problems(rows: list[dict], by_sha: dict, listed: list[dict], files_dir: Path = FILES) -> list[str]:
+    """S1e (DECISIONS #138): every seeded Memory Lane photo must show a REAL Picture date, never the upload-day fallback. So its FILE carries an EXIF
+    DateTimeOriginal, the row's occurred_on equals it, and the list the card is drawn from (`listed`, GET /api/documents) carries the same occurred_on."""
+    from datetime import datetime
+
+    from PIL import Image
+
+    listed_by_id = {d["id"]: d for d in listed}
+    problems: list[str] = []
+    for r in rows:
+        if r["lane"] != "memory" or r["doc_type"] != "photo":
+            continue
+        name = by_sha[r["sha256"]]["file"] if r["sha256"] in by_sha else str(r["id"])
+        try:
+            raw = Image.open(files_dir / by_sha[r["sha256"]]["file"]).getexif().get_ifd(0x8769).get(0x9003)
+            taken = datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").date().isoformat()
+        except Exception:  # noqa: BLE001 - a missing, unreadable or malformed EXIF date is the failure being reported
+            problems.append(f"{name}: no EXIF DateTimeOriginal in the file")
+            continue
+        if r["occurred_on"] != taken:
+            problems.append(f"{name}: occurred_on {r['occurred_on']} != EXIF {taken}")
+        if (listed_by_id.get(r["id"]) or {}).get("occurred_on") != taken:
+            problems.append(f"{name}: the card data (list) has no occurred_on equal to {taken}")
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--db", required=True)
@@ -120,6 +146,10 @@ def main(argv: list[str] | None = None) -> int:
         check("viewer_cannot_see_only_me", not any(d["id"] in {p_["id"] for p_ in personal} for d in vdocs) and
               all(client.get(f"/api/documents/{p_['id']}/history", headers=viewer).status_code == 404 for p_ in personal), "list and history by id")
         odocs = client.get("/api/documents", headers=owner).json()
+        seeded_photos = [r for r in rows if r["lane"] == "memory" and r["doc_type"] == "photo" and r["visibility"] == "company"]
+        problems = photo_date_problems(seeded_photos, by_sha, odocs)
+        check("every_seeded_photo_has_an_exif_picture_date", bool(seeded_photos) and not problems,
+              "; ".join(problems) or f"{len(seeded_photos)} photos: EXIF in the file = occurred_on = the list's occurred_on")
         check("owner_sees_own_only_me_not_in_company_files", True, f"{len([d for d in odocs if d['id'] in {p_['id'] for p_ in personal}])} shown in the company list")
 
     # ---- seasonal windows, first company, both date bases (mirrors web/src/features/ops/documentDates.ts: upload day in the company's
