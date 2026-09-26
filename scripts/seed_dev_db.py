@@ -31,6 +31,7 @@ exists: it does not repair a changed role or a deleted document. The exact clean
 state is what `scripts/reset_demo_data.py` restores (wipe, then this seed).
 """
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -190,7 +191,13 @@ def seed(client: httpx.Client, *, reuse_existing: bool = True, files_dir: Path =
     return {"company_id": company_id, "accounts": accounts, "uploads": uploads}
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Seed the dev database by UPLOADING the demo corpus. Spends the gateway budget.")
+    parser.add_argument("--allow-gateway-spend", action="store_true", help="required: every run pays for real gateway calls (DECISIONS #130)")
+    args = parser.parse_args(argv)
+    sys.path.insert(0, str(Path(__file__).parent))
+    import _live_guard  # noqa: PLC0415
+    _live_guard.refuse_unless_allowed("scripts/seed_dev_db.py", args.allow_gateway_spend)
     client = httpx.Client(base_url=API, timeout=60)
 
     try:

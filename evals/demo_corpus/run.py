@@ -9,11 +9,13 @@ input documents are fictional. Needs LLM_GATEWAY_API_KEY in .env.
 Run: python evals/demo_corpus/run.py
 """
 
+import argparse
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
 
 from dotenv import load_dotenv
 
@@ -35,6 +37,11 @@ FILES_DIR = Path(__file__).parent / "files"
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Run the synthetic corpus through the real pipeline. Spends the gateway budget.")
+    parser.add_argument("--allow-gateway-spend", action="store_true", help="required: every run pays for real gateway calls (DECISIONS #130)")
+    args = parser.parse_args()
+    import _live_guard  # noqa: PLC0415
+    _live_guard.refuse_unless_allowed("evals/demo_corpus/run.py", args.allow_gateway_spend)
     db_module.init_db(DB_PATH)
     client = TestClient(app)
 

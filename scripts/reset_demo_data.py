@@ -54,6 +54,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).parent))  # seed_dev_db and purge_document sit beside this file
 
+import _live_guard  # noqa: E402
 import purge_document  # noqa: E402  (loads .env before app.db is imported)
 import seed_dev_db  # noqa: E402
 from app import activity  # noqa: E402
@@ -369,7 +370,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Wipe the demo scope and re-seed it. Dry run unless --apply.")
     parser.add_argument("--apply", action="store_true", help="actually wipe and re-seed (default: dry run)")
     parser.add_argument("--include-unrecognised", action="store_true", help="also wipe demo-owner companies that do not carry a seeded name")
+    parser.add_argument("--allow-gateway-spend", action="store_true", help="required: the re-seed uploads eight PDFs through the real pipeline (DECISIONS #130)")
     args = parser.parse_args(argv)
+    _live_guard.refuse_unless_allowed("scripts/reset_demo_data.py", args.allow_gateway_spend)
     with httpx.Client(base_url=seed_dev_db.API, timeout=120) as client:
         return reset(client, apply=args.apply, include_unrecognised=args.include_unrecognised)
 
