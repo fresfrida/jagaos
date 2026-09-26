@@ -6,7 +6,9 @@ The master is the mark as supplied: a 500x500 PNG, a black rounded square with a
 background with some compression noise at its edges. Left as it is, a favicon would show a white box in a dark browser tab, and a
 28px logo would download 127KB. So this script leaves the master alone and writes, from it:
 
-    web/src/assets/logo-mark-112.png   the mark in the header and footer (sections use components/ui/Logo.tsx): 28px, sharp at 4x
+    web/src/assets/logo-mark-112.png   UNUSED since round 4, item 8c (DECISIONS #122): components/ui/Logo.tsx now inlines
+                                       web/src/assets/logo-thread.svg instead, for its separately animatable sage dot, which a
+                                       raster can't give you. Still generated here in case the raster mark is ever needed again.
     web/public/icon-32.png             the browser tab
     web/public/icon-192.png            the PWA manifest and the larger tab icon
     web/public/icon-512.png            the PWA manifest (Chrome wants one of 512)

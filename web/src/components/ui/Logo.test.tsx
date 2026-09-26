@@ -14,17 +14,21 @@ describe('Logo', () => {
     expect(link.textContent).toBe('JagaOS')
   })
 
-  it('shows the real mark as an image, 28px, decorative (the link and the wordmark name it), and no longer a flat black square', () => {
+  it('shows the real mark as an inline SVG, 28px, decorative (the link and the wordmark name it) — round 4, item 8c, DECISIONS #122', () => {
     const { container } = render(<Logo />)
-    const mark = container.querySelector('img')!
+    const mark = container.querySelector('svg')!
     expect(mark).toBeTruthy()
-    expect(mark.getAttribute('src')).toMatch(/logo-mark/)
-    expect(mark.getAttribute('alt')).toBe('') // decorative: a screen reader gets "JagaOS home" once, not twice
-    expect(mark.getAttribute('width')).toBe('28')
-    expect(mark.getAttribute('height')).toBe('28')
-    expect(mark.className).toContain('h-7')
-    expect(mark.className).toContain('w-7')
-    expect(container.querySelector('.bg-ink')).toBeNull() // the placeholder was `<span class="h-7 w-7 rounded-lg bg-ink">`
-    expect(mark.className).not.toContain('rounded') // it carries its own rounded corners (transparent PNG)
+    expect(mark.getAttribute('aria-hidden')).toBe('true') // decorative: a screen reader gets "JagaOS home" once, not twice
+    expect(mark.getAttribute('viewBox')).toBe('0 0 320 320') // cropped to the icon tile alone, not the full lockup canvas
+    expect(mark.className.baseVal).toContain('h-7')
+    expect(mark.className.baseVal).toContain('w-7')
+  })
+
+  it("carries the thread mark's dot as a real, separately paintable node with the pulse animation, and nothing else in the mark animates", () => {
+    const { container } = render(<Logo />)
+    const dot = container.querySelector('circle#thread-dot')!
+    expect(dot).toBeTruthy()
+    expect(dot.getAttribute('class')).toContain('thread-dot-pulse')
+    expect(container.querySelectorAll('.thread-dot-pulse')).toHaveLength(1)
   })
 })

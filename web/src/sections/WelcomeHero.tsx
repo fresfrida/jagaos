@@ -19,6 +19,7 @@
  * and tablet spacing are unchanged. And one soft sage wash sits behind the hero (`.hero-wash`, index.css), on its own layer so the cards,
  * which paint an opaque white, stay pure white. */
 
+import { motion, type Variants } from 'framer-motion'
 import { CalendarClock, ClipboardCheck, ScanLine } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/Button'
@@ -36,6 +37,20 @@ const FEATURES = [
   { id: 'remember', icon: CalendarClock },
 ] as const
 
+/** The one-time load-in (round 4, item 8b, DECISIONS #122): plays once when `WelcomeHero` mounts, not on every re-render or a
+ * route revisit within the same mount (framer-motion's `initial`/`animate` only fire on the first render of an instance,
+ * never replayed by a later re-render — a language switch does not restart it). `MotionConfig reducedMotion="user"` at the
+ * app's root (App.tsx) already turns every `motion.*` transform into an instant, opacity-only change under reduced motion,
+ * so nothing extra is needed here for that. HEADING is the true orchestrator (only it carries `initial`/`animate`); TEXT_GROUP
+ * and PHONE are nested containers so the headline, subhead and CTA stagger first (about 0.06s apart, ~0.28s each), and the
+ * phone frame rises in last, overlapping their tail — about 400ms end to end. */
+const HEADING: Variants = { hidden: {}, visible: { transition: { staggerChildren: 0.06, delayChildren: 0 } } }
+const TEXT_ITEM: Variants = { hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.28, ease: 'easeOut' } } }
+const PHONE_ITEM: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.28, ease: 'easeOut', delay: 0.16 } },
+}
+
 /** The app in a plain phone frame: a dark bezel, rounded screen, a small speaker slot. What plays in it is a screen recording of the
  * LIVE app (sections/HeroVideo.tsx, DECISIONS #113), not a mockup of a screen that does not exist; where the person asked for reduced
  * motion it is the recording's first frame, a still, and nothing moves. */
@@ -45,7 +60,11 @@ function PhoneFrame() {
   const demo = useDemoVideo()
   const showToggle = !reducedMotion && !demo.unavailable
   return (
-    <figure className="mx-auto w-[236px] sm:w-[264px] lg:mx-0 lg:justify-self-center" data-testid="hero-phone">
+    <motion.figure
+      variants={PHONE_ITEM}
+      className="mx-auto w-[236px] sm:w-[264px] lg:mx-0 lg:w-[312px] lg:justify-self-center"
+      data-testid="hero-phone"
+    >
       <div className="relative rounded-[2rem] bg-ink p-[7px] shadow-[0_24px_60px_-20px_rgba(20,20,20,0.45)]">
         <span className="absolute left-1/2 top-[13px] z-10 h-[5px] w-14 -translate-x-1/2 rounded-full bg-black/70" aria-hidden="true" />
         <div className="overflow-hidden rounded-[1.4rem] bg-white">
@@ -69,7 +88,7 @@ function PhoneFrame() {
          accessibility tree exposes it as the figure's Figcaption, read after the video and its button. It does NOT give the figure a name
          (checked); the video keeps its own label (home.hero.videoAlt). */}
       <figcaption className={cn('text-center text-sm leading-5 text-muted', showToggle ? 'mt-1' : 'mt-3')}>{t('home.hero.caption')}</figcaption>
-    </figure>
+    </motion.figure>
   )
 }
 
@@ -81,22 +100,32 @@ export function WelcomeHero() {
       {/* The wash: a decoration behind the hero only, not the page. `isolate` + `-z-10` keep it under everything in this section. */}
       <div className="hero-wash pointer-events-none absolute inset-x-0 top-0 -z-10 h-[56rem]" aria-hidden="true" data-testid="hero-wash" />
       <Container>
-        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-16">
-          <div>
-            <h1 className="max-w-xl text-[34px] font-semibold leading-[1.1] tracking-tight text-ink sm:text-5xl">
+        <motion.div
+          variants={HEADING}
+          initial="hidden"
+          animate="visible"
+          className="grid items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-16"
+        >
+          <motion.div variants={HEADING}>
+            <motion.h1
+              variants={TEXT_ITEM}
+              className="max-w-xl text-[34px] font-semibold leading-[1.1] tracking-tight text-ink sm:text-5xl"
+            >
               {t('home.hero.headline')}
-            </h1>
-            <p className="mt-4 max-w-xl text-[17px] leading-7 text-muted sm:text-lg sm:leading-8 lg:mt-6">{t('home.hero.subhead')}</p>
-            <div className="mt-7 lg:mt-11">
+            </motion.h1>
+            <motion.p variants={TEXT_ITEM} className="mt-4 max-w-xl text-[17px] leading-7 text-muted sm:text-lg sm:leading-8 lg:mt-6">
+              {t('home.hero.subhead')}
+            </motion.p>
+            <motion.div variants={TEXT_ITEM} className="mt-7 lg:mt-11">
               <Button size="md" className="w-full sm:w-auto" onClick={openDemoPicker} aria-haspopup="dialog">
                 {t('home.demo.button')}
               </Button>
               {/* 16px, up from 14 (DECISIONS #111): the line under the button read as fine print. Same colour. */}
               <p className="mt-2 text-base leading-6 text-muted lg:mt-3">{t('home.demo.hint')}</p>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
           <PhoneFrame />
-        </div>
+        </motion.div>
 
         <ul className="mt-14 grid gap-3 sm:grid-cols-3">
           {FEATURES.map(({ id, icon: Icon }) => (

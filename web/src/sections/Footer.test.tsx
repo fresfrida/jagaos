@@ -134,12 +134,12 @@ describe('Footer layout (DECISIONS #108)', () => {
     for (const link of within(list).getAllByRole('link')) expect(link.className).toContain('sm:min-h-0') // no tap-target padding on a desktop stack
   })
 
-  it('the links are a step larger and heavier than the muted body text, and NOT a different colour (DECISIONS #111)', () => {
+  it('the links are a step larger and heavier than the muted body text, and NOT a different colour (DECISIONS #111; the shared colour itself inverted for the dark footer, round 4 item 7, DECISIONS #122)', () => {
     render(<Footer />)
     for (const link of within(screen.getByRole('navigation', { name: 'Footer links' })).getAllByRole('link')) {
       expect(link.className).toContain('text-[15px]')
       expect(link.className).toContain('font-medium')
-      expect(link.className).toContain('text-muted')
+      expect(link.className).toContain('text-white/70')
     }
   })
 })

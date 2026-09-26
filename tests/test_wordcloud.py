@@ -50,6 +50,14 @@ def test_the_apps_domain_filler_is_dropped_and_real_content_kept():
     assert words_in(text) == ["straits", "print", "supplies"]
 
 
+def test_the_manual_exclusion_list_drops_name_fragments_and_brand_noise_the_algorithm_cannot_catch():
+    # Round 4, item 9 (DECISIONS #122): real 4+ letter lowercase runs, not stopwords, that OCR reads
+    # consistently off real documents (a signer's name repeated across invoices, a payment-app brand
+    # fragment) — nothing else in the pipeline drops these, so they need a manual list.
+    text = "Care Boon Deen Keng Paylah transferred insurance"
+    assert words_in(text) == ["transferred", "insurance"]
+
+
 def test_standard_english_function_words_are_dropped():
     assert words_in("the quick brown foxes and the lazy hound are not here") == ["quick", "brown", "foxes", "lazy", "hound"]
 

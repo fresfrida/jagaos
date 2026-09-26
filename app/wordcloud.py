@@ -85,7 +85,14 @@ monday tuesday wednesday thursday friday saturday sunday mon tue tues wed thu th
 am pm dd mm yyyy yy
 """
 
-STOPWORDS: frozenset[str] = frozenset((_ENGLISH + _DOMAIN_FILLER).split())
+# Manual cleanup layer (round 4, item 9, DECISIONS #122): name fragments and a payment-app brand fragment that OCR reads consistently
+# across several real documents (a signer's name repeated on invoices from the same company, "paylah" from a bank transfer receipt) —
+# real 4+ letter lowercase runs, not stopwords, appearing in 2+ documents, so nothing above catches them. A real fix (a dictionary or
+# name-frequency check, so this list stops needing hand-maintenance) is proposed, not built, in KANBAN. Edit this list directly for a
+# new noise word; no other file, format or endpoint is involved.
+_MANUAL_EXCLUSIONS = frozenset({"care", "boon", "deen", "keng", "paylah"})
+
+STOPWORDS: frozenset[str] = frozenset((_ENGLISH + _DOMAIN_FILLER).split()) | _MANUAL_EXCLUSIONS
 
 
 def words_in(text: str) -> list[str]:

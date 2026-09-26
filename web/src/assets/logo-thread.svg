@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" role="img" aria-label="JagaOS Thread logo lockup">
+  <!-- JagaOS "Thread" lockup: ink tile + thread mark, live Geist wordmark, light background -->
+  <rect width="1080" height="1080" fill="#ffffff"/>
+  <g id="app-icon" transform="translate(380 250)">
+    <rect id="tile" width="320" height="320" rx="68.5" fill="#141414"/>
+    <!-- thread mark: designed on a 96-unit grid, placed at 39,37.5 within the 168-unit tile -->
+    <g id="thread-mark" transform="translate(74.3 71.4) scale(1.9048)" fill="none">
+      <path id="thread-white" d="M 8.5 82 L 8.5 35 A 26.5 26.5 0 0 1 61.5 35 L 61.5 62.5 A 24.5 24.5 0 0 0 86 87"
+            stroke="#ffffff" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle id="thread-dot" cx="86" cy="87" r="8.5" fill="#ffffff" stroke="none"/>
+      <path id="thread-sage" d="M 33.5 34 L 33.5 62.5 A 26.25 26.25 0 0 0 86 62.5 L 86 22"
+            stroke="#6ea99d" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+  <text id="wordmark" x="540" y="797" text-anchor="middle"
+        font-family="Geist, 'Geist Sans', Inter, system-ui, -apple-system, sans-serif"
+        font-size="111" font-weight="600" fill="#141414">JagaOS</text>
+</svg>

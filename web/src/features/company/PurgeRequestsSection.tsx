@@ -44,8 +44,16 @@ export function PurgeRequestsSection({ enabled }: { enabled: boolean }) {
             <p className="p-6 text-sm text-muted">{t('companySettings.purgeRequests.empty')}</p>
           ) : (
             <ul className="divide-y divide-line">
+              {/* min-h-56/sm:min-h-40 shared with ComplianceChecklist's row (round 4, item 4, DECISIONS #122): this list's own
+                 content is the richer of the two (a title, sometimes a filename line, a status line, a "by X on Y" line and a
+                 button), so its real height IS the value both lists share; see that component for the measurements. A row here
+                 with no filename line (nothing to show under the title) is centred in the space instead of sitting at the top. */}
               {state.requests.map((request) => (
-                <li key={request.id} className="px-4 py-3" data-testid="purge-request-row">
+                <li
+                  key={request.id}
+                  className="flex min-h-56 flex-col justify-center px-4 py-3 sm:min-h-40"
+                  data-testid="purge-request-row"
+                >
                   {/* The document's own label first (vendor and type, or its description), the file name only as small text under it
                      (DECISIONS #109), exactly as the Calendar's day list does; with no label to show, the file name is the title. */}
                   <p className="break-words text-[14px] font-medium text-ink">

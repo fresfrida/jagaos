@@ -14,7 +14,15 @@ import { useAuth } from './AuthContext'
 import { groupCompanies, hasSwitchableCompanies, rolesDiffer } from './companySwitcherModel'
 import { useMyCompanies } from './MyCompaniesContext'
 
-export function CompanySwitcher({ className }: { className?: string }) {
+export function CompanySwitcher({
+  className,
+  variant = 'default',
+}: {
+  className?: string
+  // 'inverted' (round 4, item 7, DECISIONS #122): the header's own inline instance, now on the dark header bar. The instance
+  // inside UserMenu's dropdown stays 'default' — that panel is still white.
+  variant?: 'default' | 'inverted'
+}) {
   const { t } = useTranslation()
   const { company, switchCompany } = useAuth()
   const companies = useMyCompanies()
@@ -39,8 +47,11 @@ export function CompanySwitcher({ className }: { className?: string }) {
           )
         }}
         className={cn(
-          'w-full rounded-md border bg-white px-2 py-1.5 text-[14px] text-ink outline-none focus:border-ink',
-          error ? 'border-red-400' : 'border-line',
+          'w-full rounded-md border px-2 py-1.5 text-[14px] outline-none',
+          variant === 'inverted'
+            ? 'border-white/25 bg-white/10 text-white focus:border-white/60'
+            : 'bg-white text-ink focus:border-ink',
+          error ? 'border-red-400' : variant === 'default' && 'border-line',
         )}
       >
         {groupCompanies(companies).map((section) => {
@@ -52,7 +63,11 @@ export function CompanySwitcher({ className }: { className?: string }) {
           )
         })}
       </select>
-      {error && <p role="alert" className="mt-1 text-[13px] text-red-700">{error}</p>}
+      {error && (
+        <p role="alert" className={cn('mt-1 text-[13px]', variant === 'inverted' ? 'text-red-300' : 'text-red-700')}>
+          {error}
+        </p>
+      )}
     </div>
   )
 }

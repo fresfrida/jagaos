@@ -31,7 +31,8 @@ export function Footer({ visible = true }: { visible?: boolean }) {
   return (
     <footer
       className={cn(
-        'border-t border-line py-8 transition-opacity duration-300 motion-reduce:transition-none sm:py-10',
+        // Ink frame (round 4, item 7, DECISIONS #122): the other dark bookend, matching the header.
+        'border-t border-line bg-ink py-8 transition-opacity duration-300 motion-reduce:transition-none sm:py-10',
         signedIn && PHONE_BOTTOM_NAV_CLEARANCE,
         !visible && 'invisible opacity-0',
       )}
@@ -40,8 +41,8 @@ export function Footer({ visible = true }: { visible?: boolean }) {
         <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-start sm:justify-between sm:text-left">
           <div className="flex flex-col items-center sm:items-start">
             <Logo />
-            <p className="mt-3 max-w-[26rem] text-sm leading-6 text-muted">{t('footer.tagline')}</p>
-            <p className="mt-2 text-[14px] text-muted">{t('footer.copyright', { year: COPYRIGHT_YEAR, entity: LEGAL_ENTITY })}</p>
+            <p className="mt-3 max-w-[26rem] text-sm leading-6 text-white/70">{t('footer.tagline')}</p>
+            <p className="mt-2 text-[14px] text-white/50">{t('footer.copyright', { year: COPYRIGHT_YEAR, entity: LEGAL_ENTITY })}</p>
           </div>
           <nav aria-label={t('footer.linksLabel')}>
             <ul className="flex flex-col items-center sm:items-end sm:gap-2">
@@ -55,7 +56,7 @@ export function Footer({ visible = true }: { visible?: boolean }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={href === '#' ? (event) => event.preventDefault() : undefined}
-                    className="inline-flex min-h-[44px] items-center text-[15px] font-medium text-muted underline-offset-4 transition-colors hover:text-ink hover:underline sm:min-h-0"
+                    className="inline-flex min-h-[44px] items-center text-[15px] font-medium text-white/70 underline-offset-4 transition-colors hover:text-white hover:underline sm:min-h-0"
                   >
                     {t(`footer.links.${id}`)}
                   </a>

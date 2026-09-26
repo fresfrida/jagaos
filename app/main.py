@@ -489,6 +489,23 @@ def _caption_document_background(document_id: int, stored_path: str) -> None:
             "UPDATE document SET description = ? WHERE id = ? AND description IS NULL",
             (json.dumps({"en": caption}), document_id),
         )
+        # Round 4, item 6 (DECISIONS #122): real AI work with no trace row. jaga-vision is a genuine, separate model call (not the
+        # Bedrock gateway the rest of this budget tracks), so it correctly costs $0 and was never a "gateway call" — but before this,
+        # a captioned picture's trace panel showed nothing happened at all, which read as no AI ran, when it did. `run_id` is
+        # reconstructed from the document's own `sha256` (`run_id = sha256[:12]`, the same derivation `ingest.py` used originally),
+        # so this row groups with any other trace entries for the same document; a local model has no token cost, so
+        # input_tokens/output_tokens/cost_usd stay NULL, which the panel already renders as "-", exactly right for a real
+        # zero-cost step. Best-effort: a failure here must not undo the caption that was just written above.
+        try:
+            row = conn.execute("SELECT company_id, sha256 FROM document WHERE id = ?", (document_id,)).fetchone()
+            if row is not None:
+                conn.execute(
+                    "INSERT INTO trace (run_id, company_id, document_id, node, model, decision) "
+                    "VALUES (?, ?, ?, 'caption', 'blip-image-captioning-base', ?)",
+                    (row["sha256"][:12], row["company_id"], document_id, caption),
+                )
+        except Exception as e:  # noqa: BLE001 - fire-and-forget by design, see docstring
+            print(f"trace write failed for caption of document {document_id}: {e}")
     reindex_document_search(document_id, DB_PATH)
 
 

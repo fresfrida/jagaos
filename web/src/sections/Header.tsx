@@ -39,7 +39,7 @@ function LanguageSwitcher() {
       value={i18n.language}
       onChange={(e) => setLanguage(e.target.value as LanguageCode)}
       aria-label={t('header.language')}
-      className="rounded-md border border-line bg-white px-2 py-1.5 text-[14px] text-ink outline-none focus:border-ink"
+      className="rounded-md border border-white/25 bg-white/10 px-2 py-1.5 text-[14px] text-white outline-none focus:border-white/60"
     >
       {SUPPORTED_LANGUAGES.map((lang) => (
         <option key={lang.code} value={lang.code}>{lang.label}</option>
@@ -65,7 +65,7 @@ function PrimaryNav({ routes, current }: { routes: readonly RouteId[]; current: 
                 className={cn(
                   'block whitespace-nowrap rounded-md px-2.5 py-2 text-sm transition-colors sm:px-3',
                   // Same font weight in both states: a bolder active tab is wider and nudges its neighbour.
-                  active ? 'bg-canvas text-ink' : 'text-muted hover:text-ink',
+                  active ? 'bg-white/10 text-white' : 'text-white/70 hover:text-white',
                 )}
               >
                 {t(NAV_LABEL_KEYS[id] ?? '')}
@@ -90,8 +90,10 @@ export function Header({ current }: { current: ResolvedRoute }) {
     // faded the line out and back. Only the translucent, blurred background is a scroll effect now.
     <header
       className={cn(
-        'sticky top-0 z-40 border-b border-line transition-colors duration-300',
-        scrolled ? 'bg-white/80 backdrop-blur-md' : 'bg-white',
+        // Ink frame (round 4, item 7, DECISIONS #122): dark bookends around the white content area, unchanged. `border-line`
+        // (#d4d4d4) still reads as the seam against both the dark bar above it and the white page below.
+        'sticky top-0 z-40 border-b border-line bg-ink transition-colors duration-300',
+        scrolled && 'bg-ink/90 backdrop-blur-md',
       )}
     >
       <Container className="flex h-16 items-center justify-between gap-3">
@@ -106,7 +108,7 @@ export function Header({ current }: { current: ResolvedRoute }) {
               {/* Inline from `xl` (it was `lg` until four nav items needed the room); narrower, the same control is in the
                  user menu (an inline select does not fit beside the rest). Renders nothing for anyone with fewer than
                  two companies. */}
-              <CompanySwitcher className="hidden max-w-[240px] xl:block" />
+              <CompanySwitcher className="hidden max-w-[240px] xl:block" variant="inverted" />
               <UserMenu />
               {/* The single solid button, in the slot Get Started had. Not on
                  a phone (the bottom nav's centre button is Upload) and not for
@@ -116,8 +118,11 @@ export function Header({ current }: { current: ResolvedRoute }) {
                 // `display: inline-flex`, which a `hidden` on the link itself
                 // does not reliably beat.
                 <span className="hidden sm:block">
+                  {/* 'secondary' (round 4, item 7, DECISIONS #122): the default solid-ink button would nearly disappear on the
+                     now-dark header bar; the white pill is what actually stands out there. */}
                   <ButtonLink
                     href={routeHref('upload')}
+                    variant="secondary"
                     size="sm"
                     aria-current={current === 'upload' ? 'page' : undefined}
                     className="whitespace-nowrap"
@@ -131,7 +136,7 @@ export function Header({ current }: { current: ResolvedRoute }) {
             /* Hidden on phones, as before: the landing page's own button is right under the header there, and the
                row stays the logo and the language select. */
             <span className="hidden sm:block">
-              <Button size="sm" className="whitespace-nowrap" onClick={openDemoPicker} aria-haspopup="dialog">
+              <Button variant="secondary" size="sm" className="whitespace-nowrap" onClick={openDemoPicker} aria-haspopup="dialog">
                 {t('header.getStarted')}
               </Button>
             </span>

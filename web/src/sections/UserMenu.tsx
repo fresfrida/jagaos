@@ -40,7 +40,9 @@ export function UserMenu() {
       {/* The role at a glance, beside the avatar (2026-09-23): on phones and
          from `xl` (it was `lg` before the header carried four nav items). Between
          them there is no room in the header, and the menu's own header repeats it. */}
-      {role && <Badge mono className="max-xl:hidden max-sm:inline-flex">{roleLabel(t, role)}</Badge>}
+      {/* 'inverted' (round 4, item 7, DECISIONS #122): this instance sits on the dark header bar; the copy inside the dropdown
+         below keeps the default 'neutral' tone, since that panel is still white. */}
+      {role && <Badge mono tone="inverted" className="max-xl:hidden max-sm:inline-flex">{roleLabel(t, role)}</Badge>}
       <button
         type="button"
         onClick={(e) => {
@@ -50,7 +52,7 @@ export function UserMenu() {
         aria-label={t('header.accountMenu')}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line text-muted hover:border-ink/40 hover:text-ink"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/25 text-white/80 hover:border-white/50 hover:text-white"
       >
         <CircleUserRound size={19} />
       </button>

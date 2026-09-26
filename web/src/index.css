@@ -62,4 +62,22 @@
       background-image: radial-gradient(ellipse 60% 62% at 58% 38%, color-mix(in srgb, var(--color-sage) 6%, transparent), transparent 72%);
     }
   }
+
+  /* The logo mark's sage dot, pulsing (round 4, item 8c, DECISIONS #122): slow and subtle (opacity only, no scale — a size change
+     on an 8.5-radius circle at 28px would read as flickering, not breathing), on every page, so `prefers-reduced-motion: reduce`
+     turns it off outright rather than slowing it down: the header and footer are permanent chrome, not a one-time hero moment,
+     so a persistent motion source there deserves the stronger opt-out. */
+  .thread-dot-pulse {
+    animation: thread-dot-pulse 2.4s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .thread-dot-pulse {
+      animation: none;
+    }
+  }
+}
+
+@keyframes thread-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
