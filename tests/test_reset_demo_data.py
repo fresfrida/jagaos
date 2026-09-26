@@ -159,12 +159,12 @@ def test_tampering_is_repaired(corpus):
     clean = _state()
     with get_conn() as conn:
         main = conn.execute("SELECT id FROM company WHERE name = 'Try Demo Pte Ltd'").fetchone()["id"]
-        conn.execute("UPDATE membership SET role = 'owner' WHERE company_id = ? AND user_id = (SELECT id FROM app_user WHERE email = 'viewer@try-demo.test')", (main,))
+        conn.execute("UPDATE membership SET role = 'owner' WHERE company_id = ? AND user_id = (SELECT id FROM app_user WHERE email = 'corpsec_rachel@try-demo.test')", (main,))
         conn.execute("DELETE FROM review_item WHERE document_id = (SELECT id FROM document WHERE filename = '01_a.pdf')")
         conn.execute("UPDATE document SET status = 'archived' WHERE filename = '02_b.pdf'")
         conn.execute("INSERT INTO app_user (email, name) VALUES ('judge@else.test', 'Judge')")
         conn.execute("INSERT INTO membership (company_id, user_id, role) VALUES (?, (SELECT id FROM app_user WHERE email = 'judge@else.test'), 'admin')", (main,))
-        conn.execute("UPDATE app_user SET name = 'Hacked' WHERE email = 'admin@try-demo.test'")
+        conn.execute("UPDATE app_user SET name = 'Hacked' WHERE email = 'admin_jonathan@try-demo.test'")
     assert _state() != clean
 
     code, out = run(corpus, apply=True)
@@ -172,7 +172,7 @@ def test_tampering_is_repaired(corpus):
     assert code == 0, out
     assert _state() == clean
     with get_conn() as conn:
-        assert conn.execute("SELECT name FROM app_user WHERE email = 'admin@try-demo.test'").fetchone()["name"] == "Demo Admin"
+        assert conn.execute("SELECT name FROM app_user WHERE email = 'admin_jonathan@try-demo.test'").fetchone()["name"] == "Demo Admin"
         assert conn.execute("SELECT COUNT(*) FROM app_user WHERE email = 'judge@else.test'").fetchone()[0] == 1, "a non-demo account's user row is kept, only its membership goes"
 
 
@@ -198,7 +198,7 @@ def test_nothing_outside_the_demo_scope_is_touched(corpus):
     bystander = _bystander()
     before, files_before = _bystander_rows(bystander), _files()
     with get_conn() as conn:  # a demo account is also a member of someone else's company
-        conn.execute("INSERT INTO membership (company_id, user_id, role) VALUES (?, (SELECT id FROM app_user WHERE email = 'admin@try-demo.test'), 'viewer')", (bystander["company_id"],))
+        conn.execute("INSERT INTO membership (company_id, user_id, role) VALUES (?, (SELECT id FROM app_user WHERE email = 'admin_jonathan@try-demo.test'), 'viewer')", (bystander["company_id"],))
 
     code, out = run(corpus, apply=True)
 
@@ -207,7 +207,7 @@ def test_nothing_outside_the_demo_scope_is_touched(corpus):
     with get_conn() as conn:
         assert conn.execute("SELECT COUNT(*) FROM document WHERE id = ?", (bystander["doc_id"],)).fetchone()[0] == 1
         assert conn.execute(
-            "SELECT role FROM membership WHERE company_id = ? AND user_id = (SELECT id FROM app_user WHERE email = 'admin@try-demo.test')",
+            "SELECT role FROM membership WHERE company_id = ? AND user_id = (SELECT id FROM app_user WHERE email = 'admin_jonathan@try-demo.test')",
             (bystander["company_id"],)).fetchone()["role"] == "viewer", "a demo account's membership OUTSIDE the scope is left alone"
     assert client.get("/api/documents", headers=bystander["headers"]).json()[0]["id"] == bystander["doc_id"]
     assert files_before <= _files(), "the bystander's stored file is still there"
@@ -217,12 +217,12 @@ def test_the_plan_names_what_is_left_alone(corpus):
     assert run(corpus, apply=True)[0] == 0
     bystander = _bystander()
     with get_conn() as conn:
-        conn.execute("INSERT INTO membership (company_id, user_id, role) VALUES (?, (SELECT id FROM app_user WHERE email = 'admin@try-demo.test'), 'viewer')", (bystander["company_id"],))
+        conn.execute("INSERT INTO membership (company_id, user_id, role) VALUES (?, (SELECT id FROM app_user WHERE email = 'admin_jonathan@try-demo.test'), 'viewer')", (bystander["company_id"],))
 
     code, out = run(corpus, apply=False)
 
     assert code == 0
-    assert "LEFT ALONE (outside the scope): admin@try-demo.test is viewer of company" in out and "Real Co" in out
+    assert "LEFT ALONE (outside the scope): admin_jonathan@try-demo.test is viewer of company" in out and "Real Co" in out
 
 
 def test_a_dry_run_changes_nothing_and_says_what_it_would_wipe(corpus):
@@ -337,7 +337,7 @@ def test_a_seed_that_does_not_come_out_clean_is_reported_not_accepted(corpus, mo
     def seed_then_lose_a_member(*args, **kwargs):
         result = real_seed(*args, **kwargs)
         with get_conn() as conn:
-            conn.execute("DELETE FROM membership WHERE user_id = (SELECT id FROM app_user WHERE email = 'viewer@try-demo.test')")
+            conn.execute("DELETE FROM membership WHERE user_id = (SELECT id FROM app_user WHERE email = 'corpsec_rachel@try-demo.test')")
         return result
 
     monkeypatch.setattr(seed_dev_db, "seed", seed_then_lose_a_member)
@@ -345,13 +345,13 @@ def test_a_seed_that_does_not_come_out_clean_is_reported_not_accepted(corpus, mo
     code, out = run(corpus, apply=True)
 
     assert code == 1
-    assert "RESET FAILED AFTER THE WIPE" in out and "NOT the clean seed" in out and "viewer@try-demo.test" in out
+    assert "RESET FAILED AFTER THE WIPE" in out and "NOT the clean seed" in out and "corpsec_rachel@try-demo.test" in out
 
 
 def test_verify_clean_seed_names_what_differs(corpus):
     assert run(corpus, apply=True)[0] == 0
     with get_conn() as conn:
-        conn.execute("UPDATE membership SET role = 'admin' WHERE user_id = (SELECT id FROM app_user WHERE email = 'user1@try-demo.test')")
+        conn.execute("UPDATE membership SET role = 'admin' WHERE user_id = (SELECT id FROM app_user WHERE email = 'roletest_user1@try-demo.test')")
         conn.execute("UPDATE document SET filename = 'someone-replaced-it.pdf' WHERE filename = '02_b.pdf'")
     with get_conn() as conn:
         with pytest.raises(reset_demo_data.ResetRefused) as problem:

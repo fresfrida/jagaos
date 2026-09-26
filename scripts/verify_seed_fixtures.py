@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import statistics
 import sys
@@ -222,13 +223,25 @@ def main(argv: list[str] | None = None) -> int:
     uploaded_by_viewer = db.execute(
         "SELECT COUNT(*) FROM document d JOIN membership m ON m.user_id = d.uploaded_by_user_id AND m.company_id = d.company_id WHERE m.role = 'viewer'").fetchone()[0]
     check("no_document_is_uploaded_by_a_viewer", uploaded_by_viewer == 0, f"{uploaded_by_viewer} document(s)")
-    picker = {r["email"]: (r["role"], r["title"]) for r in db.execute(
-        "SELECT u.email, m.role, m.title FROM membership m JOIN app_user u ON u.id = m.user_id WHERE m.company_id = ? AND u.email LIKE '%@try-demo.test'", (c0,))}
-    check("the_pickers_viewer_login_is_the_corp_sec", picker.get("viewer@try-demo.test") == ("viewer", "Corp Sec"), str(picker.get("viewer@try-demo.test")))
-    check("the_other_picker_logins_keep_their_roles_and_none_is_a_corp_sec",
-          {e: r for e, (r, t) in picker.items() if e != "viewer@try-demo.test"} == {"owner@try-demo.test": "owner", "admin@try-demo.test": "admin", "user@try-demo.test": "user",
-                                                                                   "user1@try-demo.test": "user", "user2@try-demo.test": "user"}
-          and not any(t == "Corp Sec" for e, (r, t) in picker.items() if e != "viewer@try-demo.test"), str(picker))
+    picker_cfg = manifest["picker"]                                     # [{email, role}] in the order the picker shows them
+    picker_emails = [x["email"] for x in picker_cfg]
+    held = {r["email"]: (r["role"], r["title"]) for r in db.execute(
+        "SELECT u.email, m.role, m.title FROM membership m JOIN app_user u ON u.id = m.user_id WHERE m.company_id = ?", (c0,))}
+    ts_emails = re.findall(r"'([a-z_]+@try-demo\.test)'", (REPO / "web" / "src" / "config" / "demo.ts").read_text())
+    check("the_login_picker_config_lists_exactly_the_four_manifest_logins_in_order", ts_emails == picker_emails and len(ts_emails) == 4, str(ts_emails))
+    check("the_four_picker_logins_hold_owner_admin_admin_viewer_in_the_first_company",
+          [held.get(e, (None,))[0] for e in picker_emails] == ["owner", "admin", "admin", "viewer"] and [x["role"] for x in picker_cfg] == ["owner", "admin", "admin", "viewer"],
+          str([(e, held.get(e)) for e in picker_emails]))
+    check("the_pickers_last_login_is_the_corp_sec_and_no_other_picker_login_is",
+          held.get(picker_emails[-1]) == ("viewer", "Corp Sec") and not any(held.get(e, (None, None))[1] == "Corp Sec" for e in picker_emails[:-1]), str([(e, held.get(e)) for e in picker_emails]))
+    demo_ids = tuple(cid_ for cid_ in (cid[c["name"]] for c in manifest["companies"]))
+    role_user = db.execute(f"SELECT COUNT(*) FROM membership WHERE role = 'user' AND company_id IN ({','.join('?' * len(demo_ids))})", demo_ids).fetchone()[0]
+    check("no_membership_with_app_role_user_in_the_three_demo_companies", role_user == 0, f"{role_user} membership(s)")
+    for gone in manifest["dropped"]:
+        left = (db.execute("SELECT COUNT(*) FROM app_user WHERE email = ? OR name = ?", (gone["email"], gone["name"])).fetchone()[0]
+                + db.execute("SELECT COUNT(*) FROM document_activity WHERE actor_name = ?", (gone["name"],)).fetchone()[0]
+                + db.execute("SELECT COUNT(*) FROM membership m JOIN app_user u ON u.id = m.user_id WHERE u.name = ?", (gone["name"],)).fetchone()[0])
+        check(f"{gone['name'].split()[0].lower()}_is_dropped_entirely_no_person_no_membership_no_history_row", left == 0, f"{left} trace(s)")
     aud = db.execute("SELECT m.role, m.title, u.email FROM membership m JOIN app_user u ON u.id = m.user_id WHERE u.name = 'Marcus Lee Kok Wai' AND m.company_id = ?", (c0,)).fetchone()
     check("the_external_auditor_is_a_non_picker_viewer_who_acts_nowhere", bool(aud) and aud["role"] == "viewer" and aud["title"] == "External Auditor" and not aud["email"].endswith("@try-demo.test")
           and db.execute("SELECT COUNT(*) FROM document_activity WHERE actor_name = 'Marcus Lee Kok Wai'").fetchone()[0] == 0, str(dict(aud) if aud else None))

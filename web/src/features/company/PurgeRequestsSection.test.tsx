@@ -24,7 +24,7 @@ afterEach(cleanup)
 describe('PurgeRequestsSection', () => {
   it('lists each request with what it is, when, and who asked', async () => {
     list.mockResolvedValue([
-      { id: 5, filename: 'old-contract.pdf', requested_at: '2026-09-25 09:30:00', requested_by: 'owner@try-demo.test' },
+      { id: 5, filename: 'old-contract.pdf', requested_at: '2026-09-25 09:30:00', requested_by: 'owner_priya@try-demo.test' },
       { id: 3, filename: 'draft.pdf', requested_at: '2026-09-20 01:00:00', requested_by: null },
     ])
     render(<PurgeRequestsSection enabled />)
@@ -34,7 +34,7 @@ describe('PurgeRequestsSection', () => {
     expect(screen.getByRole('heading', { name: 'Purge requests (2)' })).toBeTruthy()
     expect(within(rows[0]!).getByText('old-contract.pdf')).toBeTruthy()
     expect(within(rows[0]!).getByText('Purge requested: the team removes it permanently.')).toBeTruthy()
-    expect(within(rows[0]!).getByText('Requested 25 Sept 2026 by owner@try-demo.test')).toBeTruthy()
+    expect(within(rows[0]!).getByText('Requested 25 Sept 2026 by owner_priya@try-demo.test')).toBeTruthy()
     expect(within(rows[1]!).getByText('Requested 20 Sept 2026 by -')).toBeTruthy()
   })
 

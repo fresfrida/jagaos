@@ -25,11 +25,11 @@ describe('LoginPage', () => {
     auth.value.login.mockResolvedValue(undefined)
     render(<LoginPage />)
 
-    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'viewer@try-demo.test' } })
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'corpsec_rachel@try-demo.test' } })
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'))
-    expect(auth.value.login).toHaveBeenCalledWith({ email: 'viewer@try-demo.test' })
+    expect(auth.value.login).toHaveBeenCalledWith({ email: 'corpsec_rachel@try-demo.test' })
     expect(navigate).not.toHaveBeenCalledWith('/upload')
   })
 

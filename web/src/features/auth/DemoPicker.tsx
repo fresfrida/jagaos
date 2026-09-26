@@ -1,4 +1,4 @@
-/** The demo-account picker (2026-09-25, round 20, item 1): a sheet listing the six
+/** The demo-account picker (2026-09-25, round 20, item 1): a sheet listing the four
  * seeded demo accounts with what each role can do, opened by the home page's demo button.
  * Choosing a row signs in as that account through the ordinary login (useDemoLogin). It
  * replaces the button that always signed in as the owner, so a visitor can see the app as
@@ -35,10 +35,8 @@ export function DemoPicker({ open, onClose }: { open: boolean; onClose: () => vo
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-baseline gap-x-2">
                     <span className="text-[16px] font-semibold text-ink">{t(`home.demo.accounts.${account.id}.name`)}</span>
-                    {/* The role only where the name does not already say it (User 1 and User 2 are both a User). */}
-                    {account.id !== account.role && (
-                      <span className="font-mono text-[12px] uppercase tracking-wide text-muted">{roleLabel(t, account.role)}</span>
-                    )}
+                    {/* Each row is a named person, so the role is always shown: it is what the visitor is choosing. */}
+                    <span className="font-mono text-[12px] uppercase tracking-wide text-muted">{roleLabel(t, account.role)}</span>
                   </span>
                   <span className="mt-0.5 block text-[14px] leading-5 text-muted">{t(`home.demo.accounts.${account.id}.text`)}</span>
                   <span className="mt-0.5 block break-all font-mono text-[12px] text-muted">{account.email}</span>

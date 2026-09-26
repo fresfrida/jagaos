@@ -1,6 +1,6 @@
 """Re-arms the demo review queue after a backend restart (round 7, item S2, DECISIONS #134).
 
-    python scripts/rearm_review_queue.py [--base-url http://127.0.0.1:8000] [--owner-email owner@try-demo.test]
+    python scripts/rearm_review_queue.py [--base-url http://127.0.0.1:8000] [--owner-email owner_priya@try-demo.test]
 
 WHY: the review checkpoint is held in memory (MemorySaver, app/graph/pipeline.py; a durable one is a post-demo item). After ANY backend
 restart or deploy every pending review item is dead: it stays in the database as open, its Confirm returns 410, and re-uploading the same
@@ -33,7 +33,7 @@ def demo_pdfs() -> list[Path]:
     return sorted(FILES.glob("*.pdf"))
 
 
-def rearm(client, *, owner_email: str = "owner@try-demo.test", out=print) -> dict:
+def rearm(client, *, owner_email: str = "owner_priya@try-demo.test", out=print) -> dict:
     """Do the three steps against `client` (an httpx client on the server, or a TestClient). Returns a summary; raises SystemExit(2) when the
     server is not in replay mode or the owner cannot be signed in."""
     from app import activity
@@ -82,7 +82,7 @@ def rearm(client, *, owner_email: str = "owner@try-demo.test", out=print) -> dic
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Remove and re-upload the demo PDFs so the review queue has live checkpoints again.")
     p.add_argument("--base-url", default=os.environ.get("JAGA_API_BASE_URL", "http://127.0.0.1:8000"))
-    p.add_argument("--owner-email", default="owner@try-demo.test")
+    p.add_argument("--owner-email", default="owner_priya@try-demo.test")
     args = p.parse_args(argv)
     from dotenv import load_dotenv
 

@@ -53,29 +53,38 @@ COMPANIES = [
 # belong to the FIRST company. The picker owner owns all three companies. Business titles are recorded in docs/DEMO-PEOPLE.md only.
 PEOPLE = {
     "c0": [
-        ("owner", "owner@try-demo.test", "Priya Ramanathan", "owner", "Managing Director"),
-        ("admin", "admin@try-demo.test", "Jonathan Ong", "admin", "HR & Finance Manager"),
-        ("user", "user@try-demo.test", "Nur Aisyah Rahman", "user", "Operations Executive"),
-        ("user1", "user1@try-demo.test", "Kavitha Subramaniam", "user", "Sales & Admin Coordinator"),
-        ("user2", "user2@try-demo.test", "Alvin Sim Jun Hao", "user", "Warehouse Supervisor"),
-        # The Corp Sec is STRICTLY VIEW-ONLY in the demo (the user's ruling, S1c): app role viewer, and the picker's viewer login.
-        ("viewer", "viewer@try-demo.test", "Rachel Tan Hui Min", "viewer", "Corp Sec"),
+        ("owner", "owner_priya@try-demo.test", "Priya Ramanathan", "owner", "Managing Director"),
+        ("admin", "admin_jonathan@try-demo.test", "Jonathan Ong", "admin", "HR & Finance Manager"),
+        # S1d (the user's ruling): there is no `user` role in the demo story. Nur Aisyah is a second admin; her title is unchanged.
+        ("admin2", "admin_aisyah@try-demo.test", "Nur Aisyah Rahman", "admin", "Operations Executive"),
+        # The Corp Sec is STRICTLY VIEW-ONLY (S1c): app role viewer, and the picker's fourth login.
+        ("viewer", "corpsec_rachel@try-demo.test", "Rachel Tan Hui Min", "viewer", "Corp Sec"),
         # A NON-PICKER viewer (the user's ruling): a member who performs no action.
         ("auditor", "marcus.lee@chenrahim.test", "Marcus Lee Kok Wai", "viewer", "External Auditor"),
     ],
     "c1": [
-        ("owner", "owner@try-demo.test", "Priya Ramanathan", "owner", "Group Managing Director"),
+        ("owner", "owner_priya@try-demo.test", "Priya Ramanathan", "owner", "Group Managing Director"),
         ("admin", "hafiz.ismail@pasirkelana.test", "Hafiz Ismail", "admin", "HR & Finance Manager"),
-        ("user1", "ravi.chandran@pasirkelana.test", "Ravi Chandran", "user", "Dispatch Coordinator"),
+        ("admin2", "ravi.chandran@pasirkelana.test", "Ravi Chandran", "admin", "Dispatch Coordinator"),
         ("corpsec", "grace.lim@pasirkelana.test", "Grace Lim Siew Ling", "viewer", "Corp Sec"),
     ],
     "c2": [
-        ("owner", "owner@try-demo.test", "Priya Ramanathan", "owner", "Group Managing Director"),
+        ("owner", "owner_priya@try-demo.test", "Priya Ramanathan", "owner", "Group Managing Director"),
         ("admin", "beehong.ng@cendanawharf.test", "Ng Bee Hong", "admin", "Finance & HR Manager"),
-        ("user1", "daniel.chia@cendanawharf.test", "Daniel Chia", "user", "Purchasing Executive"),
+        ("admin2", "daniel.chia@cendanawharf.test", "Daniel Chia", "admin", "Purchasing Executive"),
         ("corpsec", "farah.yusof@cendanawharf.test", "Farah Yusof", "viewer", "Corp Sec"),
     ],
 }
+
+# The login picker (web/src/config/demo.ts): EXACTLY these four, in this order, each a member of the FIRST company with the role beside it.
+PICKER = [("owner_priya@try-demo.test", "owner"), ("admin_jonathan@try-demo.test", "admin"), ("admin_aisyah@try-demo.test", "admin"),
+          ("corpsec_rachel@try-demo.test", "viewer")]
+
+# The accounts a database seeded BEFORE S1d already holds, and what each becomes: the seeder renames them IN PLACE (same user id, memberships and
+# sessions). `user@` was Nur Aisyah (now an admin), `viewer@` was the Corp Sec's slot. user1@ (Kavitha) and user2@ (Alvin) are DROPPED, not renamed.
+LEGACY_EMAILS = {"owner@try-demo.test": "owner_priya@try-demo.test", "admin@try-demo.test": "admin_jonathan@try-demo.test",
+                 "user@try-demo.test": "admin_aisyah@try-demo.test", "viewer@try-demo.test": "corpsec_rachel@try-demo.test"}
+DROPPED = [("user1@try-demo.test", "Kavitha Subramaniam"), ("user2@try-demo.test", "Alvin Sim Jun Hao")]
 
 # ---------------------------------------------------------------- public holidays (SEE THE NOTE IN THE DOCSTRING)
 
@@ -528,6 +537,33 @@ def render_jpeg(path: Path, occurred: date, seed: int) -> None:
     path.write_bytes(buf.getvalue())
 
 
+def reassign_uploaders(docs: list[dict]) -> None:
+    """Who uploaded each document, decided AFTER the content is fixed (S1d). Kavitha and Alvin are dropped and there is no `user` role, so
+    everything that was theirs, and part of the load Jonathan carried, is spread over the active people: the owner and the admins. A pure
+    function of the document (its cluster, type and file name): never the generator's random stream, so no date, amount, vendor, count or
+    file byte moves. Corp Secs and the auditor never appear as an uploader."""
+    import zlib
+    for d in docs:
+        crc = zlib.crc32(d["file"].encode())
+        old, doc_type, cluster = d["uploader"], d.get("doc_type"), d["cluster"]
+        if old == "owner":
+            new = "owner"
+        elif old == "admin":
+            if cluster == "gst" or doc_type in ("Annual Return Filing Receipt", "Certificate of Incorporation", "Company Constitution", "Share Register"):
+                new = "admin"
+            elif doc_type in ("AGM Minutes", "Auditor Engagement Letter", "Staff Bonus Payout Memo"):
+                new = "owner"          # the Managing Director signs the AGM minutes and the auditor's engagement, and approves the bonus memo
+            else:
+                new = ("admin", "admin2")[crc % 2]
+        elif old == "user2":
+            new = ("admin2", "owner", "admin2", "admin")[crc % 4]
+        elif d["company"] == "c2":       # the smallest company: Daniel would otherwise carry two thirds of it
+            new = ("admin2", "admin2", "admin")[crc % 3]
+        else:                          # user, user1: Nur Aisyah / Kavitha / Ravi's slot
+            new = "admin2"
+        d["uploader"] = new
+
+
 def write_people_doc() -> None:
     """docs/DEMO-PEOPLE.md: who each fictional person is. The user ruled that role labels are NAMES ONLY: no column, no migration, no
     title inside a display name. The four app roles stay (app/auth.py); a business title (Corp Sec, HR and Finance) is recorded HERE.
@@ -541,14 +577,16 @@ def write_people_doc() -> None:
         "that role labels are names only: no title inside a display name, and nothing in the app reads a title to decide what a person may do. A person's business title lives in "
         "this file and, per company, in `membership.title` (S3, DECISIONS #136), which `scripts/seed_demo_fixtures.py` writes from the same data as this "
         "table. History shows it next to the name.", "",
-        f"The group is **{GROUP_NAME}**. The picker owner (`owner@try-demo.test`, Priya Ramanathan) owns all three companies; the six emails "
-        "in the demo login picker (`web/src/config/demo.ts`: owner, admin, user, user1, user2, viewer) are all members of the FIRST company and "
-        "each holds its own role. People with other emails are members of one company each and are not in the picker.", "",
-        "**The Corp Sec is STRICTLY VIEW-ONLY in the demo (the user's ruling, S1c).** In every company the person titled Corp Sec holds app role "
-        "`viewer`, and no document, edit, purge request or cancel in the seeded data is attributed to any viewer. Statutory documents are uploaded "
-        "by the HR and Finance admin or the owner. In the first company the login picker's `viewer@try-demo.test` IS the Company Secretary. The "
-        "former External Auditor is kept as a NON-PICKER viewer in the first company (log in with the email in the table): a member who performs no "
-        "action. Nothing in `app/auth.py` changed: a viewer is already blocked from every write route.", ""]
+        f"The group is **{GROUP_NAME}**. The picker owner (`owner_priya@try-demo.test`, Priya Ramanathan) owns all three companies. **The login picker "
+        "(`web/src/config/demo.ts`) has exactly FOUR logins, in this order: `owner_priya@try-demo.test` (owner), `admin_jonathan@try-demo.test` (admin), "
+        "`admin_aisyah@try-demo.test` (admin) and `corpsec_rachel@try-demo.test` (viewer, view-only).** All four are members of the FIRST company. Everyone "
+        "else has a non-picker email and belongs to one company.", "",
+        "**There is no `user` role in the demo (S1d, the user's ruling).** Every company has an Owner, two Admins and a Corp Sec who is a viewer. Nur Aisyah "
+        "Rahman, Ravi Chandran and Daniel Chia were `user`s and are now admins with their titles unchanged. Kavitha Subramaniam and Alvin Sim Jun Hao are "
+        "DROPPED: no person, no membership, no document or History row. The app still has the `user` role; the demo simply never uses it.", "",
+        "**The Corp Sec is STRICTLY VIEW-ONLY (S1c).** In every company the person titled Corp Sec holds app role `viewer`, and no document, edit, purge request or "
+        "cancel in the seeded data is attributed to any viewer. Statutory documents are uploaded by an admin or the owner. The External Auditor (Marcus Lee Kok "
+        "Wai) is a NON-PICKER viewer who performs no action. Nothing in `app/auth.py` changed: a viewer is already blocked from every write route.", ""]
     for c in COMPANIES:
         lines += [f"## {c['name']}", "", f"Financial year end {c['fye'][1]}/{c['fye'][0]}; incorporated {c['incorporated_on']}; "
                   + (f"GST-registered, {c['gst_cycle']}." if c["gst_registered"] else "not GST-registered."), "",
@@ -576,11 +614,13 @@ def main() -> None:
             render_pdf(path, d["pages"])
         d["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     docs = sorted(g.docs, key=lambda x: (x["company"], x["received_local"], x["file"]))
+    reassign_uploaders(docs)
     for d in docs:
         d.pop("pages", None)  # the text is in the file; the manifest keeps only what the seeder must know
     manifest = {"note": FIXTURE_LINE + ". Generated by scripts/generate_seed_files.py.", "group": GROUP_NAME, "companies": COMPANIES,
                 "people": {k: [dict(zip(("key", "email", "name", "role", "title"), p)) for p in v] for k, v in PEOPLE.items()},
-                "today": TODAY.isoformat(), "holidays": HOLIDAYS, "events": EVENTS, "documents": docs}
+                "picker": [{"email": e, "role": r} for e, r in PICKER], "legacy_emails": LEGACY_EMAILS,
+                "dropped": [{"email": e, "name": n} for e, n in DROPPED], "today": TODAY.isoformat(), "holidays": HOLIDAYS, "events": EVENTS, "documents": docs}
     (OUT / "manifest.json").write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n")
     write_people_doc()
     shas = [d["sha256"] for d in docs]

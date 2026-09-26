@@ -35,13 +35,13 @@ describe('the demo picker signal', () => {
 })
 
 describe('DemoPickerHost', () => {
-  it('is closed until something signals it, then opens the six-account dialog', () => {
+  it('is closed until something signals it, then opens the four-login dialog', () => {
     render(<DemoPickerHost />)
     expect(screen.queryByRole('dialog')).toBeNull()
     act(() => openDemoPicker())
     const dialog = screen.getByRole('dialog', { name: 'Try the demo as' })
     expect(dialog).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: /^(Owner|Admin|User|Viewer)/ }).length).toBeGreaterThanOrEqual(4)
+    expect(screen.getAllByRole('button', { name: /^(Priya|Jonathan|Nur|Rachel)/ })).toHaveLength(4)
     expect(login).not.toHaveBeenCalled() // opening signs nobody in
   })
 
@@ -49,9 +49,9 @@ describe('DemoPickerHost', () => {
     login.mockResolvedValue(undefined)
     render(<DemoPickerHost />)
     act(() => openDemoPicker())
-    fireEvent.click(screen.getByRole('button', { name: /^Viewer/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Rachel/ }))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'))
-    expect(login).toHaveBeenCalledWith({ email: 'viewer@try-demo.test' })
+    expect(login).toHaveBeenCalledWith({ email: 'corpsec_rachel@try-demo.test' })
   })
 
   it('stops listening when it unmounts, which is when someone signs in', () => {

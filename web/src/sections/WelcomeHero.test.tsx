@@ -207,17 +207,17 @@ describe('WelcomeHero', () => {
 
   it('the line under the demo button names the roles in brackets and reads at 16px, not 14 (DECISIONS #111)', () => {
     render(<><WelcomeHero /><DemoPickerHost /></>)
-    const hint = screen.getByText('See the app as (owner, admin, user, viewer). No sign-up needed.')
+    const hint = screen.getByText('See the app as an owner, an admin or a view-only Corp Sec. No sign-up needed.')
     expect(hint.className).toContain('text-base')
     expect(hint.className).not.toContain('text-[14px]')
     expect(hint.className).toContain('text-muted') // size only
   })
 
   it.each([
-    ['zh', '以不同身份体验（所有者、管理员、用户、查看者），无需注册。'],
-    ['ms', 'Lihat aplikasi sebagai (pemilik, pentadbir, pengguna, pelihat). Tidak perlu mendaftar.'],
-    ['ta', 'ஆப்பை (உரிமையாளர், நிர்வாகி, பயனர், பார்வையாளர்) ஆகப் பாருங்கள். பதிவு தேவையில்லை.'],
-  ])('the same line, with the four roles in brackets, in %s', async (language, text) => {
+    ['zh', '以所有者、管理员或只读的公司秘书（Corp Sec）身份体验，无需注册。'],
+    ['ms', 'Lihat aplikasi sebagai pemilik, pentadbir atau Setiausaha Syarikat (Corp Sec) yang hanya boleh melihat. Tidak perlu mendaftar.'],
+    ['ta', 'உரிமையாளர், நிர்வாகி அல்லது பார்வை மட்டும் உள்ள நிறுவனச் செயலர் (Corp Sec) ஆகப் பாருங்கள். பதிவு தேவையில்லை.'],
+  ])('the same line, naming an owner, an admin and a view-only Corp Sec and never a `user`, in %s', async (language, text) => {
     await i18n.changeLanguage(language)
     render(<><WelcomeHero /><DemoPickerHost /></>)
     expect(screen.getByText(text)).toBeTruthy()
@@ -275,11 +275,11 @@ describe('WelcomeHero', () => {
     render(<><WelcomeHero /><DemoPickerHost /></>)
     fireEvent.click(screen.getByRole('button', { name: 'Pick a demo role' }))
 
-    fireEvent.click(screen.getByRole('button', { name: /^Owner/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Priya/ }))
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'))
     expect(login).toHaveBeenCalledTimes(1)
     expect(login).toHaveBeenCalledWith({ email: DEMO_OWNER_EMAIL })
-    expect(DEMO_OWNER_EMAIL).toBe('owner@try-demo.test')
+    expect(DEMO_OWNER_EMAIL).toBe('owner_priya@try-demo.test')
   })
 })

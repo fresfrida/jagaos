@@ -10,35 +10,27 @@
   "home": {
     "demo": {
       "button": "Pilih peranan demo",
-      "hint": "Lihat aplikasi sebagai (pemilik, pentadbir, pengguna, pelihat). Tidak perlu mendaftar.",
+      "hint": "Lihat aplikasi sebagai pemilik, pentadbir atau Setiausaha Syarikat (Corp Sec) yang hanya boleh melihat. Tidak perlu mendaftar.",
       "opening": "Membuka demo…",
       "failed": "Tidak dapat membuka demo sekarang. Anda masih boleh log masuk.",
       "pickerTitle": "Cuba demo sebagai",
-      "pickerIntro": "Setiap satu ialah log masuk sebenar ke syarikat demo yang sama. Pilih peranan yang anda mahu lihat.",
+      "pickerIntro": "Setiap satu ialah log masuk sebenar ke syarikat demo yang sama. Pilih siapa yang anda mahu jadikan pandangan aplikasi.",
       "accounts": {
         "owner": {
-          "name": "Pemilik",
-          "text": "Akses penuh, termasuk menyunting Tetapan Syarikat. Akaun ini juga memiliki dua syarikat saudara, jadi ia satu-satunya akaun dengan penukar syarikat."
+          "name": "Priya Ramanathan",
+          "text": "Pengarah Urusan. Akses penuh, termasuk menyunting Tetapan Syarikat. Beliau juga memiliki dua syarikat saudara, jadi ini satu-satunya log masuk dengan penukar syarikat."
         },
-        "admin": {
-          "name": "Pentadbir",
-          "text": "Mengesahkan atau menolak apa yang kami baca, menyunting atau memadam mana-mana dokumen syarikat, dan melihat Tetapan Syarikat secara baca sahaja."
+        "adminFinance": {
+          "name": "Jonathan Ong",
+          "text": "Pengurus HR dan Kewangan. Mengesahkan atau menolak apa yang kami baca, menyunting atau memadam mana-mana dokumen syarikat, dan melihat Tetapan Syarikat secara baca sahaja."
         },
-        "user": {
-          "name": "Pengguna",
-          "text": "Memuat naik dokumen dan menyunting dokumen sendiri. Menyimpan fail peribadi dalam Hanya saya. Tidak boleh mengesahkan atau memadam dokumen syarikat."
+        "adminOperations": {
+          "name": "Nur Aisyah Rahman",
+          "text": "Eksekutif Operasi, juga seorang pentadbir: akses yang sama seperti Jonathan. Log masuk sebagai kedua-duanya untuk melihat dua pentadbir bekerja pada dokumen yang sama."
         },
-        "user1": {
-          "name": "Pengguna 1",
-          "text": "Peranan sama seperti Pengguna. Log masuk sebagai dua pengguna untuk melihat fail dan fail peribadi setiap orang kekal miliknya."
-        },
-        "user2": {
-          "name": "Pengguna 2",
-          "text": "Peranan sama seperti Pengguna. Log masuk sebagai dua pengguna untuk melihat fail dan fail peribadi setiap orang kekal miliknya."
-        },
-        "viewer": {
-          "name": "Pelihat",
-          "text": "Baca sahaja. Melihat dokumen yang telah difailkan, Kalendar dan Carian, tetapi tidak boleh memuat naik, menyunting, atau melihat apa yang menunggu semakan."
+        "corpSec": {
+          "name": "Rachel Tan Hui Min",
+          "text": "Corp Sec, lihat sahaja. Melihat dokumen yang telah difailkan, Kalendar dan Carian, tetapi tidak boleh memuat naik, menyunting, atau melihat apa yang menunggu semakan."
         }
       }
     },

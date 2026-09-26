@@ -193,10 +193,10 @@ auth dependency fails the suite. **Fixed in the repo and confirmed on the deploy
 ## Seeding test accounts
 
 `python scripts/seed_dev_db.py` (idempotent, safe to re-run) now creates
-one account per role — `owner@try-demo.test`, `admin@try-demo.test`,
-`user@try-demo.test`, `viewer@try-demo.test` — plus, since 2026-09-24,
-`user1@try-demo.test` and `user2@try-demo.test` (two peers of the same role, so
-"a user cannot edit another user's file" can be tried against a real peer) —
+the accounts a LOCAL dev database needs — `owner_priya@try-demo.test`, `admin_jonathan@try-demo.test`,
+`admin_aisyah@try-demo.test` and `corpsec_rachel@try-demo.test` (the four logins the demo picker offers: owner, two admins and a view-only
+Corp Sec; S1d, DECISIONS #137) — plus `roletest_user1@try-demo.test` and `roletest_user2@try-demo.test` (two peers of the `user` role, NOT in the picker,
+so "a user cannot edit another user's file" can be tried against a real peer; the demo story itself has no `user`) —
 printing each one's dev-login token. Email is the only "credential" this auth model has (`dev-login` is
 a placeholder for real magic-link email, `app/auth.py`'s docstring) — there
 is no password.

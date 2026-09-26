@@ -199,15 +199,13 @@ def test_the_corp_sec_is_strictly_view_only_everywhere_and_the_auditor_is_a_non_
     Company Secretary, the other five picker logins keep their roles and none is a Corp Sec, and the External Auditor is a non-picker viewer."""
     inv = seeded["report"]["invariants"]
     for name in ("every_corp_sec_has_role_viewer_in_all_three_companies", "no_history_row_has_a_viewer_as_its_actor", "no_document_is_uploaded_by_a_viewer",
-                 "the_pickers_viewer_login_is_the_corp_sec", "the_other_picker_logins_keep_their_roles_and_none_is_a_corp_sec",
+                 "the_pickers_last_login_is_the_corp_sec_and_no_other_picker_login_is", "the_four_picker_logins_hold_owner_admin_admin_viewer_in_the_first_company",
                  "the_external_auditor_is_a_non_picker_viewer_who_acts_nowhere"):
         assert inv[name]["ok"], (name, inv[name]["detail"])
     con = sqlite3.connect(seeded["db"])
     assert con.execute("SELECT COUNT(*) FROM membership WHERE title = 'Corp Sec'").fetchone()[0] == 3
     roles = {p["email"]: p["role"] for k in MANIFEST["people"] for p in MANIFEST["people"][k]}
     assert all(roles[p["email"]] == "viewer" for k in MANIFEST["people"] for p in MANIFEST["people"][k] if p["title"] == "Corp Sec")
-    viewers = {p["key"] for p in MANIFEST["people"]["c0"] if p["role"] == "viewer"} | {"corpsec"}
-    assert not any(d["uploader"] in viewers and d["company"] == "c0" for d in MANIFEST["documents"] if d["uploader"] in ("viewer", "auditor"))
     assert not any(d["uploader"] in ("viewer", "auditor", "corpsec") for d in MANIFEST["documents"])          # in the manifest itself, in all three companies
 
 
@@ -296,9 +294,153 @@ def test_every_person_holds_the_manifests_business_title_in_that_company_and_his
     for company in MANIFEST["companies"]:
         for person in MANIFEST["people"][company["key"]]:
             assert got[(company["name"], person["email"])] == person["title"], (company["name"], person["email"])
-    assert got[("Tembusu Row Engineering Pte Ltd", "viewer@try-demo.test")] == "Corp Sec"      # the picker's viewer login is the Company Secretary
-    assert got[("Pasir Kelana Logistics Pte Ltd", "owner@try-demo.test")] == "Group Managing Director"   # the same person, another title, another company
+    assert got[("Tembusu Row Engineering Pte Ltd", "corpsec_rachel@try-demo.test")] == "Corp Sec"      # the picker's viewer login is the Company Secretary
+    assert got[("Pasir Kelana Logistics Pte Ltd", "owner_priya@try-demo.test")] == "Group Managing Director"   # the same person, another title, another company
     titles = seeded["report"]["history"]["titles_shown"]
     assert titles and set(titles) <= {p["title"] for p in MANIFEST["people"]["c0"]}
     docs = (REPO / "docs" / "DEMO-PEOPLE.md").read_text()
     assert all(p["title"] in docs and p["email"] in docs for k in MANIFEST["people"] for p in MANIFEST["people"][k])
+
+
+# ---------------------------------------------------------------- S1d: no `user` role in the demo story, four self-explanatory logins (DECISIONS #137)
+
+
+def test_the_login_picker_is_exactly_the_four_manifest_logins_and_no_demo_membership_has_role_user(seeded):
+    inv = seeded["report"]["invariants"]
+    for name in ("the_login_picker_config_lists_exactly_the_four_manifest_logins_in_order", "the_four_picker_logins_hold_owner_admin_admin_viewer_in_the_first_company",
+                 "no_membership_with_app_role_user_in_the_three_demo_companies", "kavitha_is_dropped_entirely_no_person_no_membership_no_history_row",
+                 "alvin_is_dropped_entirely_no_person_no_membership_no_history_row"):
+        assert inv[name]["ok"], (name, inv[name]["detail"])
+    assert [(x["email"], x["role"]) for x in MANIFEST["picker"]] == [
+        ("owner_priya@try-demo.test", "owner"), ("admin_jonathan@try-demo.test", "admin"), ("admin_aisyah@try-demo.test", "admin"), ("corpsec_rachel@try-demo.test", "viewer")]
+    con = sqlite3.connect(seeded["db"])
+    assert con.execute("SELECT COUNT(*) FROM membership WHERE role = 'user'").fetchone()[0] == 0
+    assert con.execute("SELECT COUNT(*) FROM app_user WHERE name IN ('Kavitha Subramaniam', 'Alvin Sim Jun Hao')").fetchone()[0] == 0
+    assert all(p["role"] != "user" for k in MANIFEST["people"] for p in MANIFEST["people"][k])
+
+
+def test_every_company_has_an_owner_two_admins_and_a_corp_sec_who_is_a_viewer():
+    for key, people in MANIFEST["people"].items():
+        roles = [p["role"] for p in people if p["title"] != "External Auditor"]
+        assert sorted(roles) == ["admin", "admin", "owner", "viewer"], (key, roles)
+        assert [p["title"] for p in people if p["role"] == "viewer" and p["title"] == "Corp Sec"] == ["Corp Sec"]
+
+
+def test_only_the_owner_and_the_admins_upload_and_no_one_carries_an_absurd_share():
+    roles = {k: {p["key"]: p["role"] for p in v} for k, v in MANIFEST["people"].items()}
+    assert {roles[d["company"]][d["uploader"]] for d in MANIFEST["documents"]} <= {"owner", "admin"}
+    for company in ("c0", "c1", "c2"):
+        mine = [d["uploader"] for d in MANIFEST["documents"] if d["company"] == company]
+        assert max(mine.count(u) for u in set(mine)) / len(mine) <= 0.6, company
+
+
+def test_the_login_emails_in_the_frontend_config_are_the_ones_the_seeder_creates():
+    import re
+    emails = re.findall(r"'([a-z_]+@try-demo\.test)'", (REPO / "web" / "src" / "config" / "demo.ts").read_text())
+    assert emails == [x["email"] for x in MANIFEST["picker"]]
+
+
+def _legacy_shaped_copy(seeded, tmp_path_factory):
+    """A database seeded BEFORE S1d, built by turning a fresh seed back into the old shape: the old picker emails, Aisyah/Ravi/Daniel as `user`,
+    Kavitha and Alvin as members with documents, edits and a purge event attributed to them, a session for the owner, a stray member of a demo
+    company, and an unrelated company that must not be touched."""
+    import shutil
+    root = tmp_path_factory.mktemp("legacy")
+    db, docs = root / "jaga.db", root / "docs"
+    shutil.copy(seeded["db"], db)
+    shutil.copytree(seeded["docs"], docs)
+    con = sqlite3.connect(db)
+    one = lambda q, *a: con.execute(q, a).fetchone()[0]  # noqa: E731
+    ids = {p["email"]: one("SELECT id FROM app_user WHERE email = ?", p["email"]) for k in MANIFEST["people"] for p in MANIFEST["people"][k]}
+    for old, new in MANIFEST["legacy_emails"].items():
+        con.execute("UPDATE app_user SET email = ? WHERE email = ?", (old, new))
+    con.execute("UPDATE membership SET role = 'user' WHERE user_id IN (?, ?, ?)", (ids["admin_aisyah@try-demo.test"], ids["ravi.chandran@pasirkelana.test"], ids["daniel.chia@cendanawharf.test"]))
+    c1 = one("SELECT id FROM company WHERE name = ?", MANIFEST["companies"][0]["name"])
+    c2 = one("SELECT id FROM company WHERE name = ?", MANIFEST["companies"][1]["name"])
+    kav = con.execute("INSERT INTO app_user (email, name) VALUES ('user1@try-demo.test', 'Kavitha Subramaniam')").lastrowid
+    alv = con.execute("INSERT INTO app_user (email, name) VALUES ('user2@try-demo.test', 'Alvin Sim Jun Hao')").lastrowid
+    stray = con.execute("INSERT INTO app_user (email, name) VALUES ('stray@else.test', 'Stray Person')").lastrowid
+    for uid_, cid_, role in ((kav, c1, "user"), (alv, c1, "user"), (stray, c2, "admin")):
+        con.execute("INSERT INTO membership (company_id, user_id, role) VALUES (?, ?, ?)", (cid_, uid_, role))
+    other = con.execute("INSERT INTO company (name, fye_month, fye_day) VALUES ('Other Co', 12, 31)").lastrowid          # a company the seeder must never touch
+    con.execute("INSERT INTO membership (company_id, user_id, role) VALUES (?, ?, 'viewer')", (other, stray))
+    con.execute("INSERT INTO membership (company_id, user_id, role) VALUES (?, ?, 'user')", (other, kav))
+    fixture = [r[0] for r in con.execute("SELECT id FROM document WHERE source_identity = 'seed-fixture' AND company_id = ? ORDER BY id LIMIT 6", (c1,))]
+    for doc in fixture[:5]:
+        con.execute("UPDATE document SET uploaded_by_user_id = ? WHERE id = ?", (kav, doc))
+        con.execute("UPDATE document_activity SET actor_user_id = ?, actor_name = 'Kavitha Subramaniam' WHERE action = 'uploaded' AND lifecycle_id = (SELECT lifecycle_id FROM document WHERE id = ?)", (kav, doc))
+    con.execute("UPDATE document_activity SET actor_user_id = ?, actor_name = 'Alvin Sim Jun Hao' WHERE id = (SELECT MIN(id) FROM document_activity WHERE action = 'edited')", (alv,))
+    con.execute("UPDATE document_activity SET actor_user_id = ?, actor_name = 'Kavitha Subramaniam' WHERE id = (SELECT MIN(id) FROM document_activity WHERE action = 'purge_requested')", (kav,))
+    con.execute("INSERT INTO document (company_id, sha256, filename, media_type, bytes, stored_path, source_channel, uploaded_by_user_id) VALUES (?, ?, 'pre-existing.pdf', 'application/pdf', 1, '/x', 'web', ?)", (c1, "f" * 64, alv))  # a NON-fixture document Alvin uploaded
+    con.execute("UPDATE document SET purge_requested_by = 'owner@try-demo.test' WHERE purge_requested_at IS NOT NULL")
+    con.execute("INSERT INTO session (user_id, token_hash, expires_at) VALUES (?, 'legacy-token-hash', '2099-01-01 00:00:00')", (ids["owner_priya@try-demo.test"],))
+    con.commit()
+    con.close()
+    return {"db": db, "docs": docs, "ids": ids, "kav": kav, "alv": alv, "stray": stray, "other": other, "c1": c1, "c2": c2}
+
+
+@pytest.fixture(scope="module")
+def migrated(seeded, tmp_path_factory):
+    legacy = _legacy_shaped_copy(seeded, tmp_path_factory)
+    run = _run("seed_demo_fixtures.py", "--db", str(legacy["db"]), "--docs-dir", str(legacy["docs"]), env=_env(LLM_CALLS_DISABLED="1"))
+    assert run.returncode == 0, run.stdout[-2500:] + run.stderr[-2500:]
+    after_first = _counts(legacy["db"])
+    again = _run("seed_demo_fixtures.py", "--db", str(legacy["db"]), "--docs-dir", str(legacy["docs"]), env=_env(LLM_CALLS_DISABLED="1"))
+    assert again.returncode == 0, again.stdout[-2500:] + again.stderr[-2500:]
+    verify = _run("verify_seed_fixtures.py", "--db", str(legacy["db"]), "--docs-dir", str(legacy["docs"]), "--json", env=_env())
+    line = next(l for l in verify.stdout.splitlines() if l.startswith("{"))
+    return {**legacy, "run": run, "after_first": after_first, "after_second": _counts(legacy["db"]), "report": json.loads(line)}
+
+
+def test_a_production_shaped_database_has_its_accounts_renamed_in_place_with_ids_and_sessions_kept(migrated):
+    con = sqlite3.connect(migrated["db"])
+    for old, new in MANIFEST["legacy_emails"].items():
+        assert con.execute("SELECT COUNT(*) FROM app_user WHERE email = ?", (old,)).fetchone()[0] == 0, old
+        assert con.execute("SELECT id FROM app_user WHERE email = ?", (new,)).fetchone()[0] == migrated["ids"][new], new     # the SAME user id
+    assert con.execute("SELECT COUNT(*) FROM session WHERE token_hash = 'legacy-token-hash'").fetchone()[0] == 1              # the owner's session survived the rename
+    assert "renamed owner@try-demo.test -> owner_priya@try-demo.test" in migrated["run"].stdout
+
+
+def test_on_that_database_no_demo_membership_holds_the_user_role_and_the_admins_were_re_roled(migrated):
+    con = sqlite3.connect(migrated["db"])
+    demo = [r[0] for r in con.execute("SELECT id FROM company WHERE name IN (?, ?, ?)", tuple(c["name"] for c in MANIFEST["companies"]))]
+    assert con.execute(f"SELECT COUNT(*) FROM membership WHERE role = 'user' AND company_id IN ({','.join('?' * len(demo))})", demo).fetchone()[0] == 0
+    for email in ("admin_aisyah@try-demo.test", "ravi.chandran@pasirkelana.test", "daniel.chia@cendanawharf.test"):
+        assert con.execute("SELECT m.role FROM membership m JOIN app_user u ON u.id = m.user_id WHERE u.email = ?", (email,)).fetchone()[0] == "admin", email
+    assert migrated["report"]["invariants"]["no_membership_with_app_role_user_in_the_three_demo_companies"]["ok"]
+
+
+def test_kavitha_alvin_and_a_stray_member_lose_their_demo_membership_and_nothing_else_is_touched(migrated):
+    con = sqlite3.connect(migrated["db"])
+    member = lambda uid, cid: con.execute("SELECT role FROM membership WHERE user_id = ? AND company_id = ?", (uid, cid)).fetchone()  # noqa: E731
+    assert member(migrated["kav"], migrated["c1"]) is None and member(migrated["alv"], migrated["c1"]) is None and member(migrated["stray"], migrated["c2"]) is None
+    assert member(migrated["stray"], migrated["other"]) == ("viewer",) and member(migrated["kav"], migrated["other"]) == ("user",)     # the unrelated company is untouched
+    assert con.execute("SELECT COUNT(*) FROM membership WHERE company_id = ?", (migrated["other"],)).fetchone()[0] == 2
+    # Kavitha is still a member of the unrelated company, so her account stays; Alvin has a document nobody re-attributed, so his stays too
+    assert con.execute("SELECT COUNT(*) FROM app_user WHERE id IN (?, ?)", (migrated["kav"], migrated["alv"])).fetchone()[0] == 2
+    assert "kept the account of user2@try-demo.test" in migrated["run"].stdout
+
+
+def test_fixture_documents_and_history_are_re_attributed_to_the_current_cast(migrated):
+    con = sqlite3.connect(migrated["db"])
+    # Fixture documents only: a pre-existing NON-fixture document Alvin uploaded (built into this database) is out of scope and keeps its own history row.
+    left = con.execute("SELECT a.id, a.action, a.actor_name FROM document_activity a JOIN document d ON d.lifecycle_id = a.lifecycle_id "
+                       "WHERE d.source_identity = 'seed-fixture' AND a.actor_name IN ('Kavitha Subramaniam', 'Alvin Sim Jun Hao')").fetchall()
+    assert left == [], left
+    assert con.execute("SELECT COUNT(*) FROM document WHERE filename = 'pre-existing.pdf'").fetchone()[0] == 1          # and that document itself is not deleted
+    assert con.execute("SELECT COUNT(*) FROM document WHERE uploaded_by_user_id IN (?, ?) AND source_identity = 'seed-fixture'", (migrated["kav"], migrated["alv"])).fetchone()[0] == 0
+    mine = {d["sha256"]: d for d in MANIFEST["documents"]}
+    people = {(k, p["key"]): p["email"] for k, v in MANIFEST["people"].items() for p in v}
+    for sha, uploader in con.execute("SELECT d.sha256, u.email FROM document d JOIN app_user u ON u.id = d.uploaded_by_user_id WHERE d.source_identity = 'seed-fixture'"):
+        d = mine[sha]
+        assert uploader == people[(d["company"], d["uploader"])], d["file"]
+    assert con.execute("SELECT COUNT(*) FROM document WHERE purge_requested_by = 'owner@try-demo.test'").fetchone()[0] == 0        # the text copy of the email followed the rename
+
+
+def test_on_that_database_the_view_only_and_picker_invariants_hold_and_a_second_run_changes_nothing(migrated):
+    inv = migrated["report"]["invariants"]
+    for name in ("every_corp_sec_has_role_viewer_in_all_three_companies", "no_history_row_has_a_viewer_as_its_actor", "no_document_is_uploaded_by_a_viewer",
+                 "the_pickers_last_login_is_the_corp_sec_and_no_other_picker_login_is", "the_four_picker_logins_hold_owner_admin_admin_viewer_in_the_first_company",
+                 "the_login_picker_config_lists_exactly_the_four_manifest_logins_in_order", "the_external_auditor_is_a_non_picker_viewer_who_acts_nowhere"):
+        assert inv[name]["ok"], (name, inv[name]["detail"])
+    assert migrated["after_second"] == migrated["after_first"]

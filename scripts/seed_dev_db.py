@@ -12,7 +12,7 @@ stable.
 
 Since 2026-09-24 (round 12, DECISIONS #77) it also seeds one demo GROUP:
 "Try Demo Holdings", holding "Try Demo Pte Ltd" plus two sibling companies,
-all owned by owner@try-demo.test — so the company switcher has something to
+all owned by owner_priya@try-demo.test — so the company switcher has something to
 switch between. The other accounts stay members of "Try Demo Pte Ltd" only:
 one membership means no switcher and no group anywhere in their UI.
 
@@ -49,7 +49,7 @@ load_dotenv()
 API = os.environ.get("JAGA_API_BASE_URL", "http://127.0.0.1:8000")
 FILES_DIR = Path(__file__).parent.parent / "evals" / "demo_corpus" / "files"
 
-OWNER_EMAIL = "owner@try-demo.test"
+OWNER_EMAIL = "owner_priya@try-demo.test"
 COMPANY_NAME = "Try Demo Pte Ltd"
 
 # 2026-09-24 (round 12, DECISIONS #77): the demo group. (name, fye_month,
@@ -71,11 +71,14 @@ SIBLING_COMPANIES = [
 # account that rule (user vs. someone else's file) could only ever be
 # exercised against a higher role, never against a peer.
 ROLE_ACCOUNTS = [
-    ("admin", "admin@try-demo.test", "Demo Admin"),
-    ("user", "user@try-demo.test", "Demo User"),
-    ("user", "user1@try-demo.test", "Demo User 1"),
-    ("user", "user2@try-demo.test", "Demo User 2"),
-    ("viewer", "viewer@try-demo.test", "Demo Viewer"),
+    # The four accounts the demo login picker signs in as (web/src/config/demo.ts; S1d, DECISIONS #137): owner, two admins and a view-only Corp Sec.
+    ("admin", "admin_jonathan@try-demo.test", "Demo Admin"),
+    ("admin", "admin_aisyah@try-demo.test", "Demo Admin 2"),
+    ("viewer", "corpsec_rachel@try-demo.test", "Demo Viewer"),
+    # Role-test accounts, NOT in the picker: two peers of the `user` role, so "a user cannot edit another user's file" can be tried against a
+    # real peer (and tests/test_reset_demo_data.py has a `user` to re-role). The demo story itself has no `user`.
+    ("user", "roletest_user1@try-demo.test", "Demo User 1"),
+    ("user", "roletest_user2@try-demo.test", "Demo User 2"),
 ]
 
 

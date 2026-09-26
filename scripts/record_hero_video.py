@@ -36,7 +36,7 @@ from urllib.parse import urlparse
 
 REPO = Path(__file__).resolve().parent.parent
 ASSETS = REPO / "web" / "src" / "assets"
-DEMO_OWNER = "owner@try-demo.test"  # config/demo.ts: the public demo account
+DEMO_OWNER = "owner_priya@try-demo.test"  # config/demo.ts: the public demo account
 LOCAL_HOSTS = {"localhost", "127.0.0.1"}
 
 FPS = 30

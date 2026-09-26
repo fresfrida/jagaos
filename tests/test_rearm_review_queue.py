@@ -22,7 +22,7 @@ import rearm_review_queue  # noqa: E402
 
 client = TestClient(app, raise_server_exceptions=False)
 REPLAY = Path(__file__).parent.parent / "evals" / "replay"
-OWNER = "owner@try-demo.test"
+OWNER = "owner_priya@try-demo.test"
 
 
 class _NoClientMayBeBuilt:

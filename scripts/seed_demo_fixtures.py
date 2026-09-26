@@ -38,7 +38,6 @@ sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(Path(__file__).parent))
 
 DEFAULT_FILES = REPO / "evals" / "seed_files"
-OWNER_EMAIL = "owner@try-demo.test"
 SEED_ACTOR = "seed-fixture"
 SOURCE_IDENTITY = "seed-fixture"
 EXTRACTOR_VERSION = "seed-fixture-v1"
@@ -87,6 +86,8 @@ class Seeder:
         self.user_ids: dict[str, int] = {}     # email -> id
         self.doc_ids: dict[str, int] = {}      # manifest file -> document id
         self.session_floor = 0
+        self.owner_email = next(p["email"] for p in self.manifest["people"]["c0"] if p["key"] == "owner")
+        self.removed: dict[int, str] = {}      # user id -> email of everyone taken out of a demo company this run
         self.stats: dict[str, int] = {"ingested": 0, "skipped_existing": 0, "extraction_rows": 0, "thumbnails": 0}
         self._headers: dict[tuple, dict] = {}
 
@@ -122,7 +123,8 @@ class Seeder:
         with self.get_conn(self.db_path) as conn:
             owned = [dict(r) for r in conn.execute(
                 "SELECT c.id, c.name, c.fye_month, c.fye_day FROM company c JOIN membership m ON m.company_id = c.id "
-                "JOIN app_user u ON u.id = m.user_id WHERE u.email = ? AND m.role = 'owner' ORDER BY c.id", (OWNER_EMAIL,))]
+                "JOIN app_user u ON u.id = m.user_id WHERE u.email IN (?, ?) AND m.role = 'owner' ORDER BY c.id",
+                (self.owner_email, next((old for old, new in self.manifest["legacy_emails"].items() if new == self.owner_email), self.owner_email)))]
         taken: set[int] = set()
         owner_name = next(p["name"] for p in self.manifest["people"]["c0"] if p["key"] == "owner")
         for spec in self.manifest["companies"]:
@@ -131,7 +133,7 @@ class Seeder:
                 match = next((c for c in owned if [c["fye_month"], c["fye_day"]] == spec["fye"] and c["id"] not in taken), None)
             if match is None:
                 r = self.client.post("/api/auth/dev-login", json={
-                    "email": OWNER_EMAIL, "name": owner_name, "company_name": spec["name"], "fye_month": spec["fye"][0], "fye_day": spec["fye"][1]})
+                    "email": self.owner_email, "name": owner_name, "company_name": spec["name"], "fye_month": spec["fye"][0], "fye_day": spec["fye"][1]})
                 r.raise_for_status()
                 cid = r.json()["company"]["id"]
                 print(f"  created {spec['key']}: {spec['name']} (company #{cid})")
@@ -141,7 +143,7 @@ class Seeder:
             self.company_id[spec["key"]] = cid
         # Owner names first (the picker owner exists by now), then rename through the real endpoint as the owner.
         with self.get_conn(self.db_path) as conn:
-            conn.execute("UPDATE app_user SET name = ? WHERE email = ?", (owner_name, OWNER_EMAIL))
+            conn.execute("UPDATE app_user SET name = ? WHERE email = ?", (owner_name, self.owner_email))
         for spec in self.manifest["companies"]:
             h = self.headers(spec["key"], "owner")
             body = {"name": spec["name"], "gst_registered": bool(spec["gst_registered"])}
@@ -159,6 +161,85 @@ class Seeder:
             for cid in self.company_id.values():
                 conn.execute("UPDATE company SET group_id = ? WHERE id = ?", (gid, cid))
 
+    # ------------------------------------------------------------ S1d: accounts a database seeded BEFORE S1d already holds
+    def rename_legacy_accounts(self) -> None:
+        """Rename the old picker accounts IN PLACE (UPDATE app_user SET email: the same user id, so memberships, sessions and everything that points at
+        the user survive). Only when the old email exists and the new one does not; if both exist the old one is left alone here and is removed from the
+        demo companies by sweep_cast()."""
+        with self.get_conn(self.db_path) as conn:
+            for old, new in self.manifest["legacy_emails"].items():
+                o = conn.execute("SELECT id FROM app_user WHERE email = ?", (old,)).fetchone()
+                n = conn.execute("SELECT id FROM app_user WHERE email = ?", (new,)).fetchone()
+                if o and not n:
+                    conn.execute("UPDATE app_user SET email = ? WHERE id = ?", (new, o["id"]))
+                    conn.execute("UPDATE document SET purge_requested_by = ? WHERE purge_requested_by = ?", (new, old))  # a text copy of the email
+                    print(f"  renamed {old} -> {new} (user #{o['id']}, in place)")
+                elif o and n:
+                    print(f"  NOTE: both {old} and {new} exist; {old} is left as it is and leaves the demo companies below")
+
+    def sweep_cast(self) -> None:
+        """Remove the membership of anyone in one of the three demo companies who is not in the cast (Kavitha and Alvin, or a stray member): they can
+        no longer sign in to those companies. Never touches another company. Their app_user rows go only if nothing references them (drop_unreferenced)."""
+        with self.get_conn(self.db_path) as conn:
+            for ckey, people in self.manifest["people"].items():
+                cid = self.company_id[ckey]
+                cast = [p["email"] for p in people]
+                rows = conn.execute(
+                    f"SELECT m.id, m.user_id, u.email FROM membership m JOIN app_user u ON u.id = m.user_id WHERE m.company_id = ? AND u.email NOT IN ({','.join('?' * len(cast))})",
+                    (cid, *cast)).fetchall()
+                for r in rows:
+                    conn.execute("DELETE FROM membership WHERE id = ?", (r["id"],))
+                    self.removed[r["user_id"]] = r["email"]
+                    print(f"  removed {r['email']} from {ckey}")
+
+    def repair_attribution(self) -> None:
+        """A database seeded with an earlier cast holds fixture documents attributed to people who are now dropped or re-roled. Point each fixture
+        document and its Uploaded event at the manifest's uploader, and hand every other event by a removed person to an active one (edits to the second
+        admin, purge events to the owner). Only fixture documents (source_identity 'seed-fixture') are touched."""
+        names = {p["email"]: p["name"] for people in self.manifest["people"].values() for p in people}
+        fixed = 0
+        with self.get_conn(self.db_path) as conn:
+            for d in self.manifest["documents"]:
+                row = conn.execute("SELECT id, uploaded_by_user_id, lifecycle_id FROM document WHERE sha256 = ? AND source_identity = ?", (d["sha256"], SOURCE_IDENTITY)).fetchone()
+                if row is None:
+                    continue
+                person = next(p for p in self.manifest["people"][d["company"]] if p["key"] == d["uploader"])
+                want = self.user_ids[person["email"]]
+                if row["uploaded_by_user_id"] != want:
+                    conn.execute("UPDATE document SET uploaded_by_user_id = ? WHERE id = ?", (want, row["id"]))
+                    conn.execute("UPDATE document_activity SET actor_user_id = ?, actor_name = ? WHERE lifecycle_id = ? AND action = 'uploaded'", (want, names[person["email"]], row["lifecycle_id"]))
+                    fixed += 1
+            if self.removed:
+                marks = ",".join("?" * len(self.removed))
+                for ckey, cid in self.company_id.items():
+                    owner = next(p for p in self.manifest["people"][ckey] if p["key"] == "owner")
+                    second = next(p for p in self.manifest["people"][ckey] if p["key"] == "admin2")
+                    for action, person in (("edited", second),):
+                        conn.execute(f"UPDATE document_activity SET actor_user_id = ?, actor_name = ? WHERE company_id = ? AND action = ? AND actor_user_id IN ({marks})",
+                                     (self.user_ids[person["email"]], person["name"], cid, action, *self.removed))
+                    conn.execute(f"UPDATE document_activity SET actor_user_id = ?, actor_name = ? WHERE company_id = ? AND action != 'uploaded' AND actor_user_id IN ({marks})",
+                                 (self.user_ids[owner["email"]], owner["name"], cid, *self.removed))
+                    conn.execute(f"UPDATE document SET purge_requested_by = ? WHERE company_id = ? AND purge_requested_by IN ({','.join('?' * len(self.removed))})",
+                                 (owner["email"], cid, *self.removed.values()))
+        print(f"  re-attributed {fixed} existing fixture document(s) to the current cast")
+
+    def drop_unreferenced(self) -> None:
+        """Delete the app_user row of a removed person when NOTHING references it any more (no membership anywhere, no document, no history row,
+        no other foreign key); their sessions go first. A row that is still referenced stays, and can no longer sign in to a demo company."""
+        from app.purge import references_to
+
+        with self.get_conn(self.db_path) as conn:
+            for user_id, email in self.removed.items():
+                conn.execute("DELETE FROM session WHERE user_id = ?", (user_id,))
+                refs = sum(conn.execute(f'SELECT COUNT(*) FROM "{t}" WHERE "{c}" = ?', (user_id,)).fetchone()[0] for t, c in references_to(conn, "app_user"))
+                refs += conn.execute("SELECT COUNT(*) FROM document_activity WHERE actor_user_id = ?", (user_id,)).fetchone()[0]
+                refs += conn.execute("SELECT COUNT(*) FROM document WHERE purge_requested_by = ?", (email,)).fetchone()[0]
+                if refs == 0:
+                    conn.execute("DELETE FROM app_user WHERE id = ?", (user_id,))
+                    print(f"  deleted the account of {email} (nothing referenced it)")
+                else:
+                    print(f"  kept the account of {email} ({refs} reference(s)); it has no membership in a demo company")
+
     def ensure_people(self) -> None:
         for ckey, people in self.manifest["people"].items():
             cid = self.company_id[ckey]
@@ -173,7 +254,10 @@ class Seeder:
                     self.client.post(f"/api/companies/{cid}/members", json={"email": p["email"], "name": p["name"], "role": p["role"]},
                                      headers=self.headers(ckey, "owner")).raise_for_status()
                 elif member["role"] != p["role"]:
-                    print(f"  WARNING: {p['email']} already has role {member['role']} in {ckey}, not {p['role']}; left as it is")
+                    # The cast is authoritative for the demo companies (S1d: no `user` role in the demo; a Corp Sec is a viewer). Data only.
+                    with self.get_conn(self.db_path) as conn:
+                        conn.execute("UPDATE membership SET role = ? WHERE company_id = ? AND user_id = (SELECT id FROM app_user WHERE email = ?)", (p["role"], cid, p["email"]))
+                    print(f"  {p['email']}: role {member['role']} -> {p['role']} in {ckey}")
                 with self.get_conn(self.db_path) as conn:
                     conn.execute("UPDATE app_user SET name = ? WHERE email = ?", (p["name"], p["email"]))
                 self._set_title(cid, p)
@@ -300,7 +384,7 @@ class Seeder:
             return f"{stamp.isoformat()} {hour:02d}:{(self.doc_ids[d['file']] * 7) % 50 + 5:02d}"
 
         # Edited by someone other than the uploader (Jonathan Ong, the HR and finance admin), a few by the owner, one by the uploader.
-        by_others = [d for d in docs if d["uploader"] in ("user1", "user2") and d["cluster"] in ("base", "cny", "festival", "yearend")]
+        by_others = [d for d in docs if d["uploader"] == "admin2" and d["cluster"] in ("base", "cny", "festival", "yearend")]
         for n, d in enumerate(by_others[3::7][:7]):
             editor = "admin" if n % 3 else "owner"
             if self._has(self.doc_ids[d["file"]], "edited"):
@@ -310,14 +394,14 @@ class Seeder:
             self.client.patch(f"/api/documents/{self.doc_ids[d['file']]}", json=body, headers=self.headers("c0", editor)).raise_for_status()
             self._backdate(self.doc_ids[d["file"]], "edited", later(d, 2, 11))
             report["edited"].append((d["file"], editor))
-        own = next((d for d in docs if d["uploader"] == "user2" and d["cluster"] == "cny"), None)
+        own = next((d for d in docs if d["uploader"] == "admin2" and d["cluster"] == "cny"), None)
         if own and not self._has(self.doc_ids[own["file"]], "edited"):
-            self.client.patch(f"/api/documents/{self.doc_ids[own['file']]}", json={"vendor_name": own["vendor"]}, headers=self.headers("c0", "user2"))
+            self.client.patch(f"/api/documents/{self.doc_ids[own['file']]}", json={"vendor_name": own["vendor"]}, headers=self.headers("c0", "admin2"))
             # an edit that changes nothing writes no history row; make it a real one
             self.client.patch(f"/api/documents/{self.doc_ids[own['file']]}", json={"description": own["description"] + " Reunion booking confirmed."},
-                              headers=self.headers("c0", "user2")).raise_for_status()
+                              headers=self.headers("c0", "admin2")).raise_for_status()
             self._backdate(self.doc_ids[own["file"]], "edited", later(own, 1, 3, 11))
-            report["edited"].append((own["file"], "user2"))
+            report["edited"].append((own["file"], "admin2"))
 
         owner = self.headers("c0", "owner")
         recent = [d for d in docs if d["received_local"] >= "2026-06-01" and d["cluster"] == "base" and d["media"] == "pdf"]
@@ -369,10 +453,14 @@ class Seeder:
             self.session_floor = conn.execute("SELECT COALESCE(MAX(id), 0) FROM session").fetchone()[0]
         with TestClient(app) as self.client:
             print("companies and people ...")
+            self.rename_legacy_accounts()
             self.ensure_companies()
             self.ensure_people()
+            self.sweep_cast()
             print("documents ...")
             self.apply_documents()
+            self.repair_attribution()
+            self.drop_unreferenced()
             print("checklist ...")
             self.apply_events()
             print("history ...")

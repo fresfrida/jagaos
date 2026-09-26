@@ -10,35 +10,27 @@
   "home": {
     "demo": {
       "button": "Pick a demo role",
-      "hint": "See the app as (owner, admin, user, viewer). No sign-up needed.",
+      "hint": "See the app as an owner, an admin or a view-only Corp Sec. No sign-up needed.",
       "opening": "Opening the demo…",
       "failed": "Couldn't open the demo right now. You can still sign in.",
       "pickerTitle": "Try the demo as",
-      "pickerIntro": "Each one is a real login to the same demo company. Pick the role you want to see.",
+      "pickerIntro": "Each one is a real login to the same demo company. Pick who you want to see the app as.",
       "accounts": {
         "owner": {
-          "name": "Owner",
-          "text": "Full access, including editing Company Settings. It also owns two sibling companies, so it is the only account with the company switcher."
+          "name": "Priya Ramanathan",
+          "text": "Managing Director. Full access, including editing Company Settings. She also owns two sibling companies, so this is the only login with the company switcher."
         },
-        "admin": {
-          "name": "Admin",
-          "text": "Confirms or rejects what we read, edits or deletes any company document, and sees Company Settings read-only."
+        "adminFinance": {
+          "name": "Jonathan Ong",
+          "text": "HR and Finance Manager. Confirms or rejects what we read, edits or deletes any company document, and sees Company Settings read-only."
         },
-        "user": {
-          "name": "User",
-          "text": "Uploads documents and edits their own. Keeps private files in Only me. Cannot confirm or delete company documents."
+        "adminOperations": {
+          "name": "Nur Aisyah Rahman",
+          "text": "Operations Executive, also an admin: the same access as Jonathan. Sign in as both to see two admins work on the same documents."
         },
-        "user1": {
-          "name": "User 1",
-          "text": "Same role as User. Sign in as two users to see that one person's files, and private files, stay theirs."
-        },
-        "user2": {
-          "name": "User 2",
-          "text": "Same role as User. Sign in as two users to see that one person's files, and private files, stay theirs."
-        },
-        "viewer": {
-          "name": "Viewer",
-          "text": "Read-only. Sees filed documents, the Calendar and Search, but cannot upload, edit, or see what is waiting for review."
+        "corpSec": {
+          "name": "Rachel Tan Hui Min",
+          "text": "Corp Sec, view only. Sees filed documents, the Calendar and Search, but cannot upload, edit, or see what is waiting for review."
         }
       }
     },

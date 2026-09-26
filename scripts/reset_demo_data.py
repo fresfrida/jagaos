@@ -14,7 +14,7 @@ So a reset is a WIPE of the demo scope followed by that same seed, not a second
 seeding path.
 
 THE SCOPE (nothing outside it is touched):
-  - every company the demo owner (owner@try-demo.test) OWNS, with all their
+  - every company the demo owner (owner_priya@try-demo.test) OWNS, with all their
     documents (rows, search rows, files on disk), events, obligations, checklist
     rows, review items, traces and memberships;
   - the group(s) those companies belonged to, once no company uses them;

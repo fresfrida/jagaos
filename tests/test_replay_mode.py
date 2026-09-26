@@ -180,7 +180,7 @@ def test_every_fixture_says_which_fields_are_authored_and_which_are_recorded(pat
 
 
 def _login():
-    resp = client.post("/api/auth/dev-login", json={"email": "owner@try-demo.test", "name": "Priya Ramanathan", "company_name": "Replay Co", "fye_month": 12, "fye_day": 31})
+    resp = client.post("/api/auth/dev-login", json={"email": "owner_priya@try-demo.test", "name": "Priya Ramanathan", "company_name": "Replay Co", "fye_month": 12, "fye_day": 31})
     assert resp.status_code == 200, resp.text
     return {"Authorization": "Bearer " + resp.json()["token"]}
 

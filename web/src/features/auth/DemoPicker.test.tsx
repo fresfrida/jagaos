@@ -1,5 +1,5 @@
-/** The demo-account picker (round 20, item 1): six seeded accounts, each one the ordinary
- * login with its own email, with a line on what the role can do. */
+/** The demo-account picker (round 20, item 1; four logins since S1d, DECISIONS #137): each one the ordinary
+ * login with its own email, a named person, their role and a line on what that role can do. There is no `user` role in the demo. */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -24,25 +24,57 @@ afterEach(cleanup)
 const rows = () => within(screen.getByRole('dialog')).getAllByRole('listitem').map((li) => within(li).getByRole('button'))
 
 describe('the demo roster', () => {
-  it('has the six seeded accounts of Try Demo Pte Ltd, each a distinct real address, with owner first', () => {
+  it('has exactly four logins, in this order, each a distinct address: owner, admin, admin and a view-only Corp Sec', () => {
     expect(DEMO_ACCOUNTS.map((a) => a.email)).toEqual([
-      'owner@try-demo.test', 'admin@try-demo.test', 'user@try-demo.test', 'user1@try-demo.test', 'user2@try-demo.test', 'viewer@try-demo.test',
+      'owner_priya@try-demo.test', 'admin_jonathan@try-demo.test', 'admin_aisyah@try-demo.test', 'corpsec_rachel@try-demo.test',
     ])
-    expect(new Set(DEMO_ACCOUNTS.map((a) => a.email)).size).toBe(6)
-    expect(DEMO_ACCOUNTS.map((a) => a.role)).toEqual(['owner', 'admin', 'user', 'user', 'user', 'viewer'])
+    expect(new Set(DEMO_ACCOUNTS.map((a) => a.email)).size).toBe(4)
+    expect(DEMO_ACCOUNTS.map((a) => a.role)).toEqual(['owner', 'admin', 'admin', 'viewer'])
+  })
+
+  it('offers no `user` role at all', () => {
+    expect(DEMO_ACCOUNTS.some((a) => (a.role as string) === 'user')).toBe(false)
   })
 })
 
 describe('DemoPicker', () => {
-  it('lists every account with its role and a description of what that role can do', () => {
+  it('lists four named people, each with their role shown and a description of what that role can do', () => {
     render(<DemoPicker open onClose={vi.fn()} />)
-    expect(rows()).toHaveLength(6)
-    const owner = rows()[0]!
-    expect(owner.textContent).toContain('Owner')
-    expect(owner.textContent).toContain('Full access, including editing Company Settings')
-    expect(owner.textContent).toContain('owner@try-demo.test')
-    expect(rows()[5]!.textContent).toContain('Read-only')
-    expect(rows()[5]!.textContent).toContain('viewer@try-demo.test')
+    expect(rows()).toHaveLength(4)
+    const [owner, jonathan, aisyah, rachel] = rows().map((r) => r.textContent ?? '')
+    expect(owner).toContain('Priya Ramanathan')
+    expect(owner).toContain('Owner')
+    expect(owner).toContain('Full access, including editing Company Settings')
+    expect(owner).toContain('owner_priya@try-demo.test')
+    expect(jonathan).toContain('Jonathan Ong')
+    expect(jonathan).toContain('Admin')
+    expect(jonathan).toContain('HR and Finance Manager')
+    expect(aisyah).toContain('Nur Aisyah Rahman')
+    expect(aisyah).toContain('Admin')
+    expect(aisyah).toContain('same access as Jonathan')
+    expect(rachel).toContain('Rachel Tan Hui Min')
+    expect(rachel).toContain('Corp Sec, view only')
+    expect(rachel).toContain('cannot upload, edit')
+    expect(rachel).toContain('corpsec_rachel@try-demo.test')
+  })
+
+  it('shows a role on every row, and no row says User', () => {
+    render(<DemoPicker open onClose={vi.fn()} />)
+    const text = rows().map((r) => r.textContent ?? '')
+    for (const row of text) expect(row).toMatch(/Owner|Admin|Viewer/)
+    expect(text.join(' ')).not.toMatch(/\bUser\b/)
+  })
+
+  it('reads as self-explanatory in every language: a name, a role and a description, never an empty string or a raw key', async () => {
+    for (const lang of ['ms', 'zh', 'ta']) {
+      await i18n.changeLanguage(lang)
+      const { unmount } = render(<DemoPicker open onClose={vi.fn()} />)
+      for (const row of rows()) {
+        expect(row.textContent ?? '', lang).not.toMatch(/home\.demo|undefined|\{\{/)
+        expect((row.textContent ?? '').length, lang).toBeGreaterThan(60)
+      }
+      unmount()
+    }
   })
 
   it.each(DEMO_ACCOUNTS.map((a) => [a.id, a.email] as const))('choosing %s logs in with exactly %s and lands where the login form does', async (id, email) => {
@@ -107,6 +139,6 @@ describe('DemoPicker', () => {
     await i18n.changeLanguage('ms')
     render(<DemoPicker open onClose={vi.fn()} />)
     expect(rows()[0]!.textContent).toContain('Pemilik')
-    expect(rows()[5]!.textContent).toContain('Pelihat')
+    expect(rows()[3]!.textContent).toContain('Pelihat')
   })
 })
