@@ -34,7 +34,7 @@ const doc: DocumentRow = {
 }
 
 const renderCard = () =>
-  render(<DocumentCard doc={doc} canEdit canArchive onView={vi.fn()} onTrace={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
+  render(<DocumentCard doc={doc} canEdit canArchive onView={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
 
 const switchLanguage = (code: string) => act(async () => { await i18n.changeLanguage(code) })
 

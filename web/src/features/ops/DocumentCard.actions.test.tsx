@@ -1,5 +1,6 @@
 /** The row of text actions on a document card (DECISIONS #108): still text, but real tap targets, evenly spaced. Purge was a fourth action
- * set apart from the rest until DECISIONS #109 folded it into Delete's confirmation, so the row is View, Edit, Delete and the overflow menu.
+ * set apart from the rest until DECISIONS #109 folded it into Delete's confirmation, so the row is View, Edit and Delete, with the AI-trace
+ * accordion (round 5, items 3/6, DECISIONS #125) as its own always-visible block below, no longer an overflow menu at the row's far end.
  * jsdom has no layout, so this pins what makes it true; the measured widths, and the Malay row, are checked in a real browser. */
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -13,7 +14,7 @@ const doc: DocumentRow = {
   description: JSON.stringify({ en: 'Office lease' }), bucket: 'Contracts', vendor_name: null, occurred_on: null, can_edit: true,
 }
 const show = (over: Partial<{ canRequestPurge: boolean; canArchive: boolean; canEdit: boolean }> = {}) =>
-  render(<DocumentCard doc={doc} canEdit canArchive canRequestPurge onView={vi.fn()} onTrace={vi.fn()} onArchive={vi.fn()} onRequestPurge={vi.fn()} onSaved={vi.fn()} {...over} />)
+  render(<DocumentCard doc={doc} canEdit canArchive canRequestPurge onView={vi.fn()} onArchive={vi.fn()} onRequestPurge={vi.fn()} onCancelPurge={vi.fn()} onSaved={vi.fn()} {...over} />)
 const action = (name: RegExp) => screen.getByRole('button', { name })
 
 beforeEach(async () => { await i18n.changeLanguage('en') })
@@ -41,10 +42,11 @@ describe('document card actions: tap targets', () => {
     }
   })
 
-  it('the overflow menu button is a 44px target too, not 24px', () => {
+  it('the AI-trace accordion trigger is its own full-width row, separate from View/Edit/Delete', () => {
     show()
-    expect(action(/more actions/i).className).toContain('h-11')
-    expect(action(/more actions/i).className).toContain('w-11')
+    const trigger = screen.getByRole('button', { name: /ai trace/i })
+    expect(trigger.className).toContain('w-full')
+    expect(action(/^view$/i).parentElement).not.toBe(trigger.parentElement)
   })
 })
 
@@ -55,16 +57,11 @@ describe('document card actions: one destructive action (DECISIONS #109)', () =>
     expect(screen.queryByRole('button', { name: /^purge$/i })).toBeNull()
   })
 
-  it('View, Edit and Delete share one group and the overflow menu is the far group, on its own line where there is no room', () => {
+  it('View, Edit and Delete all share one group', () => {
     show()
     const group = (name: RegExp) => action(name).parentElement!
     expect(group(/^view$/i)).toBe(group(/^edit$/i))
     expect(group(/^view$/i)).toBe(group(/^delete$/i))
-    const far = action(/more actions/i).parentElement!.parentElement!
-    expect(far).not.toBe(group(/^view$/i))
-    expect(far.className).toContain('ml-auto')
-    expect(far.parentElement).toBe(group(/^view$/i).parentElement)
-    expect(far.parentElement!.className).toContain('flex-wrap')
   })
 
   it('reads in Malay: Padam is the one destructive action and nowrap', async () => {
@@ -86,15 +83,18 @@ describe('the Delete confirmation carries the owner\'s permanent-removal choice 
     expect(within(openDelete()).queryByRole('checkbox')).toBeNull()
   })
 
-  it('a document already waiting to be purged has no Delete, so no such choice', () => {
-    render(<DocumentCard doc={{ ...doc, status: 'purge_requested' }} canEdit canArchive canRequestPurge onView={vi.fn()} onTrace={vi.fn()} onArchive={vi.fn()} onRequestPurge={vi.fn()} onSaved={vi.fn()} />)
-    expect(screen.queryByRole('button', { name: /^delete$/i })).toBeNull()
+  it('a document already waiting to be purged keeps Delete visible, DISABLED, rather than gone (round 5, item 2, DECISIONS #125)', () => {
+    render(<DocumentCard doc={{ ...doc, status: 'purge_requested' }} canEdit canArchive canRequestPurge onView={vi.fn()} onArchive={vi.fn()} onRequestPurge={vi.fn()} onCancelPurge={vi.fn()} onSaved={vi.fn()} />)
+    const deleteButton = screen.getByRole('button', { name: /^delete$/i })
+    expect(deleteButton.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(deleteButton) // disabled: must not open the confirmation dialog
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
   it('confirming with the box ticked calls onRequestPurge only; unticked calls onArchive only', () => {
     const onArchive = vi.fn()
     const onRequestPurge = vi.fn()
-    render(<DocumentCard doc={doc} canEdit canArchive canRequestPurge onView={vi.fn()} onTrace={vi.fn()} onArchive={onArchive} onRequestPurge={onRequestPurge} onSaved={vi.fn()} />)
+    render(<DocumentCard doc={doc} canEdit canArchive canRequestPurge onView={vi.fn()} onArchive={onArchive} onRequestPurge={onRequestPurge} onSaved={vi.fn()} />)
 
     let dialog = openDelete()
     fireEvent.click(within(dialog).getByRole('checkbox'))
@@ -124,14 +124,14 @@ describe('a rejected document (a legacy state) still gets a real title (DECISION
   const rejected = (over: Partial<DocumentRow> = {}): DocumentRow => ({ ...doc, status: 'rejected', description: null, lane: null, doc_type: null, bucket: null, filename: 'old-upload-scan.pdf', ...over })
 
   it('says it is a rejected document and shows the file name under it, instead of a blank or "- / -" card', () => {
-    render(<DocumentCard doc={rejected()} canEdit canArchive canRequestPurge={false} onView={vi.fn()} onTrace={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
+    render(<DocumentCard doc={rejected()} canEdit canArchive canRequestPurge={false} onView={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
     expect(screen.getByText('Rejected document')).toBeTruthy()
     expect(screen.getByText('old-upload-scan.pdf')).toBeTruthy()
     expect(screen.queryByText('- / -')).toBeNull()
   })
 
   it('a rejected document that DOES have a description keeps it as the title', () => {
-    render(<DocumentCard doc={rejected({ description: JSON.stringify({ en: 'Office lease' }) })} canEdit canArchive canRequestPurge={false} onView={vi.fn()} onTrace={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
+    render(<DocumentCard doc={rejected({ description: JSON.stringify({ en: 'Office lease' }) })} canEdit canArchive canRequestPurge={false} onView={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
     expect(screen.getByText('Office lease')).toBeTruthy()
     expect(screen.queryByText('Rejected document')).toBeNull()
   })
@@ -139,36 +139,15 @@ describe('a rejected document (a legacy state) still gets a real title (DECISION
   it('reads in the other languages', async () => {
     for (const [language, title] of [['zh', '已拒绝的文件'], ['ms', 'Dokumen ditolak'], ['ta', 'நிராகரிக்கப்பட்ட ஆவணம்']] as const) {
       await i18n.changeLanguage(language)
-      render(<DocumentCard doc={rejected()} canEdit canArchive canRequestPurge={false} onView={vi.fn()} onTrace={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
+      render(<DocumentCard doc={rejected()} canEdit canArchive canRequestPurge={false} onView={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
       expect(screen.getByText(title)).toBeTruthy()
       cleanup()
     }
   })
 
   it('an ordinary document with no description, lane or type at all shows its file name, never "- / -"', () => {
-    render(<DocumentCard doc={{ ...doc, status: 'filed', description: null, lane: null, doc_type: null, filename: 'mystery.pdf' }} canEdit canArchive canRequestPurge={false} onView={vi.fn()} onTrace={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
+    render(<DocumentCard doc={{ ...doc, status: 'filed', description: null, lane: null, doc_type: null, filename: 'mystery.pdf' }} canEdit canArchive canRequestPurge={false} onView={vi.fn()} onArchive={vi.fn()} onSaved={vi.fn()} />)
     expect(screen.getByText('mystery.pdf')).toBeTruthy()
     expect(screen.queryByText('- / -')).toBeNull()
   })
 })
-
-describe('the Trace menu entry is called "AI trace" (DECISIONS #110)', () => {
-  const openMenu = () => fireEvent.click(action(/more actions/i))
-
-  it('the overflow menu offers "AI trace", not "Trace", and choosing it asks for the trace', () => {
-    const onTrace = vi.fn()
-    render(<DocumentCard doc={doc} canEdit canArchive canRequestPurge onView={vi.fn()} onTrace={onTrace} onArchive={vi.fn()} onRequestPurge={vi.fn()} onSaved={vi.fn()} />)
-    openMenu()
-    expect(screen.queryByRole('menuitem', { name: 'Trace' })).toBeNull()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'AI trace' }))
-    expect(onTrace).toHaveBeenCalledTimes(1)
-  })
-
-  it.each([['zh', 'AI 追踪'], ['ms', 'Jejak AI'], ['ta', 'AI தடமறிதல்']])('is called %s in that language', async (language, label) => {
-    await i18n.changeLanguage(language)
-    show()
-    fireEvent.click(screen.getAllByRole('button').find((b) => b.getAttribute('aria-haspopup') === 'menu')!)
-    expect(screen.getByRole('menuitem', { name: label })).toBeTruthy()
-  })
-})
-

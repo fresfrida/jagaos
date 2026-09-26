@@ -136,6 +136,10 @@ export interface DocumentRow {
   // GET /api/personal-files (the "Only me" section) and every row there says
   // 'only_me'. Absent from an older backend, which has no personal files.
   visibility?: Visibility
+  // Round 5, item 6 (DECISIONS #125): a collapsed "AI trace · N steps · $X" summary needs no per-card fetch — this
+  // rides along on the same list/search/personal-files response the card already has. `null`/absent (an older
+  // backend, or a document with no trace row at all) both mean the same thing: nothing to summarize yet.
+  trace_summary?: { steps: number; cost_usd: number } | null
 }
 
 /** One word of the Search page's word cloud (round 21, A8, DECISIONS #101): `count` is how many documents contain it. */
@@ -246,6 +250,18 @@ export interface TraceReport {
     at: string
   }>
   total_cost_usd: number
+  // Round 5, item 3c-i (DECISIONS #125): the document's own extracted result, folded to the latest value per field
+  // (a human correction on Accept outlives the model's original guess, same "last wins" rule the company-profile
+  // pre-fill already uses over this table) — so a person can check the AI's actual work against the source, not
+  // just see that "extract" ran. Empty for a document with nothing extracted (a picture, a duplicate, ...).
+  extraction: Array<{
+    field: string
+    value_text: string | null
+    value_num: number | null
+    value_date: string | null
+    confidence: number
+    source: 'llm' | 'human'
+  }>
 }
 
 /** What a caller may attach to an upload beyond the file itself. */

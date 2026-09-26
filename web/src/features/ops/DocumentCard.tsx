@@ -3,7 +3,7 @@
  * — content and behavior unchanged, only the file it lives in and where
  * its shared pieces now come from. */
 
-import { FileText, MoreHorizontal, X } from 'lucide-react'
+import { ChevronDown, FileText, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '../../components/ui/Badge'
@@ -28,8 +28,9 @@ import {
   docTypeLabel,
   useDocumentBlobUrl,
 } from './opsShared'
-import { downloadHref, opsApi, type Bucket, type DocumentRow } from './opsApi'
+import { downloadHref, opsApi, type Bucket, type DocumentRow, type TraceReport } from './opsApi'
 import { isPurgeRequested, isRejectedDocument } from './documentStatus'
+import { TracePanel } from './TracePanel'
 import { useEditableDescription } from './useEditableDescription'
 
 /** Small preview next to each row in the Documents list (2026-09-22, doc
@@ -173,7 +174,6 @@ export function DocumentCard({
   canArchive,
   canRequestPurge = false,
   onView,
-  onTrace,
   onArchive,
   onRequestPurge,
   onCancelPurge,
@@ -186,7 +186,6 @@ export function DocumentCard({
    * deletes nothing; it hides the document and tells the team. Owner only, and never on a personal file. */
   canRequestPurge?: boolean
   onView: () => void
-  onTrace: () => void
   onArchive: () => void
   onRequestPurge?: () => void
   /** Takes a PENDING purge request back (round 3, item 9b, DECISIONS #121): offered on a purge-requested card, to the owner alone (the
@@ -211,13 +210,15 @@ export function DocumentCard({
   const [filename, setFilename] = useState(doc.filename)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showMenu, setShowMenu] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   // Delete's one confirmation carries an owner-only "also remove it permanently" choice (DECISIONS #109): ticking it makes
   // the confirm a purge REQUEST instead of an ordinary delete. There is no separate Purge button or dialog any more.
   const [alsoPurge, setAlsoPurge] = useState(false)
-  // The owner's purge request, still shown to them until the team removes the row (round 21, DECISIONS #102): read-only,
-  // marked, and with nothing left to ask for (Edit, Delete, Purge and Trace are off; View still opens the file).
+  // The owner's purge request, still shown to them until the team removes the row (round 21, DECISIONS #102; round 5,
+  // item 2, DECISIONS #125): read-only and marked, but Edit and Delete stay in place, disabled, rather than
+  // disappearing — a document mid-request is not the same as one with nothing left to do, and hiding the "···" menu
+  // this card used to have made AI trace a dead end for exactly the documents someone had just acted on. View and AI
+  // trace both stay fully live either way.
   const purgePending = isPurgeRequested(doc)
   // The owner's "also remove it permanently" option in Delete's confirmation: the existing rule (canRequestPurge, never on a personal file), and
   // never on a document already waiting to be purged.
@@ -226,19 +227,30 @@ export function DocumentCard({
   const isPictureLane = doc.lane === 'memory'
   const isPendingCaption = isPictureLane && doc.description === null
 
-  // Trace is an agent-debugging view (which pipeline step ran, what model,
-  // token cost) with no day-to-day use for a business owner — confirmed
-  // live via a direct user question, "what is trace btw?" (2026-09-23).
-  // It's the only place this card surfaces it (no other action reaches
-  // `onTrace`), so it stays reachable, just de-emphasized into a small
-  // overflow menu instead of sitting equal-weight next to View/Edit/Delete.
-  // Closes on any click elsewhere, not just its own toggle.
-  useEffect(() => {
-    if (!showMenu) return
-    const onDocClick = () => setShowMenu(false)
-    document.addEventListener('click', onDocClick)
-    return () => document.removeEventListener('click', onDocClick)
-  }, [showMenu])
+  // AI trace (round 5, items 3/6, DECISIONS #125): a per-card accordion, not a menu item or a sibling block a parent
+  // list renders after the card. The collapsed "AI trace · N steps · $X" summary comes from `doc.trace_summary`,
+  // already on the list response (no per-card fetch just to show it, `app/main.py::_trace_summaries`); the full
+  // node-by-node detail is fetched lazily, once, only when a card's own accordion is actually opened.
+  const [traceExpanded, setTraceExpanded] = useState(false)
+  const [traceReport, setTraceReport] = useState<TraceReport | null>(null)
+  const [traceLoading, setTraceLoading] = useState(false)
+  const [traceError, setTraceError] = useState<string | null>(null)
+
+  const toggleTrace = async () => {
+    const opening = !traceExpanded
+    setTraceExpanded(opening)
+    if (opening && traceReport === null && !traceLoading) {
+      setTraceLoading(true)
+      setTraceError(null)
+      try {
+        setTraceReport(await opsApi.getTrace(doc.id))
+      } catch (e) {
+        setTraceError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setTraceLoading(false)
+      }
+    }
+  }
 
   const save = async () => {
     setBusy(true)
@@ -392,12 +404,14 @@ export function DocumentCard({
         </div>
       )}
 
-      {/* The row of text actions (DECISIONS #108). They stay text, not buttons, but each is a real 44px-tall tap target with
-         padding either side (a 13px label with no padding was about 16px tall), the group is spaced by that padding, and Purge
-         is set well apart from View, Edit and Delete: it sits in its own group at the far end with the overflow menu, at least
-         a 24px margin away from the other three (their own spacing is about 20px), and on a narrow phone in Malay, where the
-         longest label ("Hapus kekal") does not fit beside the rest, that group drops to its own line, never squeezing a
-         label. Every label is nowrap. */}
+      {/* The row of text actions (DECISIONS #108). They stay text, not buttons, but each is a real 44px-tall tap target
+         with padding either side (a 13px label with no padding was about 16px tall). Round 5, item 2 (DECISIONS #125):
+         while a purge is pending, Edit and Delete stay in their normal places, DISABLED (greyed, `aria-disabled`, their
+         own handlers refuse to run) rather than disappearing — a document mid-request still needs to be found in the
+         same spot a person looks for it in. The "···" overflow menu this row used to end in is gone: AI trace was its
+         only item, and hiding that whole menu whenever a purge was pending (the old rule) made trace unreachable for
+         exactly the documents someone had just acted on — item 6 replaces it with the always-visible accordion below,
+         never gated on purgePending at all. */}
       <div className="mt-1 flex flex-wrap items-center justify-between">
         <div className="-ml-2 mr-6 flex flex-wrap items-center gap-x-1">
           <button onClick={onView} className={ACTION_CLASS}>
@@ -408,15 +422,18 @@ export function DocumentCard({
               {t('ops.documents.purgeRequest.cancel')}
             </button>
           )}
-          {canEdit && !purgePending && !editing && (
+          {canEdit && !editing && (
             <button
+              disabled={purgePending}
+              aria-disabled={purgePending}
               onClick={() => {
+                if (purgePending) return
                 // Entering edit mode starts from what is on screen right now,
                 // discarding any earlier edit's "user typed this" pin.
                 resetDescription()
                 setEditing(true)
               }}
-              className={ACTION_CLASS}
+              className={`${ACTION_CLASS} disabled:pointer-events-none disabled:opacity-40`}
             >
               {t('ops.documents.edit')}
             </button>
@@ -435,53 +452,46 @@ export function DocumentCard({
              (`archiveDocument`, `status='archived'`) is deliberately
              unchanged — see its own comment in opsApi.ts. Gated behind
              ConfirmDialog below, not a single unconfirmed click. */}
-          {canArchive && !purgePending && (
-            <button onClick={() => setShowDeleteConfirm(true)} className={`${ACTION_CLASS} hover:!text-red-700`}>
+          {canArchive && (
+            <button
+              disabled={purgePending}
+              aria-disabled={purgePending}
+              onClick={() => {
+                if (purgePending) return
+                setShowDeleteConfirm(true)
+              }}
+              className={`${ACTION_CLASS} hover:!text-red-700 disabled:pointer-events-none disabled:opacity-40 disabled:hover:!text-muted`}
+            >
               {t('ops.documents.delete')}
             </button>
           )}
         </div>
-        <div className="-mr-2 ml-auto flex items-center gap-x-1">
-          {/* Trace (2026-09-23, live user question "what is trace btw?"):
-             an agent-debugging view, not a primary action a business owner
-             needs day to day — tucked into this small overflow menu instead
-             of sitting equal-weight next to View/Edit/Delete. Still just as
-             reachable, one extra click. */}
-          {!purgePending && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowMenu((s) => !s)
-                }}
-                aria-label={t('ops.documents.moreActions')}
-                aria-haspopup="menu"
-                aria-expanded={showMenu}
-                className="flex h-11 w-11 items-center justify-center rounded-control text-muted hover:bg-canvas hover:text-ink"
-              >
-                <MoreHorizontal size={16} />
-              </button>
-              {showMenu && (
-                <div
-                  role="menu"
-                  className="absolute right-0 z-10 mt-1 min-w-[7rem] overflow-hidden rounded-control border border-line bg-white py-1 shadow-md"
-                >
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      setShowMenu(false)
-                      onTrace()
-                    }}
-                    className="block w-full px-3 py-1.5 text-left text-[13px] font-mono uppercase tracking-wide text-muted hover:bg-canvas hover:text-ink"
-                  >
-                    {t('ops.documents.trace')}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+      </div>
+
+      {/* AI trace (round 5, items 3/6, DECISIONS #125): a small, always-visible collapsed summary — never gated on
+         purgePending, so it is never a dead end for a document someone just acted on — that expands the full detail
+         IN PLACE on a second tap, collapsing back on a third. */}
+      <div className="mt-2 border-t border-line pt-2">
+        <button
+          type="button"
+          onClick={() => void toggleTrace()}
+          aria-expanded={traceExpanded}
+          className="flex w-full items-center justify-between gap-2 py-1 text-left text-[12px] font-mono uppercase tracking-wide text-muted hover:text-ink"
+        >
+          <span>
+            {doc.trace_summary
+              ? t('ops.documents.traceSummary', { steps: doc.trace_summary.steps, cost: doc.trace_summary.cost_usd.toFixed(4) })
+              : t('ops.documents.traceSummaryEmpty')}
+          </span>
+          <ChevronDown size={16} className={traceExpanded ? 'rotate-180 transition-transform' : 'transition-transform'} aria-hidden="true" />
+        </button>
+        {traceExpanded && (
+          <div className="mt-2">
+            {traceLoading && <p className="text-[14px] text-muted">{t('ops.documents.traceLoading')}</p>}
+            {traceError && <p className="text-[14px] text-red-700" role="alert">{traceError}</p>}
+            {traceReport && <TracePanel report={traceReport} />}
+          </div>
+        )}
       </div>
 
       <ConfirmDialog

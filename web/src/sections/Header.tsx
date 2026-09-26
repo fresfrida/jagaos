@@ -98,7 +98,7 @@ export function Header({ current }: { current: ResolvedRoute }) {
     >
       <Container className="flex h-16 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3 sm:gap-6">
-          <Logo />
+          <Logo variant="onDark" />
           {signedIn && <PrimaryNav routes={signedInNavRoutes(role)} current={current} />}
         </div>
         <div className="flex shrink-0 items-center gap-2">

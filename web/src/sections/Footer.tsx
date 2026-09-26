@@ -40,7 +40,7 @@ export function Footer({ visible = true }: { visible?: boolean }) {
       <Container>
         <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-start sm:justify-between sm:text-left">
           <div className="flex flex-col items-center sm:items-start">
-            <Logo />
+            <Logo variant="onDark" />
             <p className="mt-3 max-w-[26rem] text-sm leading-6 text-white/70">{t('footer.tagline')}</p>
             <p className="mt-2 text-[14px] text-white/50">{t('footer.copyright', { year: COPYRIGHT_YEAR, entity: LEGAL_ENTITY })}</p>
           </div>

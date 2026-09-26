@@ -1027,7 +1027,25 @@ def list_obligations(
         return [dict(r) for r in rows]
 
 
-def _document_row_for(membership: CurrentMembership, row: sqlite3.Row) -> dict:
+def _trace_summaries(conn: sqlite3.Connection, document_ids: list[int]) -> dict[int, dict]:
+    """{document_id: {"steps": n, "cost_usd": total}} for every id that has at least one trace row — round 5, item 6
+    (DECISIONS #125): the list/search/personal-files responses carry this so a card's collapsed "AI trace · N steps ·
+    $X" summary needs no per-card fetch (the full node-by-node detail is still fetched lazily, only when a card's
+    accordion is actually opened, exactly as before). ONE grouped query for the whole page, never N: every caller
+    collects its document ids first and calls this once. A document with no row at all (a duplicate, a personal file
+    still pending, anything that never reached a pipeline step) is simply absent from the returned dict, not a zero."""
+    if not document_ids:
+        return {}
+    marks = ",".join("?" * len(document_ids))
+    rows = conn.execute(
+        f"SELECT document_id, COUNT(*) AS steps, SUM(cost_usd) AS cost_usd FROM trace "
+        f"WHERE document_id IN ({marks}) GROUP BY document_id",
+        document_ids,
+    ).fetchall()
+    return {r["document_id"]: {"steps": r["steps"], "cost_usd": round(r["cost_usd"] or 0, 6)} for r in rows}
+
+
+def _document_row_for(membership: CurrentMembership, row: sqlite3.Row, trace_summaries: dict[int, dict] | None = None) -> dict:
     """A document as list/search return it: the row minus the uploader's
     user id (the client never needs it), plus `can_edit` — the caller's own
     answer from auth.may_edit_document, so the UI does not offer an Edit
@@ -1044,6 +1062,9 @@ def _document_row_for(membership: CurrentMembership, row: sqlite3.Row) -> dict:
         # shown as such and read-only until the team removes it (round 21, DECISIONS #102).
         doc["status"] = "purge_requested"
         doc["can_edit"] = False
+    # Round 5, item 6 (DECISIONS #125): absent (None) for an older caller that never fetched trace summaries, and for a
+    # document trace never touched — the card renders its zero-state either way, never a crash on a missing key.
+    doc["trace_summary"] = (trace_summaries or {}).get(doc["id"])
     return doc
 
 
@@ -1086,7 +1107,9 @@ def list_documents(
         # file — is left out exactly the way an archived one is, so it is
         # absent from Company Files, from Search and from the Calendar (which
         # reads this same list), not merely hidden by the UI.
-        return [_document_row_for(membership, r) for r in rows if _can_see(membership, r) and _in_company_files(r)]
+        visible = [r for r in rows if _can_see(membership, r) and _in_company_files(r)]
+        summaries = _trace_summaries(conn, [r["id"] for r in visible])
+        return [_document_row_for(membership, r, summaries) for r in visible]
 
 
 @app.get("/api/personal-files")
@@ -1111,7 +1134,9 @@ def list_personal_files(
             "AND status != 'archived' ORDER BY received_at DESC, id DESC",
             (membership.company_id, membership.user_id),
         ).fetchall()
-        return [_document_row_for(membership, r) for r in rows if _can_see(membership, r)]
+        visible = [r for r in rows if _can_see(membership, r)]
+        summaries = _trace_summaries(conn, [r["id"] for r in visible])
+        return [_document_row_for(membership, r, summaries) for r in visible]
 
 
 @app.get("/api/limits")
@@ -1190,9 +1215,9 @@ def search_documents(
         # no status or visibility of its own, so a hidden document still
         # MATCHES on its text — this join-back is where it stops being
         # returned, which is the same place archived documents are dropped.
-        docs_by_id = {
-            d["id"]: _document_row_for(membership, d) for d in docs if _can_see(membership, d) and _in_company_files(d)
-        }
+        visible = [d for d in docs if _can_see(membership, d) and _in_company_files(d)]
+        summaries = _trace_summaries(conn, [d["id"] for d in visible])
+        docs_by_id = {d["id"]: _document_row_for(membership, d, summaries) for d in visible}
     # FTS5's rank order (relevance), not the IN-clause's arbitrary order.
     return [docs_by_id[doc_id] for doc_id in ordered_ids if doc_id in docs_by_id]
 
@@ -1743,4 +1768,16 @@ def get_trace(
         ).fetchall()
         out = [dict(r) for r in rows]
         total_cost = sum(r["cost_usd"] or 0 for r in out)
-        return {"nodes": out, "total_cost_usd": round(total_cost, 6)}
+        # Round 5, item 3c-i (DECISIONS #125): the AI's actual extracted result, so a person can check its work against
+        # the source instead of only seeing that "extract" ran. `extraction` is an EAV table (one row per field, oldest
+        # first); a human correction on Accept INSERTs a NEW row rather than overwriting the model's original guess
+        # (app/db.py's own comment), so the LAST row per field is folded to "current" here — the same "last wins" rule
+        # `rules.company_profile.extraction_values` already uses for the same table — with its `source` kept so the
+        # panel can say a field was corrected rather than passing off a human's edit as the model's own work.
+        extraction: dict[str, dict] = {}
+        for r in conn.execute(
+            "SELECT field, value_text, value_num, value_date, confidence, source FROM extraction "
+            "WHERE document_id = ? ORDER BY id", (document_id,),
+        ):
+            extraction[r["field"]] = dict(r)
+        return {"nodes": out, "total_cost_usd": round(total_cost, 6), "extraction": list(extraction.values())}

@@ -379,14 +379,39 @@
       "edit": "Edit",
       "delete": "Delete",
       "deleteConfirmMessage": "Delete {{filename}}? This can't be undone.",
-      "moreActions": "More actions",
-      "traceHeading": "AI trace: document #{{documentId}} · total ${{cost}}",
+      "traceHeading": "AI trace · ${{cost}} total",
+      "traceSummary": "AI trace · {{steps}} steps · ${{cost}}",
+      "traceSummaryEmpty": "AI trace · no steps recorded",
+      "traceLoading": "Loading trace…",
+      "traceViewRaw": "View raw trace",
+      "traceHideRaw": "Hide raw trace",
+      "traceExtractedHeading": "Extracted result",
+      "traceFieldCorrected": "corrected by a person",
+      "traceNoAiCall": "No AI call: a rule-based step",
+      "traceStep": {
+        "classify": "Checked the document type",
+        "classifyGrounding": "Checked names against the document",
+        "extract": "Read the key details",
+        "verify": "Checked the extracted details",
+        "archive": "Archived the file",
+        "deriveEvents": "Looked for related dates",
+        "caption": "Described the photo",
+        "rules": "Applied the filing rules"
+      },
+      "traceStatus": {
+        "done": "Done",
+        "skipped": "Skipped",
+        "failed": "Failed"
+      },
       "traceTable": {
+        "step": "Step",
+        "status": "Status",
         "node": "Node",
         "model": "Model",
         "tokens": "Tokens in/out",
         "cost": "Cost",
-        "decision": "Decision"
+        "decision": "Decision",
+        "confidence": "Confidence"
       },
       "purge": {
         "message": "This deletes the file and everything read from it for good. It can't be undone.",

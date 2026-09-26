@@ -378,14 +378,39 @@
       "edit": "Edit",
       "delete": "Padam",
       "deleteConfirmMessage": "Padam {{filename}}? Ini tidak boleh dibatalkan.",
-      "moreActions": "Tindakan lain",
-      "traceHeading": "Jejak AI: dokumen #{{documentId}} · jumlah ${{cost}}",
+      "traceHeading": "Jejak AI · jumlah ${{cost}}",
+      "traceSummary": "Jejak AI · {{steps}} langkah · ${{cost}}",
+      "traceSummaryEmpty": "Jejak AI · tiada langkah direkodkan",
+      "traceLoading": "Memuatkan jejak…",
+      "traceViewRaw": "Lihat jejak mentah",
+      "traceHideRaw": "Sembunyikan jejak mentah",
+      "traceExtractedHeading": "Hasil yang diekstrak",
+      "traceFieldCorrected": "dibetulkan oleh seseorang",
+      "traceNoAiCall": "Tiada panggilan AI: langkah berasaskan peraturan",
+      "traceStep": {
+        "classify": "Menyemak jenis dokumen",
+        "classifyGrounding": "Menyemak nama dalam dokumen",
+        "extract": "Membaca butiran utama",
+        "verify": "Menyemak butiran yang diekstrak",
+        "archive": "Mengarkibkan fail",
+        "deriveEvents": "Mencari tarikh berkaitan",
+        "caption": "Menerangkan gambar",
+        "rules": "Menggunakan peraturan pemfailan"
+      },
+      "traceStatus": {
+        "done": "Selesai",
+        "skipped": "Dilangkau",
+        "failed": "Gagal"
+      },
       "traceTable": {
+        "step": "Langkah",
+        "status": "Status",
         "node": "Nod",
         "model": "Model",
         "tokens": "Token masuk/keluar",
         "cost": "Kos",
-        "decision": "Keputusan"
+        "decision": "Keputusan",
+        "confidence": "Keyakinan"
       },
       "noDocumentDate": "Tiada tarikh dokumen",
       "purge": {

@@ -1,18 +1,16 @@
-/** Renders a list of documents as DocumentCards, plus the trace panel (under the
- * card that asked for it) and viewer modal any of them can open — shared by the Company Files and
- * Search pages (2026-09-23, header/nav restructure) so the "view/trace/
- * archive a document" wiring exists in one place rather than copy-pasted
- * into both. Archiving here calls opsApi directly and then `onSaved()`
- * (the caller's refresh/re-filter), same shape OpsConsole used to have
- * inline. */
+/** Renders a list of documents as DocumentCards, plus the viewer modal any of them can open — shared by the Company
+ * Files and Search pages (2026-09-23, header/nav restructure) so the "view/archive a document" wiring exists in one
+ * place rather than copy-pasted into both. Archiving here calls opsApi directly and then `onSaved()` (the caller's
+ * refresh/re-filter), same shape OpsConsole used to have inline. AI trace is no longer this list's concern (round 5,
+ * items 3/6, DECISIONS #125): each `DocumentCard` fetches and expands its own trace in place now, not a sibling
+ * block this component renders after the card that asked for it. */
 
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { middleEllipsis } from '../../lib/filename'
 import { DocumentCard, DocumentViewerModal } from './DocumentCard'
-import { opsApi, type DocumentRow, type TraceReport } from './opsApi'
+import { opsApi, type DocumentRow } from './opsApi'
 import { documentIsEditable } from './opsShared'
-import { TracePanel } from './TracePanel'
 
 export function DocumentResultsList({
   documents,
@@ -40,19 +38,9 @@ export function DocumentResultsList({
   useEffect(() => {
     if (highlightPresent) highlightRef.current?.scrollIntoView({ block: 'center' })
   }, [highlightPresent])
-  const [trace, setTrace] = useState<{ documentId: number; report: TraceReport } | null>(null)
   const [viewingDocument, setViewingDocument] = useState<DocumentRow | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-
-  const viewTrace = async (documentId: number) => {
-    try {
-      const report = await opsApi.getTrace(documentId)
-      setTrace({ documentId, report })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
 
   const archiveDocument = async (doc: DocumentRow) => {
     try {
@@ -109,8 +97,8 @@ export function DocumentResultsList({
           {documents.map((doc) => {
             const highlighted = doc.id === highlightId
             return (
-              <Fragment key={doc.id}>
               <div
+                key={doc.id}
                 ref={highlighted ? highlightRef : undefined}
                 aria-current={highlighted || undefined}
                 className={highlighted ? 'rounded-card ring-2 ring-ink' : undefined}
@@ -121,16 +109,12 @@ export function DocumentResultsList({
                   canArchive={canArchive}
                   canRequestPurge={canRequestPurge && doc.visibility !== 'only_me'}
                   onView={() => setViewingDocument(doc)}
-                  onTrace={() => void viewTrace(doc.id)}
                   onArchive={() => void archiveDocument(doc)}
                   onRequestPurge={() => void requestPurge(doc)}
                   onCancelPurge={() => void cancelPurge(doc)}
                   onSaved={onSaved}
                 />
               </div>
-              {/* Directly under the card it was asked from, outside the highlight ring (round 3, item 5, DECISIONS #121). */}
-              {trace?.documentId === doc.id && <TracePanel documentId={doc.id} report={trace.report} />}
-              </Fragment>
             )
           })}
         </div>

@@ -305,20 +305,23 @@ describe('Company Files: a purge the owner asked for stays visible to them until
     expect(shown()).toContain('Doc 5')
   })
 
-  it('leaves View, and for the owner Cancel purge, and nothing else: no Edit, no Delete, no Purge, no more-actions menu', () => {
+  it('leaves View and Cancel purge live; Delete stays in place but DISABLED (round 5, item 2, DECISIONS #125); no Edit (this doc\'s own can_edit is false) and no separate Purge', () => {
     ops.documents = [requested()]
     render(<CompanyFilesPage />)
     const card = screen.getByText('Doc 5').closest('div.p-4') as HTMLElement
     expect(within(card).getByRole('button', { name: /^view$/i })).toBeTruthy()
     expect(within(card).getByRole('button', { name: 'Cancel purge' })).toBeTruthy() // round 3, item 9b
-    for (const name of [/^edit$/i, /^delete$/i, /^purge$/i, /more actions/i]) expect(within(card).queryByRole('button', { name }), String(name)).toBeNull()
+    const deleteButton = within(card).getByRole('button', { name: /^delete$/i })
+    expect(deleteButton.hasAttribute('disabled')).toBe(true) // present, not gone — the fix for the old "AI trace unreachable" dead end
+    for (const name of [/^edit$/i, /^purge$/i, /more actions/i]) expect(within(card).queryByRole('button', { name }), String(name)).toBeNull()
   })
 
   it('the other documents beside it keep their own actions', () => {
     ops.documents = [...DOCS, requested()]
     render(<CompanyFilesPage />)
-    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(4) // and no separate Purge button anywhere (DECISIONS #109)
-    expect(screen.queryAllByRole('button', { name: 'Purge' })).toHaveLength(0)
+    // 5, not 4: the purge-requested document's own Delete is now present too, disabled rather than gone (round 5, item 2).
+    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(5)
+    expect(screen.queryAllByRole('button', { name: 'Purge' })).toHaveLength(0) // no separate Purge button anywhere (DECISIONS #109)
   })
 
   it('counts with the rest', () => {
