@@ -200,9 +200,24 @@ def main(argv: list[str] | None = None) -> int:
                                "median_scattered_docs_per_window": statistics.median(t["base"] for t in table)}
 
     # ---- invariants over every seeded document
-    files_ok = all((Path(args.docs_dir) / Path(r["stored_path"]).name).exists() and
-                   hashlib.sha256((Path(args.docs_dir) / Path(r["stored_path"]).name).read_bytes()).hexdigest() == r["sha256"] for r in rows)
-    check("every_seeded_file_exists_and_its_hash_matches", files_ok, f"{len(rows)} documents")
+    # A seeded PDF may have been re-rendered in place by scripts/beautify_invoices.py, which leaves the sha256 and bytes columns alone on purpose
+    # (DECISIONS #142). Its bytes then differ from the recorded hash; it is accepted only when its words are the stored text's words (the same
+    # word-for-word check the script applies), so a corrupted or swapped file still fails.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from beautify_invoices import verify_render
+
+    def file_state(r) -> str:
+        f = Path(args.docs_dir) / Path(r["stored_path"]).name
+        if not f.exists():
+            return "missing"
+        if hashlib.sha256(f.read_bytes()).hexdigest() == r["sha256"]:
+            return "same"
+        return "rerendered" if f.suffix.lower() == ".pdf" and verify_render(str(f), r["extracted_text"] or "") is None else "different"
+
+    states = [file_state(r) for r in rows]
+    files_ok = all(st in ("same", "rerendered") for st in states)
+    check("every_seeded_file_exists_and_its_hash_matches", files_ok,
+          f"{len(rows)} documents" + (f", {states.count('rerendered')} re-rendered by beautify_invoices with the same words" if "rerendered" in states else ""))
     check("every_manifest_document_was_seeded", set(seeded) == set(by_sha), f"{len(seeded)} of {len(by_sha)}")
     check("no_shared_sha256", len({r['sha256'] for r in rows}) == len(rows))
     incomplete = [r["filename"] for r in rows if r["visibility"] == "company" and r["lane"] != "memory" and not (r["description"] and r["bucket"] and r["vendor_name"])]
