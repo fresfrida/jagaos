@@ -7,10 +7,12 @@ multiset) and add nothing but the table headers. The line item must equal the do
 followed by a note) and the total must equal the caption's amount. A document that fails any check is SKIPPED and listed, never guessed. Nothing
 is invented: no payment terms, bank line or extra line items, only the stored words in a different arrangement.
 
-LAYOUT AND COLOUR: two independent dimensions, both deterministic by document id. Layout = id % 5: 0 slate band, 1 rule and tag with striped rows, 2 centred letterhead with a
+LAYOUT AND COLOUR: two independent dimensions, both fixed by the ISSUING COMPANY, not by the document: h = the first 8 bytes of sha256 of the issuer's
+name as stored, as a number; layout = h % 5, palette = (h // 5) % 8. Every document from one company therefore renders in the same template and colours, in any run,
+for ever (sha256, never Python's per-process hash()); different companies may share a layout. Layout: 0 slate band, 1 rule and tag with striped rows, 2 centred letterhead with a
 ledger, 3 side strip with a grid table, 4 minimal with leader lines. Two stored layouts are understood: the seeded one (issuer, GST status, number,
 date, bill to, numbered line items, subtotal, GST, total, fixture note) and the demo-corpus one (05 and 07: no bill to, a Description line, and
-whatever else the document says after the total, kept verbatim, e.g. 07's injected lines). Palette = (id // 5) % 8: slate, forest green, deep maroon,
+whatever else the document says after the total, kept verbatim, e.g. 07's injected lines). Palette: slate, forest green, deep maroon,
 warm charcoal-brown, deep teal, plum, ochre, classic navy (muted letterhead colours). One accent per page, used sparingly: the issuer and labels, the
 rules, a faint tint behind the table header row, the footer rule and the existing band, strip or total bar; no other large fills.
 
@@ -28,6 +30,7 @@ replaces each stored file atomically and removes that document's cached thumbnai
     python3 beautify_invoices.py --db DB --manifest manifest.json --top-per-bucket 10 --ids 375,377,373 --apply --backup-dir /home/ubuntu/backups/docs.pre-beautify-<stamp>
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -393,12 +396,17 @@ VARIANT_LEFT_MM = (20, 20, 20, 30, 20)  # each layout's left margin, so the foot
 VARIANT_NAMES = ("slate band", "rule and tag, striped", "centred ledger", "side strip, grid", "minimal, leaders")
 
 
-def variant_of(doc_id: int) -> int:
-    return int(doc_id) % len(VARIANTS)
+def _issuer_key(issuer: str) -> int:
+    """A number that depends only on the issuer's name as stored (sha256, so it is the same in every process, on every machine, in every run)."""
+    return int.from_bytes(hashlib.sha256(issuer.strip().encode("utf-8")).digest()[:8], "big")
 
 
-def palette_of(doc_id: int) -> int:
-    return (int(doc_id) // len(VARIANTS)) % len(PALETTES)  # 8 palettes
+def variant_of(issuer: str) -> int:
+    return _issuer_key(issuer) % len(VARIANTS)
+
+
+def palette_of(issuer: str) -> int:
+    return (_issuer_key(issuer) // len(VARIANTS)) % len(PALETTES)
 
 
 def _tint(rgb, keep: float):
@@ -406,9 +414,9 @@ def _tint(rgb, keep: float):
     return tuple(1 - (1 - v) * keep for v in rgb)
 
 
-def render_pdf(dest: str, p: dict, doc_id: int) -> None:
+def render_pdf(dest: str, p: dict) -> None:
     global SLATE, LIGHT, PALE, RULE, HEAD
-    SLATE = PALETTES[palette_of(doc_id)][1]
+    SLATE = PALETTES[palette_of(p["issuer"])][1]
     LIGHT, RULE, HEAD = _tint(SLATE, 0.09), _tint(SLATE, 0.45), _tint(SLATE, 0.13)
     PALE = tuple((t + 0.83) / 2 for t in _tint(SLATE, 0.28))  # a greyed tint: the big title must read as ink on paper, never pastel
     from reportlab.lib.pagesizes import A4
@@ -417,7 +425,7 @@ def render_pdf(dest: str, p: dict, doc_id: int) -> None:
 
     w, h = A4
     c = canvas.Canvas(dest, pagesize=A4)
-    v = variant_of(doc_id)
+    v = variant_of(p["issuer"])
     VARIANTS[v](c, p, w, h, mm)
     left = VARIANT_LEFT_MM[v] * mm
     c.setStrokeColorRGB(*RULE)
@@ -543,8 +551,8 @@ def main() -> None:
     done = failed = 0
     for r, p in plans:
         target = resolve(r["stored_path"], db_root)
-        v = variant_of(r["id"])
-        label = f"[{r['id']:>3}] v{v} {PALETTES[palette_of(r['id'])][0]:<14} {r['company'][:8]:<8} {r['bucket']:<11} {r['status']:<12} {p['issuer'][:28]:<28} {dict(p['meta']).get('Invoice No', '-'):<14} {p['total'][7:]}"
+        v = variant_of(p["issuer"])
+        label = f"[{r['id']:>3}] v{v} {PALETTES[palette_of(p['issuer'])][0]:<14} {r['company'][:8]:<8} {r['bucket']:<11} {r['status']:<12} {p['issuer'][:28]:<28} {dict(p['meta']).get('Invoice No', '-'):<14} {p['total'][7:]}"
         if not target.exists():
             print(f"  ! {label}: stored file not found at {target}")
             failed += 1
@@ -552,7 +560,7 @@ def main() -> None:
         fd, tmp = tempfile.mkstemp(suffix=".pdf", dir=(str(target.parent) if args.apply else str(preview_dir)))
         os.close(fd)
         try:
-            render_pdf(tmp, p, r["id"])
+            render_pdf(tmp, p)
             bad = verify_render(tmp, r["extracted_text"])
             if bad:
                 print(f"  ! {label}: {bad} (left alone)")
