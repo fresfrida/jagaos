@@ -39,3 +39,32 @@ describe('apiRequest errors', () => {
     await expect(apiRequest('/x')).resolves.toEqual({ ok: true })
   })
 })
+
+describe('the 401 handler', () => {
+  it('is called on a 401 and not on any other status', async () => {
+    const { setUnauthorizedHandler } = await import('./apiClient')
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    try {
+      respond(401, JSON.stringify({ detail: 'Missing or malformed Authorization header' }))
+      await apiRequest('/x').catch(() => {})
+      expect(handler).toHaveBeenCalledTimes(1)
+      respond(403, JSON.stringify({ detail: 'nope' }))
+      await apiRequest('/y').catch(() => {})
+      expect(handler).toHaveBeenCalledTimes(1)
+    } finally {
+      setUnauthorizedHandler(null)
+    }
+  })
+
+  it('a 401 still throws its ApiError as before, for the call site’s own error handling', async () => {
+    const { setUnauthorizedHandler } = await import('./apiClient')
+    setUnauthorizedHandler(() => {})
+    try {
+      respond(401, JSON.stringify({ detail: 'Session expired. Log in again.' }))
+      await expect(apiRequest('/x')).rejects.toMatchObject({ status: 401, message: 'Session expired. Log in again.' })
+    } finally {
+      setUnauthorizedHandler(null)
+    }
+  })
+})

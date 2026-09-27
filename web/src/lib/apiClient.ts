@@ -38,6 +38,19 @@ export class ApiError extends Error {
   }
 }
 
+/** Set by AuthContext on mount: what to do when ANY call comes back 401 (a token that is missing, expired or revoked — the exact
+ * wording is app/auth.py's, "Missing or malformed Authorization header" / "Session expired/revoked. Log in again."). apiClient has
+ * no notion of a session itself, so it only reports the fact; AuthContext (the one place that owns session state) decides what
+ * "signed out" means. Found live 2026-09-27: an expired token surfaced that raw backend string as if it were a normal page error,
+ * and Log Out itself could 401 (its own token already invalid) and silently do nothing, both because nothing told the app to fall
+ * back to signed-out. A module-level callback, not a thrown-and-caught event, because a call site deep in a page (Company Files,
+ * Search, anywhere) has no reason to know about auth at all — it just gets its ApiError as before, for its own error UI; the
+ * session reset happens once, centrally, in parallel. */
+let onUnauthorized: (() => void) | null = null
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler
+}
+
 /** Every JSON call goes through here, and each one is counted while it is in flight (lib/pendingRequests.ts). */
 export function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return trackRequest(send<T>(path, init))
@@ -46,6 +59,7 @@ export function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 async function send<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, init)
   if (!res.ok) {
+    if (res.status === 401) onUnauthorized?.()
     const bodyText = await res.text()
     let message = bodyText
     let code: string | undefined

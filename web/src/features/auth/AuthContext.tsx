@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { setUnauthorizedHandler } from '../../lib/apiClient'
 import { authApi, clearToken, getToken, type Company, type DevLoginParams, type Role, type User } from './authApi'
 
 interface AuthState {
@@ -46,6 +47,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     status: 'loading', user: null, company: null, role: null, error: null,
   })
 
+  // Any call anywhere in the app coming back 401 (a token gone missing, expired or revoked mid-session, apiClient.ts) means the
+  // same thing everywhere: drop the stale token and fall back to the login picker, rather than a page showing the backend's raw
+  // "Missing or malformed Authorization header" as if it were its own error. One handler, registered once, for every call site.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      clearToken()
+      setState({ status: 'signed-out', user: null, company: null, role: null, error: null })
+    })
+    return () => setUnauthorizedHandler(null)
+  }, [])
+
   useEffect(() => {
     if (!getToken()) {
       setState({ status: 'signed-out', user: null, company: null, role: null, error: null })
@@ -76,8 +88,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(async () => {
-    await authApi.logout()
-    setState({ status: 'signed-out', user: null, company: null, role: null, error: null })
+    // authApi.logout() already clears the stored token even if the POST fails (its own token already invalid, a 401,
+    // is exactly the case this is for). Local state must reset the same way — and the call NEVER rethrows: the one
+    // caller (UserMenu) does `logout().then(() => navigate(...))` with no .catch, so a rethrow here would silently
+    // cancel the "go to the login picker" step too, leaving Log Out looking like it did nothing.
+    try {
+      await authApi.logout()
+    } catch {
+      // signing out locally does not depend on the server call having succeeded
+    } finally {
+      setState({ status: 'signed-out', user: null, company: null, role: null, error: null })
+    }
   }, [])
 
   const refreshCompany = useCallback(async () => {
