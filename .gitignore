@@ -26,3 +26,9 @@ evals/demo_corpus/store/
 .claude/settings.local.json
 # local dry-run output of scripts/beautify_invoices.py; never commit previews
 scripts/beautify_preview/
+
+# Working notes, not needed to build or judge the app (kept locally, never pushed)
+docs/screenshots/
+MDs/
+docs/ADVISOR-PLAYBOOK.md
+docs/ADVISOR-PLAYBOOK-JAGAOS.md
