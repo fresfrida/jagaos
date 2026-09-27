@@ -146,10 +146,29 @@ def test_every_demo_pdf_has_a_classify_fixture_named_by_its_own_hash():
         assert (REPLAY / f"{run_id}.classify.json").is_file(), name
 
 
+def _hand_authored(fx: dict) -> bool:
+    return str(fx.get("provenance", {}).get("built_by", "")).startswith("HAND-AUTHORED")
+
+
+def test_the_hand_authored_receipt_is_recorded_under_both_keys_with_the_same_answer():
+    """Beat 3's receipt photo (DECISIONS #144): the web app re-encodes a photo before posting it, so the answer is filed under the original file's
+    key (a8fa37448029, for an upload straight to the API) and under the bytes the browser actually posts (d61176d64347)."""
+    got = {}
+    for key in ("a8fa37448029", "d61176d64347"):
+        c = json.loads((REPLAY / f"{key}.classify.json").read_text())
+        e = json.loads((REPLAY / f"{key}.extract.json").read_text())
+        assert _hand_authored(c) and _hand_authored(e)
+        got[key] = (c["arguments"], {k: v["value"] for k, v in e["arguments"].items()})
+    assert got["a8fa37448029"] == got["d61176d64347"]
+    args, values = got["a8fa37448029"]
+    assert args["vendor_name"] == "Hanbaobao Pte Ltd" and args["bucket"] == "Expenses" and args["doc_type"] == "receipt"
+    assert values["total"] == 15.0 and values["tax"] == 1.24 and values["issued_on"] == "2025-04-10" and round(values["subtotal"] + values["tax"], 2) == values["total"]
+
+
 @pytest.mark.parametrize("path", _fixtures(), ids=lambda p: p.name)
 def test_every_fixture_validates_against_the_schema_the_node_uses(path):
     fx = json.loads(path.read_text())
-    assert path.name == f"{fx['run_id']}.{fx['purpose']}.json" and fx["run_id"] in RUN_IDS.values()
+    assert path.name == f"{fx['run_id']}.{fx['purpose']}.json" and (fx["run_id"] in RUN_IDS.values() or _hand_authored(fx))
     args = fx["arguments"]
     if fx["purpose"] == "classify":
         assert fx["tool_name"] == classify_module.TOOL["function"]["name"]
@@ -166,6 +185,10 @@ def test_every_fixture_validates_against_the_schema_the_node_uses(path):
 def test_every_fixture_says_which_fields_are_authored_and_which_are_recorded(path):
     fx = json.loads(path.read_text())
     prov = fx["provenance"]
+    if _hand_authored(fx):  # DECISIONS #144: a fixture written by hand for a file that was never sent to the gateway says so, field by field
+        assert set(prov["authored"]) <= set(prov["fields"]) and set(prov["authored"]) == set(fx["arguments"]) and len(prov["source"]["sha256"]) == 64
+        assert prov["source"]["sha256"].startswith(fx["run_id"])
+        return
     assert prov["source"]["db"] in ("data/jaga.db", "evals/demo_corpus/demo.db") and prov["built_on"]
     assert set(prov["fields"]) == set(fx["arguments"])
     if fx["purpose"] == "classify":

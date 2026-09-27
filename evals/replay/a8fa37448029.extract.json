@@ -1,0 +1,79 @@
+{
+ "run_id": "a8fa37448029",
+ "purpose": "extract",
+ "tool_name": "extract_invoice_fields",
+ "arguments": {
+  "vendor": {
+   "value": "Hanbaobao Pte Ltd",
+   "confidence": 0.92,
+   "char_start": 51,
+   "char_end": 68
+  },
+  "gst_reg_no": {
+   "value": "M2-0023981-4",
+   "confidence": 0.8,
+   "char_start": 82,
+   "char_end": 94
+  },
+  "invoice_no": {
+   "value": "300882600036782",
+   "confidence": 0.9,
+   "char_start": 119,
+   "char_end": 134
+  },
+  "issued_on": {
+   "value": "2025-04-10",
+   "confidence": 0.9,
+   "char_start": 156,
+   "char_end": 166
+  },
+  "subtotal": {
+   "value": 13.76,
+   "confidence": 0.8
+  },
+  "tax": {
+   "value": 1.24,
+   "confidence": 0.85,
+   "char_start": 460,
+   "char_end": 464
+  },
+  "tax_label": {
+   "value": "GST",
+   "confidence": 0.85
+  },
+  "total": {
+   "value": 15.0,
+   "confidence": 0.95,
+   "char_start": 376,
+   "char_end": 381
+  }
+ },
+ "provenance": {
+  "built_by": "HAND-AUTHORED (advisor session, 2026-09-27); NO LLM CALL was made and none was recorded",
+  "source": {
+   "filename": "WhatsApp Image 2026-09-27 at 10.41.45.jpeg",
+   "sha256": "a8fa37448029d45ba98a86b70056487d36c558adb5cd3497d89c11dd27894bcd",
+   "ocr_text": "the text app/extract/ocr.py::extract_text returned for this exact file on the box, 2026-09-27; the offsets below index into it"
+  },
+  "fields": {
+   "vendor": "read from the photo (OCR agrees)",
+   "gst_reg_no": "read from the photo: 'M2-0023981-4'; the OCR garbles it ('¥2-0029981-4'), so the offsets point at the garbled token",
+   "invoice_no": "read from the photo (OCR agrees)",
+   "issued_on": "read from the photo: 10/04/2025, day first (Singapore), so 10 April 2025",
+   "subtotal": "DERIVED, not printed: the receipt prints one subtotal that already includes GST (15.00), so the net amount is total minus GST, 13.76 (13.76 x 9% = 1.24), which is what lets the arithmetic check pass; it has no offsets",
+   "tax": "read from the photo: 'TOTAL INCLUDES GST OF 1.24' (the OCR reads '4,24', so the offsets point at that token)",
+   "tax_label": "read from the photo: GST",
+   "total": "read from the photo: 15.00"
+  },
+  "authored": [
+   "vendor",
+   "gst_reg_no",
+   "invoice_no",
+   "issued_on",
+   "subtotal",
+   "tax",
+   "tax_label",
+   "total"
+  ]
+ }
+}

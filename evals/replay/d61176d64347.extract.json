@@ -1,0 +1,80 @@
+{
+ "run_id": "d61176d64347",
+ "purpose": "extract",
+ "tool_name": "extract_invoice_fields",
+ "arguments": {
+  "vendor": {
+   "value": "Hanbaobao Pte Ltd",
+   "confidence": 0.92,
+   "char_start": 54,
+   "char_end": 71
+  },
+  "gst_reg_no": {
+   "value": "M2-0023981-4",
+   "confidence": 0.8,
+   "char_start": 87,
+   "char_end": 99
+  },
+  "invoice_no": {
+   "value": "300882600036782",
+   "confidence": 0.9,
+   "char_start": 126,
+   "char_end": 141
+  },
+  "issued_on": {
+   "value": "2025-04-10",
+   "confidence": 0.9,
+   "char_start": 163,
+   "char_end": 173
+  },
+  "subtotal": {
+   "value": 13.76,
+   "confidence": 0.8
+  },
+  "tax": {
+   "value": 1.24,
+   "confidence": 0.85,
+   "char_start": 462,
+   "char_end": 466
+  },
+  "tax_label": {
+   "value": "GST",
+   "confidence": 0.85
+  },
+  "total": {
+   "value": 15.0,
+   "confidence": 0.95,
+   "char_start": 380,
+   "char_end": 385
+  }
+ },
+ "provenance": {
+  "built_by": "HAND-AUTHORED (advisor session, 2026-09-27); NO LLM CALL was made and none was recorded",
+  "source": {
+   "filename": "receipt_mcdonalds_cck.jpg (the user's receipt photo, as the web app re-encodes it before upload)",
+   "sha256": "d61176d643470418ff7ff8810d185fc11809f13cc690cc81f0567f32a45226d3",
+   "note": "the browser (Chromium) shrinks and re-encodes a photo before posting it, so its bytes, and this key, differ from the original file's (a8fa37448029); the same answer is recorded under both keys",
+   "ocr_text": "the text app/extract/ocr.py::extract_text returned for exactly these posted bytes on the box, 2026-09-27; the offsets below index into it"
+  },
+  "fields": {
+   "vendor": "read from the photo (OCR agrees)",
+   "gst_reg_no": "read from the photo: 'M2-0023981-4'; the OCR garbles it ('¥2-0029981-4'), so the offsets point at the garbled token",
+   "invoice_no": "read from the photo: 300882600036782 (this OCR misreads one digit, '300862600036782', so the offsets point at that token)",
+   "issued_on": "read from the photo: 10/04/2025, day first (Singapore), so 10 April 2025",
+   "subtotal": "DERIVED, not printed: the receipt prints one subtotal that already includes GST (15.00), so the net amount is total minus GST, 13.76 (13.76 x 9% = 1.24), which is what lets the arithmetic check pass; it has no offsets",
+   "tax": "read from the photo: 'TOTAL INCLUDES GST OF 1.24' (this OCR reads '4.24', so the offsets point at that token)",
+   "tax_label": "read from the photo: GST",
+   "total": "read from the photo: 15.00"
+  },
+  "authored": [
+   "vendor",
+   "gst_reg_no",
+   "invoice_no",
+   "issued_on",
+   "subtotal",
+   "tax",
+   "tax_label",
+   "total"
+  ]
+ }
+}

@@ -1,0 +1,43 @@
+{
+ "run_id": "d61176d64347",
+ "purpose": "classify",
+ "tool_name": "classify_document",
+ "arguments": {
+  "lane": "invoice",
+  "doc_type": "receipt",
+  "confidence": 0.9,
+  "injection_suspected": false,
+  "description": "Receipt from Hanbaobao Pte Ltd for meals at McDonald's Choa Chu Kang 4, SGD 15.00",
+  "description_en": "Receipt from Hanbaobao Pte Ltd for meals at McDonald's Choa Chu Kang 4, SGD 15.00",
+  "bucket": "Expenses",
+  "vendor_name": "Hanbaobao Pte Ltd"
+ },
+ "provenance": {
+  "built_by": "HAND-AUTHORED (advisor session, 2026-09-27); NO LLM CALL was made and none was recorded",
+  "source": {
+   "filename": "receipt_mcdonalds_cck.jpg (the user's receipt photo, as the web app re-encodes it before upload)",
+   "sha256": "d61176d643470418ff7ff8810d185fc11809f13cc690cc81f0567f32a45226d3",
+   "note": "the browser (Chromium) shrinks and re-encodes a photo before posting it, so its bytes, and this key, differ from the original file's (a8fa37448029); the same answer is recorded under both keys"
+  },
+  "fields": {
+   "lane": "authored from what is printed on the photo",
+   "doc_type": "authored from what is printed on the photo",
+   "confidence": "authored from what is printed on the photo",
+   "injection_suspected": "authored from what is printed on the photo",
+   "description": "authored from what is printed on the photo",
+   "description_en": "authored from what is printed on the photo",
+   "bucket": "authored from what is printed on the photo",
+   "vendor_name": "authored from what is printed on the photo"
+  },
+  "authored": [
+   "lane",
+   "doc_type",
+   "confidence",
+   "injection_suspected",
+   "description",
+   "description_en",
+   "bucket",
+   "vendor_name"
+  ]
+ }
+}
