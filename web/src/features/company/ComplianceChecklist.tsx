@@ -55,20 +55,21 @@ export function ComplianceChecklist({
           <p className="p-6 text-sm text-muted">{t('ops.gaps.empty')}</p>
         ) : (
           <ul className="divide-y divide-line">
-            {/* One compact row per item: the name on the left, and on the right a fixed pair of slots (status pill, then one quiet
-               action) that sit in the same place on every row, so the column reads straight down. */}
+            {/* One compact row per item. From `sm` up: the name on the left and a fixed pair of slots on the right (status pill, then one quiet
+               action) in the same place on every row. Below `sm` (a phone): the name on its own full-width line, then the pill on the left and
+               the action on the right of one centred line, so a long name is never squeezed into a narrow column. */}
             {expectations.map((exp) => {
               const evidence =
                 exp.status === 'satisfied' && exp.evidence_document_id != null
                   ? documents.find((d) => d.id === exp.evidence_document_id) ?? null
                   : null
               return (
-                <li key={exp.id} className="flex items-center gap-2 py-1.5 pl-4 pr-2" data-testid="checklist-row">
-                  <p className="min-w-0 flex-1 break-words text-[14px] font-medium text-ink">{exp.label}</p>
-                  <span className="flex w-[6.25rem] shrink-0 justify-start">
+                <li key={exp.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-2 pl-4 pr-2 sm:flex-nowrap sm:py-1.5" data-testid="checklist-row">
+                  <p className="min-w-0 basis-full break-words text-[14px] font-medium text-ink sm:flex-1 sm:basis-0">{exp.label}</p>
+                  <span className="flex shrink-0 justify-start sm:w-[6.25rem]">
                     <StatusPill status={exp.status} />
                   </span>
-                  <span className="flex w-16 shrink-0 justify-end">
+                  <span className="ml-auto flex shrink-0 justify-end sm:w-16">
                     {evidence && (
                       <Button variant="ghost" size="sm" className="px-2.5" onClick={() => setViewing(evidence)} aria-label={t('ops.gaps.viewDocument')}>
                         {t('ops.gaps.view')}

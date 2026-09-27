@@ -109,4 +109,23 @@ describe('ComplianceChecklistSection', () => {
     expect(rows[1]!.querySelectorAll('button, a')).toHaveLength(1)
     expect(rows[1]!.textContent).toContain('Upload')
   })
+
+  it('the row stacks on a phone (name on its own full-width line, then pill left and action right) and is one line from `sm` up', async () => {
+    expectations.mockResolvedValue([exp(1, 'satisfied', 9), exp(2, 'missing')])
+    documents.mockResolvedValue([evidenceDoc])
+    render(<ComplianceChecklistSection enabled />)
+    const [held, missing] = await screen.findAllByTestId('checklist-row')
+    for (const row of [held!, missing!]) {
+      expect(row.className).toContain('flex-wrap')
+      expect(row.className).toContain('sm:flex-nowrap')
+      const [name, pill, action] = Array.from(row.children) as HTMLElement[]
+      expect(name!.className).toContain('basis-full') // the name takes the whole first line on a phone
+      expect(name!.className).toContain('sm:flex-1')
+      expect(pill!.className).not.toContain(' w-') // no fixed width below `sm`; only `sm:w-…`
+      expect(pill!.className).toContain('sm:w-[6.25rem]')
+      expect(action!.className).toContain('ml-auto') // the action sits at the right end of the second line
+      expect(action!.className).toContain('sm:w-16')
+      expect(name!.className).not.toMatch(/truncate|line-clamp/) // never truncated
+    }
+  })
 })
