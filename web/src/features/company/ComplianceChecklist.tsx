@@ -13,6 +13,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { uploadHrefFor } from '../upload/uploadHint'
+import { Button } from '../../components/ui/Button'
 import { ButtonLink } from '../../components/ui/ButtonLink'
 import { Card } from '../../components/ui/Card'
 import { DocumentViewerModal } from '../ops/DocumentCard'
@@ -34,45 +35,51 @@ export function ComplianceChecklist({
 
   return (
     <section>
-      <h2 className="mb-3 text-[12px] font-mono uppercase tracking-wide text-muted">
+      <h2 className="text-[12px] font-mono uppercase tracking-wide text-muted">
         {t('ops.gaps.heading', { satisfied, total: expectations.length })}
       </h2>
+      {expectations.length > 0 && (
+        <div
+          className="mb-3 mt-2 h-1 overflow-hidden rounded-full bg-line"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={expectations.length}
+          aria-valuenow={satisfied}
+          aria-label={t('ops.gaps.heading', { satisfied, total: expectations.length })}
+        >
+          <div className="h-full rounded-full bg-sage transition-[width] duration-300" style={{ width: `${(satisfied / expectations.length) * 100}%` }} />
+        </div>
+      )}
       <Card className="overflow-hidden p-0" interactive={false}>
         {expectations.length === 0 ? (
           <p className="p-6 text-sm text-muted">{t('ops.gaps.empty')}</p>
         ) : (
           <ul className="divide-y divide-line">
-            {/* Natural row height below `sm`; from `sm` up a min-height floor with the content centred in it,
-               as in PurgeRequestsSection's rows. */}
+            {/* One compact row per item: the name on the left, and on the right a fixed pair of slots (status pill, then one quiet
+               action) that sit in the same place on every row, so the column reads straight down. */}
             {expectations.map((exp) => {
               const evidence =
                 exp.status === 'satisfied' && exp.evidence_document_id != null
                   ? documents.find((d) => d.id === exp.evidence_document_id) ?? null
                   : null
               return (
-                <li
-                  key={exp.id}
-                  className="flex flex-col px-4 py-3 sm:min-h-40 sm:justify-center"
-                  data-testid="checklist-row"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="min-w-0 break-words text-[14px] font-medium text-ink">{exp.label}</p>
+                <li key={exp.id} className="flex items-center gap-2 py-1.5 pl-4 pr-2" data-testid="checklist-row">
+                  <p className="min-w-0 flex-1 break-words text-[14px] font-medium text-ink">{exp.label}</p>
+                  <span className="flex w-[6.25rem] shrink-0 justify-start">
                     <StatusPill status={exp.status} />
-                  </div>
-                  {evidence && (
-                    <button
-                      type="button"
-                      onClick={() => setViewing(evidence)}
-                      className="mt-1 text-[13px] text-ink underline underline-offset-2 hover:text-muted"
-                    >
-                      {t('ops.gaps.viewDocument')}
-                    </button>
-                  )}
-                  {exp.status === 'missing' && canUpload && (
-                    <ButtonLink href={uploadHrefFor(exp.doc_type)} variant="secondary" size="sm" className="mt-2">
-                      {t('ops.gaps.upload')}
-                    </ButtonLink>
-                  )}
+                  </span>
+                  <span className="flex w-16 shrink-0 justify-end">
+                    {evidence && (
+                      <Button variant="ghost" size="sm" className="px-2.5" onClick={() => setViewing(evidence)} aria-label={t('ops.gaps.viewDocument')}>
+                        {t('ops.gaps.view')}
+                      </Button>
+                    )}
+                    {exp.status === 'missing' && canUpload && (
+                      <ButtonLink href={uploadHrefFor(exp.doc_type)} variant="ghost" size="sm" className="px-2.5">
+                        {t('ops.gaps.upload')}
+                      </ButtonLink>
+                    )}
+                  </span>
                 </li>
               )
             })}

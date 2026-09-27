@@ -442,6 +442,7 @@
       "heading": "Compliance checklist: {{satisfied}} of {{total}} held",
       "empty": "Nothing on the checklist yet. Upload a statutory document that reads as a company event (incorporation, corp sec change) and what it needs appears here.",
       "viewDocument": "View document",
+      "view": "View",
       "upload": "Upload",
       "openInSettings": "Open the full checklist in Company Settings"
     },

@@ -441,6 +441,7 @@
       "heading": "合规清单：已持有 {{satisfied}} / {{total}}",
       "empty": "清单暂无项目。上传能识别为公司事件（如注册成立、公司秘书变更）的法定文件后，所需文件会显示在这里。",
       "viewDocument": "查看文件",
+      "view": "查看",
       "upload": "上传",
       "openInSettings": "在公司设置中查看完整清单"
     },

@@ -441,6 +441,7 @@
       "heading": "Senarai semak pematuhan: {{satisfied}} daripada {{total}} dipegang",
       "empty": "Belum ada apa-apa dalam senarai semak. Muat naik dokumen berkanun yang menunjukkan peristiwa syarikat (penubuhan, pertukaran setiausaha syarikat) dan keperluannya akan dipaparkan di sini.",
       "viewDocument": "Lihat dokumen",
+      "view": "Lihat",
       "upload": "Muat naik",
       "openInSettings": "Buka senarai semak penuh dalam Tetapan Syarikat"
     },

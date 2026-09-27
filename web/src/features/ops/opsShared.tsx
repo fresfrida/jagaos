@@ -636,7 +636,7 @@ const STATUS_TONE: Record<string, string> = {
   processed: 'text-sage-ink bg-sage/15',
   needs_review: 'text-amber-800 bg-amber-100',
   quarantined: 'text-red-800 bg-red-100',
-  missing: 'text-muted bg-canvas',
+  missing: 'text-amber-800 bg-amber-100', // a checklist gap wants attention: the same amber tint as an open review
   satisfied: 'text-sage-ink bg-sage/15',
   open: 'text-amber-800 bg-amber-100',
   archived: 'text-muted bg-canvas',
