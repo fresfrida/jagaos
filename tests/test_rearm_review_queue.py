@@ -214,3 +214,61 @@ def test_the_replay_mode_refusal_still_holds_with_only(monkeypatch, armed):
     with pytest.raises(SystemExit) as raised:
         rearm_review_queue.rearm(client, only="05", out=said.append)
     assert raised.value.code == 2 and "not in replay mode" in said[0] and _snapshot() == before
+
+
+# ---- DECISIONS #140: dry run, refusal of seeded evidence, count assertions -------------------------------------------------------------------
+
+def _archive_demo_copy(name: str) -> int:
+    """Make a demo copy look like the 2026-09-27 originals: archived, with an event derived from it."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT id, company_id FROM document WHERE filename = ?", (name,)).fetchone()
+        conn.execute("UPDATE document SET status = 'archived' WHERE id = ?", (row["id"],))
+        conn.execute("INSERT INTO event (company_id, kind, occurred_on, title, confidence, status, source_document_id) VALUES (?, 'incorporation', '2016-03-14', 'x', 1.0, 'confirmed', ?)", (row["company_id"], row["id"]))
+        return row["id"]
+
+
+def test_dry_run_changes_nothing_and_says_what_it_would_do(armed, capsys):
+    _upload_all_eight(armed)
+    before = _snapshot()
+    lines: list[str] = []
+    summary = rearm_review_queue.rearm(client, dry_run=True, out=lines.append)
+    assert _snapshot() == before
+    assert summary["dry_run"] is True and len(summary["would_remove"]) == 8 and summary["would_upload"] == SAFE
+    assert any("DRY RUN" in l for l in lines)
+
+
+def test_it_refuses_to_remove_an_archived_copy_or_one_with_derived_events_and_changes_nothing(armed):
+    _upload_all_eight(armed)
+    doc_id = _archive_demo_copy("01_certificate_of_incorporation.pdf")
+    before, events = _snapshot(), _event_count()
+    lines: list[str] = []
+    with pytest.raises(SystemExit) as exit_info:
+        rearm_review_queue.rearm(client, out=lines.append)
+    assert exit_info.value.code == 2
+    assert _snapshot() == before and _event_count() == events
+    assert any(f"document {doc_id} is archived" in l and "Nothing was changed" in l for l in lines)
+
+
+def test_dry_run_reports_the_refusal_a_real_run_would_make(armed):
+    _upload_all_eight(armed)
+    _archive_demo_copy("01_certificate_of_incorporation.pdf")
+    summary = rearm_review_queue.rearm(client, dry_run=True, out=lambda *_: None)
+    assert summary["blockers"] and "archived" in summary["blockers"][0]
+
+
+def test_a_count_change_after_the_removal_exits_3(armed, monkeypatch):
+    _upload_all_eight(armed)
+    real = rearm_review_queue._counts
+    calls = {"n": 0}
+
+    def drifting(conn, company_id):
+        calls["n"] += 1
+        got = real(conn, company_id)
+        if calls["n"] == 2:  # the count taken after the removal
+            got["events"] += 1
+        return got
+
+    monkeypatch.setattr(rearm_review_queue, "_counts", drifting)
+    with pytest.raises(SystemExit) as exit_info:
+        rearm_review_queue.rearm(client, out=lambda *_: None)
+    assert exit_info.value.code == 3

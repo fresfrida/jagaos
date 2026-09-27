@@ -181,3 +181,20 @@ def test_contracts_is_a_bucket_a_document_can_be_moved_into(company):
     rows = client.get("/api/documents", headers=_headers(company["tokens"]["user1"])).json()
     mine = next(d for d in rows if d["id"] == company["documents"]["user1"])
     assert mine["bucket"] == "Contracts"
+
+
+def test_a_viewer_archiving_a_pending_review_document_is_404_then_403_once_it_is_filed(company):
+    """Seen live 2026-09-27 (a viewer archiving pending document 375 answered 404, not the 403 first predicted): the visibility check runs BEFORE
+    the role check (app/main.py archive_document; auth.may_see_document: a document pending review is invisible to a viewer), so a viewer cannot
+    tell a pending document from one that does not exist. Once it is filed the same call is the role answer, 403. Intended behaviour, not a bug."""
+    owner, viewer = company["tokens"]["owner"], company["tokens"]["viewer"]
+    uploaded = client.post("/api/documents", headers=_headers(owner), files={"file": ("pending-pmx.jpg", _jpeg((1, 2, 3)), "image/jpeg")})
+    assert uploaded.status_code == 200, uploaded.text
+    doc_id = uploaded.json()["document_id"]
+    with get_conn() as conn:
+        assert conn.execute("SELECT status FROM document WHERE id = ?", (doc_id,)).fetchone()["status"] == "needs_review"
+    assert client.post(f"/api/documents/{doc_id}/archive", headers=_headers(viewer)).status_code == 404
+    item = next(i for i in client.get("/api/review", headers=_headers(owner)).json() if i["document_id"] == doc_id)
+    resolved = client.post(f"/api/review/{item['id']}/resolve?thread_id={item['thread_id']}", json={"action": "confirm", "corrected_fields": {}}, headers=_headers(owner))
+    assert resolved.status_code == 200, resolved.text
+    assert client.post(f"/api/documents/{doc_id}/archive", headers=_headers(viewer)).status_code == 403
