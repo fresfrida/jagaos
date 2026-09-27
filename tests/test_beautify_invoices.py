@@ -18,19 +18,26 @@ CAPTION = json.dumps({"en": "Invoice to Orchid Bay Interiors Pte Ltd for materia
 
 
 @pytest.mark.parametrize("text", [SEEDED, NIL, DEMO])
-@pytest.mark.parametrize("doc_id", range(20))  # every layout x every palette
+@pytest.mark.parametrize("doc_id", range(40))  # every layout x every palette
 def test_every_layout_and_palette_carries_exactly_the_stored_words(tmp_path, text, doc_id):
     parts, why = bi.parse_text(text)
     assert why is None
     out = tmp_path / "x.pdf"
-    bi.render_pdf(str(out), parts, doc_id)  # the doc id picks the layout (id % 5) and the palette ((id // 5) % 4)
+    bi.render_pdf(str(out), parts, doc_id)  # the doc id picks the layout (id % 5) and the palette ((id // 5) % 8)
     assert bi.verify_render(str(out), text) is None
 
 
 def test_the_palette_is_a_second_deterministic_dimension_independent_of_the_layout():
-    assert [bi.palette_of(i) for i in (0, 4, 5, 9, 10, 15, 20, 375, 377)] == [0, 0, 1, 1, 2, 3, 0, 3, 3]
+    assert [bi.palette_of(i) for i in (0, 4, 5, 9, 10, 15, 20, 375, 377)] == [0, 0, 1, 1, 2, 3, 4, 3, 3]
     combos = {(bi.variant_of(i), bi.palette_of(i)) for i in range(100)}
-    assert len(combos) == 20 and {n for n, _ in bi.PALETTES} == {"slate", "forest green", "deep maroon", "charcoal brown"}
+    assert len(combos) == 40 and [n for n, _ in bi.PALETTES] == ["slate", "forest green", "deep maroon", "charcoal brown", "deep teal", "plum", "ochre", "classic navy"]
+
+
+def test_every_accent_is_muted_and_dark_enough_for_white_text():
+    for name, (r, g, b) in bi.PALETTES:
+        luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        assert luminance < 0.45, f"{name} is too light for white text on its band"
+        assert max(r, g, b) < 0.65 and max(r, g, b) - min(r, g, b) < 0.5, f"{name} is too loud for a letterhead"
 
 
 def test_the_layout_is_chosen_by_document_id():

@@ -10,8 +10,9 @@ is invented: no payment terms, bank line or extra line items, only the stored wo
 LAYOUT AND COLOUR: two independent dimensions, both deterministic by document id. Layout = id % 5: 0 slate band, 1 rule and tag with striped rows, 2 centred letterhead with a
 ledger, 3 side strip with a grid table, 4 minimal with leader lines. Two stored layouts are understood: the seeded one (issuer, GST status, number,
 date, bill to, numbered line items, subtotal, GST, total, fixture note) and the demo-corpus one (05 and 07: no bill to, a Description line, and
-whatever else the document says after the total, kept verbatim, e.g. 07's injected lines). Palette = (id // 5) % 4: slate, forest green, deep maroon,
-warm charcoal-brown (muted, business-document colours; the accent is the only colour used, with a light tint of it for fills).
+whatever else the document says after the total, kept verbatim, e.g. 07's injected lines). Palette = (id // 5) % 8: slate, forest green, deep maroon,
+warm charcoal-brown, deep teal, plum, ochre, classic navy (muted letterhead colours). One accent per page, used sparingly: the issuer and labels, the
+rules, a faint tint behind the table header row, the footer rule and the existing band, strip or total bar; no other large fills.
 
 SCOPE (required, nothing is re-rendered by default): --top-per-bucket N takes the N newest documents of each company's bucket as Company Files lists
 them (newest received first, archived and personal files left out) and keeps those that are eligible (seeded invoice or receipt, not quarantined);
@@ -42,6 +43,10 @@ PALETTES = (
     ("forest green", (0.16, 0.32, 0.23)),
     ("deep maroon", (0.42, 0.14, 0.18)),
     ("charcoal brown", (0.29, 0.23, 0.19)),
+    ("deep teal", (0.09, 0.33, 0.35)),
+    ("plum", (0.32, 0.17, 0.34)),
+    ("ochre", (0.55, 0.38, 0.09)),
+    ("classic navy", (0.08, 0.16, 0.36)),
 )
 SLATE = PALETTES[0][1]  # the ACCENT colour of the page being drawn (the name is historical); render_pdf sets it, and its tints, per document
 ALLOWED_EXTRA_WORDS = {"ITEM", "DESCRIPTION", "AMOUNT"}  # table headers the layout adds; nothing else may appear
@@ -154,6 +159,8 @@ def caption_matches(p, caption: str):
 GREY = (0.4, 0.4, 0.4)
 LIGHT = (0.94, 0.95, 0.97)  # a light tint of the accent, set with it
 PALE = (0.82, 0.84, 0.87)   # a paler tint, for the large title of the minimal layout
+RULE = (0.8, 0.8, 0.8)      # the accent softened, for rules, borders and leader lines
+HEAD = (0.9, 0.9, 0.92)     # a faint accent tint behind the table header row
 
 
 def _extra_box(c, p, x, y, width, mm):
@@ -162,7 +169,7 @@ def _extra_box(c, p, x, y, width, mm):
         return y
     hgt = (len(p["extra"]) * 5.5 + 5) * mm
     c.setFillColorRGB(0.97, 0.97, 0.97)
-    c.setStrokeColorRGB(0.8, 0.8, 0.8)
+    c.setStrokeColorRGB(*RULE)
     c.rect(x, y - hgt, width, hgt, stroke=1, fill=1)
     c.setFillColorRGB(0.15, 0.15, 0.15)
     c.setFont("Helvetica", 10)
@@ -184,13 +191,15 @@ def _rows(c, p, y, L, R, mm, *, head=True, zebra=False, grid=False, leader=False
     """The line items. Seeded: number, description, amount under an ITEM/DESCRIPTION/AMOUNT head. Demo: one 'Description:' row, no amount."""
     seeded = p["fmt"] == "A"
     if seeded and head:
+        c.setFillColorRGB(*HEAD)
+        c.rect(L, y - 3 * mm, R - L, 8 * mm, stroke=0, fill=1)  # a faint tint behind the header row
         c.setFillColorRGB(*SLATE)
         c.setFont("Helvetica-Bold", 8.5)
         c.drawString(L + (2 * mm if grid else 0), y, "ITEM")
         c.drawString(L + 14 * mm, y, "DESCRIPTION")
         c.drawRightString(R - (2 * mm if grid else 0), y, "AMOUNT")
         y -= 3 * mm
-        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+        c.setStrokeColorRGB(*RULE)
         c.line(L, y, R, y)
         y -= 6.5 * mm
     for no, desc, amount in p["items"]:
@@ -206,7 +215,7 @@ def _rows(c, p, y, L, R, mm, *, head=True, zebra=False, grid=False, leader=False
         if amount:
             if leader:
                 c.setDash(1, 2)
-                c.setStrokeColorRGB(0.6, 0.6, 0.6)
+                c.setStrokeColorRGB(*RULE)
                 c.line(dx + c.stringWidth(desc, "Helvetica", 10) + 2 * mm, y + 0.8 * mm, R - c.stringWidth(amount, "Helvetica", 10) - 2 * mm, y + 0.8 * mm)
                 c.setDash()
             c.drawRightString(R - (2 * mm if grid else 0), y, amount)
@@ -214,9 +223,9 @@ def _rows(c, p, y, L, R, mm, *, head=True, zebra=False, grid=False, leader=False
     return y
 
 
-def _meta(c, p, y, L, R, mm, *, value_x=27, right=False, label_rgb=(0, 0, 0)):
+def _meta(c, p, y, L, R, mm, *, value_x=27, right=False, label_rgb=None):
     for label, value in p["meta"]:
-        c.setFillColorRGB(*label_rgb)
+        c.setFillColorRGB(*(label_rgb or SLATE))
         c.setFont("Helvetica-Bold", 10)
         c.drawString(L, y, f"{label}:")
         c.setFillColorRGB(0, 0, 0)
@@ -243,8 +252,8 @@ def _totals(c, p, y, R, mm, *, fill=True, slate=False, rule=False):
         c.setFillColorRGB(*LIGHT)
         c.rect(R - 70 * mm, ty - 3 * mm, 70 * mm, 8.5 * mm, stroke=0, fill=1)
         c.setFillColorRGB(0, 0, 0)
-    else:
-        c.setFillColorRGB(0, 0, 0)
+    if not slate:
+        c.setFillColorRGB(*SLATE)
     c.setFont("Helvetica-Bold", 11)
     c.drawRightString(R - 2 * mm, ty, p["total"])
     if rule:
@@ -270,7 +279,7 @@ def _v0(c, p, w, h, mm):  # slate band
     c.drawRightString(R, h - 19 * mm, p["title"])
     y = _meta(c, p, h - 50 * mm, L, R, mm)
     y = _rows(c, p, y - 8 * mm, L, R, mm)
-    c.setStrokeColorRGB(0.8, 0.8, 0.8)
+    c.setStrokeColorRGB(*RULE)
     c.line(L, y + 3.5 * mm, R, y + 3.5 * mm)
     y = _totals(c, p, y - 6 * mm, R, mm)
     _extra_box(c, p, L, y, R - L, mm)
@@ -334,7 +343,7 @@ def _v3(c, p, w, h, mm):  # side strip, boxed meta, grid table, slate total
     L, R = 30 * mm, w - 18 * mm
     c.setFillColorRGB(*SLATE)
     c.rect(0, 0, 10 * mm, h, stroke=0, fill=1)
-    c.setFillColorRGB(0, 0, 0)
+    c.setFillColorRGB(*SLATE)
     c.setFont("Helvetica-Bold", 16)
     c.drawString(L, h - 24 * mm, p["issuer"])
     if p["gst_status"]:
@@ -350,12 +359,12 @@ def _v3(c, p, w, h, mm):  # side strip, boxed meta, grid table, slate total
     c.setFillColorRGB(*SLATE)
     c.drawCentredString(R - tw / 2, h - 24.4 * mm, p["title"])
     bh = (len(p["meta"]) * 6.5 + 4) * mm
-    c.setStrokeColorRGB(0.8, 0.8, 0.8)
+    c.setStrokeColorRGB(*RULE)
     c.rect(L, h - 42 * mm - bh, R - L, bh, stroke=1, fill=0)
     y = _meta(c, p, h - 42 * mm - 6.5 * mm, L + 4 * mm, R, mm, value_x=25)
     top = h - 42 * mm - bh - 10 * mm
     y = _rows(c, p, top, L, R, mm, grid=True)
-    c.setStrokeColorRGB(0.8, 0.8, 0.8)
+    c.setStrokeColorRGB(*RULE)
     c.rect(L, y + 5.5 * mm, R - L, top - y + 3 * mm - 3.5 * mm + 4.5 * mm, stroke=1, fill=0)
     y = _totals(c, p, y - 2 * mm, R, mm, slate=True)
     _extra_box(c, p, L, y, R - L, mm)
@@ -373,13 +382,14 @@ def _v4(c, p, w, h, mm):  # minimal, big pale title, leader lines
         c.setFillColorRGB(*GREY)
         c.setFont("Helvetica", 9)
         c.drawString(L, h - 26 * mm, p["gst_status"])
-    y = _meta(c, p, h - 48 * mm, L, R, mm, value_x=24, label_rgb=GREY)
+    y = _meta(c, p, h - 48 * mm, L, R, mm, value_x=24, label_rgb=_tint(SLATE, 0.75))
     y = _rows(c, p, y - 6 * mm, L, R, mm, head=False, leader=True)
     y = _totals(c, p, y - 6 * mm, R, mm, fill=False)
     _extra_box(c, p, L, y, R - L, mm)
 
 
 VARIANTS = (_v0, _v1, _v2, _v3, _v4)
+VARIANT_LEFT_MM = (20, 20, 20, 30, 20)  # each layout's left margin, so the footer rule lines up with its content
 VARIANT_NAMES = ("slate band", "rule and tag, striped", "centred ledger", "side strip, grid", "minimal, leaders")
 
 
@@ -388,7 +398,7 @@ def variant_of(doc_id: int) -> int:
 
 
 def palette_of(doc_id: int) -> int:
-    return (int(doc_id) // len(VARIANTS)) % len(PALETTES)
+    return (int(doc_id) // len(VARIANTS)) % len(PALETTES)  # 8 palettes
 
 
 def _tint(rgb, keep: float):
@@ -397,9 +407,9 @@ def _tint(rgb, keep: float):
 
 
 def render_pdf(dest: str, p: dict, doc_id: int) -> None:
-    global SLATE, LIGHT, PALE
+    global SLATE, LIGHT, PALE, RULE, HEAD
     SLATE = PALETTES[palette_of(doc_id)][1]
-    LIGHT = _tint(SLATE, 0.09)
+    LIGHT, RULE, HEAD = _tint(SLATE, 0.09), _tint(SLATE, 0.45), _tint(SLATE, 0.13)
     PALE = tuple((t + 0.83) / 2 for t in _tint(SLATE, 0.28))  # a greyed tint: the big title must read as ink on paper, never pastel
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
@@ -407,7 +417,13 @@ def render_pdf(dest: str, p: dict, doc_id: int) -> None:
 
     w, h = A4
     c = canvas.Canvas(dest, pagesize=A4)
-    VARIANTS[variant_of(doc_id)](c, p, w, h, mm)
+    v = variant_of(doc_id)
+    VARIANTS[v](c, p, w, h, mm)
+    left = VARIANT_LEFT_MM[v] * mm
+    c.setStrokeColorRGB(*RULE)
+    c.setLineWidth(0.6)
+    c.line(left, 21 * mm, w - 20 * mm, 21 * mm)  # the footer rule
+    c.setLineWidth(1)
     _footer(c, p, w, mm)
     c.showPage()
     c.save()
