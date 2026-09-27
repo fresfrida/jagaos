@@ -7,10 +7,11 @@ multiset) and add nothing but the table headers. The line item must equal the do
 followed by a note) and the total must equal the caption's amount. A document that fails any check is SKIPPED and listed, never guessed. Nothing
 is invented: no payment terms, bank line or extra line items, only the stored words in a different arrangement.
 
-LAYOUT: five variants, chosen deterministically by document id (id % 5): 0 slate band, 1 rule and tag with striped rows, 2 centred letterhead with a
+LAYOUT AND COLOUR: two independent dimensions, both deterministic by document id. Layout = id % 5: 0 slate band, 1 rule and tag with striped rows, 2 centred letterhead with a
 ledger, 3 side strip with a grid table, 4 minimal with leader lines. Two stored layouts are understood: the seeded one (issuer, GST status, number,
 date, bill to, numbered line items, subtotal, GST, total, fixture note) and the demo-corpus one (05 and 07: no bill to, a Description line, and
-whatever else the document says after the total, kept verbatim, e.g. 07's injected lines).
+whatever else the document says after the total, kept verbatim, e.g. 07's injected lines). Palette = (id // 5) % 4: slate, forest green, deep maroon,
+warm charcoal-brown (muted, business-document colours; the accent is the only colour used, with a light tint of it for fills).
 
 SCOPE (required, nothing is re-rendered by default): --top-per-bucket N takes the N newest documents of each company's bucket as Company Files lists
 them (newest received first, archived and personal files left out) and keeps those that are eligible (seeded invoice or receipt, not quarantined);
@@ -36,7 +37,13 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-SLATE = (0.23, 0.31, 0.42)
+PALETTES = (
+    ("slate", (0.23, 0.31, 0.42)),
+    ("forest green", (0.16, 0.32, 0.23)),
+    ("deep maroon", (0.42, 0.14, 0.18)),
+    ("charcoal brown", (0.29, 0.23, 0.19)),
+)
+SLATE = PALETTES[0][1]  # the ACCENT colour of the page being drawn (the name is historical); render_pdf sets it, and its tints, per document
 ALLOWED_EXTRA_WORDS = {"ITEM", "DESCRIPTION", "AMOUNT"}  # table headers the layout adds; nothing else may appear
 ITEM_RE = re.compile(r"^(\d+) (.+) (SGD [\d,]+\.\d{2})$")
 KV_RE = re.compile(r"^([A-Za-z][A-Za-z ]*?): (.+)$")
@@ -145,7 +152,8 @@ def caption_matches(p, caption: str):
 # layouts. Every one draws the same stored strings; only the arrangement, rules, fills and type sizes differ.
 # ---------------------------------------------------------------------------------------------------------------------------------------------
 GREY = (0.4, 0.4, 0.4)
-LIGHT = (0.94, 0.95, 0.97)
+LIGHT = (0.94, 0.95, 0.97)  # a light tint of the accent, set with it
+PALE = (0.82, 0.84, 0.87)   # a paler tint, for the large title of the minimal layout
 
 
 def _extra_box(c, p, x, y, width, mm):
@@ -355,7 +363,7 @@ def _v3(c, p, w, h, mm):  # side strip, boxed meta, grid table, slate total
 
 def _v4(c, p, w, h, mm):  # minimal, big pale title, leader lines
     L, R = 20 * mm, w - 20 * mm
-    c.setFillColorRGB(0.82, 0.84, 0.87)
+    c.setFillColorRGB(*PALE)
     c.setFont("Helvetica-Bold", 26)
     c.drawRightString(R, h - 26 * mm, p["title"])
     c.setFillColorRGB(*SLATE)
@@ -379,7 +387,20 @@ def variant_of(doc_id: int) -> int:
     return int(doc_id) % len(VARIANTS)
 
 
+def palette_of(doc_id: int) -> int:
+    return (int(doc_id) // len(VARIANTS)) % len(PALETTES)
+
+
+def _tint(rgb, keep: float):
+    """The accent mixed toward white: `keep` is how much of the accent stays."""
+    return tuple(1 - (1 - v) * keep for v in rgb)
+
+
 def render_pdf(dest: str, p: dict, doc_id: int) -> None:
+    global SLATE, LIGHT, PALE
+    SLATE = PALETTES[palette_of(doc_id)][1]
+    LIGHT = _tint(SLATE, 0.09)
+    PALE = tuple((t + 0.83) / 2 for t in _tint(SLATE, 0.28))  # a greyed tint: the big title must read as ink on paper, never pastel
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
@@ -507,7 +528,7 @@ def main() -> None:
     for r, p in plans:
         target = resolve(r["stored_path"], db_root)
         v = variant_of(r["id"])
-        label = f"[{r['id']:>3}] v{v} {r['company'][:8]:<8} {r['bucket']:<11} {r['status']:<12} {p['issuer'][:28]:<28} {dict(p['meta']).get('Invoice No', '-'):<14} {p['total'][7:]}"
+        label = f"[{r['id']:>3}] v{v} {PALETTES[palette_of(r['id'])][0]:<14} {r['company'][:8]:<8} {r['bucket']:<11} {r['status']:<12} {p['issuer'][:28]:<28} {dict(p['meta']).get('Invoice No', '-'):<14} {p['total'][7:]}"
         if not target.exists():
             print(f"  ! {label}: stored file not found at {target}")
             failed += 1

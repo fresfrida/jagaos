@@ -18,13 +18,19 @@ CAPTION = json.dumps({"en": "Invoice to Orchid Bay Interiors Pte Ltd for materia
 
 
 @pytest.mark.parametrize("text", [SEEDED, NIL, DEMO])
-@pytest.mark.parametrize("variant", range(5))
-def test_every_layout_carries_exactly_the_stored_words(tmp_path, text, variant):
+@pytest.mark.parametrize("doc_id", range(20))  # every layout x every palette
+def test_every_layout_and_palette_carries_exactly_the_stored_words(tmp_path, text, doc_id):
     parts, why = bi.parse_text(text)
     assert why is None
     out = tmp_path / "x.pdf"
-    bi.render_pdf(str(out), parts, variant)  # the doc id picks the layout: id % 5
+    bi.render_pdf(str(out), parts, doc_id)  # the doc id picks the layout (id % 5) and the palette ((id // 5) % 4)
     assert bi.verify_render(str(out), text) is None
+
+
+def test_the_palette_is_a_second_deterministic_dimension_independent_of_the_layout():
+    assert [bi.palette_of(i) for i in (0, 4, 5, 9, 10, 15, 20, 375, 377)] == [0, 0, 1, 1, 2, 3, 0, 3, 3]
+    combos = {(bi.variant_of(i), bi.palette_of(i)) for i in range(100)}
+    assert len(combos) == 20 and {n for n, _ in bi.PALETTES} == {"slate", "forest green", "deep maroon", "charcoal brown"}
 
 
 def test_the_layout_is_chosen_by_document_id():
