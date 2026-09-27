@@ -101,6 +101,16 @@ Verify on the live URL, and attach a screenshot to the report:
 - [ ] Response header `X-Robots-Tag: noindex` present
 - [ ] Optional: basic auth in front of the site while it is UAT-only (Caddy `basic_auth`, hash from `caddy hash-password`; never commit the password)
 
+## Demo-window operating cautions (2026-09-27, until the replay revert after Monday 28 Sep)
+
+Production runs in replay mode on purpose (`LLM_CALLS_DISABLED=1`, `LLM_REPLAY_DIR`; DECISIONS #132, #134). What that means for anyone operating the box:
+
+- **Do not restart `jaga-api` before the demo.** The review checkpoint is in memory: a restart kills every pending review item (Confirm answers 410) until `scripts/rearm_review_queue.py` is run. Run it with `--dry-run` first (DECISIONS #140); it refuses to remove an archived or event-bearing copy.
+- **After ANY box restart, re-run beautify on ids 375 and 377** (the live review documents 05 and 07). The re-arm script uploads the ORIGINAL old-look demo PDFs again, under NEW document ids, so look the new ids up first (Company Files, or `select id, filename from document where filename like '05_%' or filename like '07_%'`), then: `sudo -u jaga .venv/bin/python scripts/beautify_invoices.py --db data/jaga.db --manifest evals/seed_files/manifest.json --ids <new 05 id>,<new 07 id> --apply --backup-dir <dir>` (dry run first by leaving out `--apply`; the ids 375 and 377 apply only to the documents as they stand tonight). The other 167 seeded invoices are unaffected by a restart.
+- **The purge request on document 373 after the recording is deliberate, judge-facing state.** Beat 8 asks Jonathan to request its purge; the owner then sees "Purge requested (1)". Leave it in place: do not clear, archive or purge it unless the user says so. Document 373 is a seeded BrightGrid Energy Retail invoice in Tembusu Row.
+- **Never run the beautify script with `--apply` without `--backup-dir`, and never on documents outside the seed manifest except the named demo files 05_ and 07_.** It writes no database row, so `sha256` and `bytes` no longer match the re-rendered files (DECISIONS #142); `verify_seed_fixtures.py` accounts for that.
+- **Never set `RUN_LIVE_GATEWAY_TESTS`, and do not upload a file that has no recorded answer** (it answers 503 `ai_unavailable`): only the eight files with fixtures in `evals/replay/` can be processed on the box.
+
 ## Before every push
 
 ```bash
