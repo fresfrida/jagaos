@@ -24,3 +24,5 @@ assets/
 evals/demo_corpus/store/
 # personal Claude Code permission overrides, not for the team
 .claude/settings.local.json
+# local dry-run output of scripts/beautify_invoices.py; never commit previews
+scripts/beautify_preview/
