@@ -36,6 +36,11 @@ skipped() { # path
 # frontend's origin in its CORS allowlist, docs/PORTABILITY.md documents where each piece is hosted.
 VERCEL_ALLOWED=(app/main.py docs/PORTABILITY.md)
 
+# Paths allowed to mention Supabase, for the Supabase check ONLY (DECISIONS #149): the export
+# script's whole job is naming Supabase (its docstring, --out default, and comments) — it holds no
+# credentials, no project ref, and never calls out to Supabase or the network itself.
+SUPABASE_ALLOWED=(scripts/export_to_supabase.py)
+
 files=()
 while IFS= read -r -d '' f; do
   [ -f "$f" ] || continue          # tracked but deleted in the working tree
@@ -108,7 +113,7 @@ check() {
 }
 
 check "no Vercel URLs or project links"  'vercel\.app|\.vercel\.' "${VERCEL_ALLOWED[@]}"
-check "no Supabase references"           'supabase'
+check "no Supabase references"           'supabase' "${SUPABASE_ALLOWED[@]}"
 
 webfiles=()
 for f in ${files[@]+"${files[@]}"}; do

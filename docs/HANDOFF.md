@@ -1,5 +1,7 @@
 # Handoff
 
+**2026-09-28 Supabase lifeboat export:** `scripts/export_to_supabase.py` (DECISIONS #149) reads a COPY of the SQLite file and writes one `.sql` file to paste into the Supabase SQL editor by hand — not a migration, the app keeps running on SQLite. Tested against a real local Postgres 16 (exact row counts and byte-for-byte content across all 16 tables) and against a real, hosted, throwaway Supabase project (`jagaos-lifeboat-throwaway`, ref `hvvairqhptfqoomsbkmx`, $0/month) — schema, indexes, and a representative data sample (including the injection-attempt document and the McDonald's-apostrophe receipts) all loaded and matched exactly. The throwaway Supabase project is still live (free tier) pending the user's call on keep-or-delete.
+
 Last updated: 2026-09-26 (advisor session, after a gap where the user worked with a different assistant — Codex — directly). **CURRENT STATE, READ THIS FIRST:**
 
 **Deployed and live right now** (Vercel + the AWS box, both verified): round 5 plus the Edit-gap fix, at commit `dffff75`. That's what a visitor sees today.
