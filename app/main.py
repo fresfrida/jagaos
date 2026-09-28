@@ -552,6 +552,18 @@ def _process_upload(
     multi-page upload below (2026-09-24, round 12, DECISIONS #78), so a merged
     scan takes exactly the path any other document takes. Does not delete
     tmp_path — the caller owns its lifetime (see the try/finally in each)."""
+    # 2026-09-28 (DECISIONS #151): the Vercel deployment is a browse-only playground with ZERO model spend, by policy —
+    # independent of the shared kill switch below (calls_disabled()) and independent of whether a replay fixture exists
+    # for this exact file. ANY upload that would reach the gateway (a company document, not a picture — same shape the
+    # kill-switch check below already uses) from a MANUAL_ENTRY_ORIGINS origin is refused here, unconditionally, BEFORE
+    # ingest() runs, so nothing is left behind (no row, no stored file, no history event, no thumbnail) — the SAME
+    # refusal already used when the switch is on (_uploads_disabled_here(), reused rather than inventing new copy).
+    # This supersedes DECISIONS #147's "let it through with AI skipped, a human fills it in" design for the Vercel
+    # origin specifically: that mechanism (classify.py/verify.py's skip_ai branch, PipelineState.skip_ai) is left in
+    # place, unused, rather than removed outright — the smallest change is to stop ever reaching it, not to delete it.
+    if visibility == "company" and not is_picture and origin in MANUAL_ENTRY_ORIGINS:
+        raise _uploads_disabled_here()
+
     # Round 7 (DECISIONS #132): with gateway calls switched off, refuse an upload that would reach one BEFORE ingest() runs, so nothing
     # is left behind (no row, no stored file, no history event, no thumbnail). It reaches the gateway when it is a company document (an
     # Only me file never enters the pipeline, below) that is not a picture (classify.py skips its call for one, a picture's lane has no
@@ -559,18 +571,10 @@ def _process_upload(
     # readable text, or an exact duplicate, is refused too while the switch is on: a false positive on a machine that opted in, never spend.
     # Round 7, S2 (DECISIONS #134): unless the file has a recorded replay answer. With replay on, the file's run_id (the first 12 hex of its
     # sha256, which is what ingest() will use) names the fixtures, so a recorded file is let through even with the switch armed, and every
-    # other file is still refused.
-    #
-    # 2026-09-28 (DECISIONS #147): "refused" now depends on which frontend the request came from (MANUAL_ENTRY_ORIGINS above). The
-    # AWS box's own origins keep the old behaviour exactly (refuse, now with a friendlier message); the Vercel deployment instead
-    # lets the upload through with AI skipped entirely (classify.py's skip_ai branch, set on ingest_state below) — nothing is
-    # returned here for that case, it just falls through to ingest() same as any normal upload.
-    manual_entry = False
+    # other file is still refused. (A Vercel-origin request never reaches this: the block above already refused it, unconditionally, and
+    # that refusal does not depend on calls_disabled() at all — AWS-origin behavior here is exactly what it was before DECISIONS #151.)
     if visibility == "company" and not is_picture and calls_disabled() and not replay_available(hashlib.sha256(Path(tmp_path).read_bytes()).hexdigest()[:12]):
-        if origin in MANUAL_ENTRY_ORIGINS:
-            manual_entry = True
-        else:
-            raise _uploads_disabled_here()
+        raise _uploads_disabled_here()
 
     ingest_state = ingest(
         company_id=membership.company_id, source_path=tmp_path, filename=filename,
@@ -621,9 +625,10 @@ def _process_upload(
     ingest_state["is_picture"] = is_picture
     ingest_state["language"] = language
     ingest_state["visibility"] = visibility
-    # 2026-09-28 (DECISIONS #147): read by classify.py, same pattern as is_picture above — a deterministic, no-gateway-call branch,
-    # not a special case threaded through ingest() itself.
-    ingest_state["skip_ai"] = manual_entry
+    # skip_ai (DECISIONS #147/PipelineState.skip_ai) is no longer set from here (DECISIONS #151): a request that would
+    # have set it true — company, not a picture, Vercel origin — is now refused outright, above, before this point is
+    # ever reached. classify.py's and verify.py's skip_ai branches stay in the code, simply never exercised by any live
+    # caller today; ingest_state's own default (the key absent) reads as falsy, identical to an explicit False.
     # Round 16 (DECISIONS #90): only a real checklist slug is carried; anything
     # else is dropped here, so the pipeline never holds client-chosen text.
     if doc_type_hint in LABEL_BY_DOC_TYPE:
