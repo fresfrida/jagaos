@@ -31,6 +31,9 @@ from app.main import app
 client = TestClient(app, raise_server_exceptions=False)
 DOCS = Path(os.environ["JAGA_DOCS_PATH"])
 UNAVAILABLE = {"code": "ai_unavailable", "message": "AI is temporarily unavailable. Please try again shortly."}
+# 2026-09-28 (DECISIONS #147): the preflight refusal (an unrecorded file, no origin in MANUAL_ENTRY_ORIGINS) now answers this,
+# not UNAVAILABLE above — UNAVAILABLE is still the real, mid-pipeline gateway-failure message and is unchanged.
+UPLOADS_DISABLED = {"code": "uploads_disabled_demo_box", "message": "Uploads are disabled on this shared demo box."}
 SECRET_BODY = "SECRET-RESPONSE-BODY-DO-NOT-LOG"
 _seed = iter(range(1, 100_000))
 
@@ -316,7 +319,7 @@ def test_a_company_document_is_refused_with_a_503_before_anything_is_written(no_
     before, files_before = _counts(), _stored_files()
     resp = _post_document(token)
     assert resp.status_code == 503, resp.text
-    assert resp.json()["detail"] == UNAVAILABLE
+    assert resp.json()["detail"] == UPLOADS_DISABLED
     assert _counts() == before               # no document row, no history event, no trace, no review item
     assert _stored_files() == files_before   # no stored file left in the document store
 
@@ -326,7 +329,7 @@ def test_a_company_photo_set_is_refused_the_same_way(no_gateway_at_all):
     before, files_before = _counts(), _stored_files()
     resp = client.post("/api/documents/pages", files=[("files", ("p1.jpg", _jpeg(), "image/jpeg")), ("files", ("p2.jpg", _jpeg(), "image/jpeg"))], headers=_h(token))
     assert resp.status_code == 503, resp.text
-    assert resp.json()["detail"] == UNAVAILABLE
+    assert resp.json()["detail"] == UPLOADS_DISABLED
     assert _counts() == before and _stored_files() == files_before
 
 

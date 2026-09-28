@@ -38,6 +38,11 @@ class PipelineState(TypedDict, total=False):
     # app/main.py. A hint for classify.py's prompt, never a classification.
     # Declared here for the same LangGraph reason as `language`.
     doc_type_hint: str
+    # 2026-09-28 (DECISIONS #147): the Vercel deployment's manual-entry path (app/main.py::_process_upload, MANUAL_ENTRY_ORIGINS) —
+    # AI is skipped entirely, deterministically, in classify.py and verify.py. Declared here for the same LangGraph reason as
+    # `language`/`visibility`/`doc_type_hint` above: an undeclared key is silently dropped before the first node ever sees it
+    # (confirmed live writing this feature — the exact bug `language`'s own comment already warns about, hit again here).
+    skip_ai: bool
 
     # suffixed _result to avoid colliding with the node names "classify" /
     # "extract" / "verify" — LangGraph forbids a node name equal to a state key

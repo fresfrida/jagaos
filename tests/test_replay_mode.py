@@ -301,7 +301,9 @@ def test_an_unrecorded_file_in_that_same_configuration_gets_the_503_and_leaves_n
     c.save()
     files_before = sorted(p.name for p in DOCS.iterdir())
     resp = client.post("/api/documents", files={"file": ("unrecorded.pdf", buf.getvalue(), "application/pdf")}, headers=headers)
-    assert resp.status_code == 503 and resp.json()["detail"]["code"] == "ai_unavailable"
+    # 2026-09-28 (DECISIONS #147): the friendlier, judge-facing code/message for exactly this case (no Origin header here, so
+    # not the Vercel manual-entry path either) — ai_unavailable is now reserved for a genuine mid-pipeline gateway failure.
+    assert resp.status_code == 503 and resp.json()["detail"]["code"] == "uploads_disabled_demo_box"
     with get_conn() as conn:
         assert conn.execute("SELECT COUNT(*) FROM document").fetchone()[0] == 0 and conn.execute("SELECT COUNT(*) FROM document_activity").fetchone()[0] == 0
     assert sorted(p.name for p in DOCS.iterdir()) == files_before

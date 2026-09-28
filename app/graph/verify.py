@@ -355,7 +355,14 @@ def verify(state: PipelineState) -> PipelineState:
     # found" text, which is actively misleading, not just less specific.
     # The function's own code/params changed too (could_not_read_document,
     # no params) — no percentage, not the old confidence-bearing text.
-    reasons.extend(_check_classify_confidence(classify))
+    #
+    # 2026-09-28 (DECISIONS #147): skipped for a manual-entry document (classify.py's skip_ai branch, confidence 0.0 by
+    # construction) — its own reason below already says exactly why, correctly; "could not read this document" would be
+    # actively wrong here (nothing was ever read).
+    if state.get("skip_ai"):
+        reasons.append({"code": "ai_skipped_manual_entry", "params": {}})
+    else:
+        reasons.extend(_check_classify_confidence(classify))
     # 2026-09-24 (items 5/6): reads description_en specifically, not
     # description — description is now generated in the uploader's
     # selected UI language (app/graph/classify.py), so this check's

@@ -231,7 +231,8 @@
         "clean": "已收到上传文件。未发现问题。请在下方确认。",
         "needsReview": "已收到上传文件。已标记待审核，详见下方。",
         "quarantined": "出于安全考虑已拦截此次上传，详见下方。",
-        "duplicate": "该文件已上传过。"
+        "duplicate": "该文件已上传过。",
+        "aiSkipped": "此部署已停用 AI 提取功能。您仍可以自行输入详细信息，JagaOS 会保存您的文件。"
       },
       "choice": {
         "document": {
@@ -310,7 +311,8 @@
         "missingRequiredFields": "缺少必填字段：{{fields}}",
         "missingArithmeticFields": "缺少小计/税额/总额，无法核实算术",
         "descriptionSignalsProblem": "描述表明此文件可能未被正确读取。请检查",
-        "couldNotReadDocument": "我们无法读取此文件。请尝试更清晰的照片或其他文件。"
+        "couldNotReadDocument": "我们无法读取此文件。请尝试更清晰的照片或其他文件。",
+        "aiSkippedManualEntry": "此部署已停用 AI 提取功能。请在下方输入详细信息，JagaOS 会保存您的文件。"
       },
       "fieldLabel": {
         "vendor": "供应商",

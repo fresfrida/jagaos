@@ -101,6 +101,24 @@ describe('existing standalone headlines are untouched', () => {
   })
 })
 
+describe('ai_skipped_manual_entry (2026-09-28, DECISIONS #147: the Vercel deployment’s manual-entry path)', () => {
+  const aiSkipped: ReviewReason = { code: 'ai_skipped_manual_entry', params: {} }
+
+  it('reads as its own bare sentence, not "could not read this document" and not a "Please confirm:" fragment', () => {
+    const { container } = render(<ReviewReasons reasons={[aiSkipped]} className="x" />)
+    expect(container.querySelectorAll('p')).toHaveLength(1)
+    expect(container.textContent).toBe(tFor('en')('ops.review.reasons.aiSkippedManualEntry'))
+    expect(container.textContent).not.toBe(tFor('en')('ops.review.reasons.couldNotReadDocument'))
+  })
+
+  it.each(['en', 'ms', 'zh', 'ta'])('%s: has its own translation, distinct from couldNotReadDocument', (lang) => {
+    const t = tFor(lang)
+    const text = t('ops.review.reasons.aiSkippedManualEntry')
+    expect(text).toBeTruthy()
+    expect(text).not.toBe(t('ops.review.reasons.couldNotReadDocument'))
+  })
+})
+
 describe('bucket labels', () => {
   it.each(['en', 'ms', 'zh', 'ta'])('%s: every bucket, including Contracts, has a translation', (lang) => {
     const t = tFor(lang)

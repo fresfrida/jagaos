@@ -222,7 +222,18 @@ def classify(state: PipelineState) -> PipelineState:
     language = state.get("language") or "en"
     language_name = LANGUAGE_NAMES.get(language, "English")
 
-    if state.get("is_picture"):
+    if state.get("skip_ai"):
+        # 2026-09-28 (DECISIONS #147): the Vercel deployment, kill switch armed, no replay fixture for this file — the upload is
+        # let through anyway (app/main.py::_process_upload) rather than refused, but there is genuinely no model answer to give:
+        # never invent one. Same "no gateway call, no trace row" convention as the is_picture and no-text branches below (this
+        # still falls through to their shared tail: the document row is written and reindexed exactly the same way).
+        # lane="important"/doc_type="other"/bucket=None leave every field for the reviewer to fill in themselves — verify.py
+        # gives this its own reason code (ai_skipped_manual_entry) instead of routing through the generic low-confidence check,
+        # so the review card explains why, not "could not read this document" (nothing here claims to have tried reading it).
+        result = {"lane": "important", "doc_type": "other", "confidence": 0.0,
+                   "injection_suspected": False, "description": None, "description_en": None,
+                   "bucket": None, "vendor_name": None}
+    elif state.get("is_picture"):
         # 2026-09-23: the human already answered, at upload time, the only
         # question this node exists to answer for this document ("what
         # kind of thing is this") — no LLM call needed, and the gateway

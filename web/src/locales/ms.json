@@ -231,7 +231,8 @@
         "clean": "Muat naik diterima. Tiada isu ditemui. Sahkan di bawah.",
         "needsReview": "Muat naik diterima. Ditanda untuk semakan, lihat di bawah.",
         "quarantined": "Muat naik disekat untuk semakan keselamatan, lihat di bawah.",
-        "duplicate": "Fail ini sudah dimuat naik sebelum ini."
+        "duplicate": "Fail ini sudah dimuat naik sebelum ini.",
+        "aiSkipped": "Pengekstrakan AI dilumpuhkan pada penggunaan ini. Anda masih boleh masukkan butiran sendiri dan JagaOS akan menyimpan dokumen anda."
       },
       "choice": {
         "document": {
@@ -310,7 +311,8 @@
         "missingRequiredFields": "medan wajib hilang: {{fields}}",
         "missingArithmeticFields": "subjumlah/cukai/jumlah tiada, tidak dapat mengesahkan pengiraan",
         "descriptionSignalsProblem": "penerangan menunjukkan dokumen ini mungkin tidak dibaca dengan betul. Sila semaknya",
-        "couldNotReadDocument": "Kami tidak dapat membaca fail ini. Cuba foto yang lebih jelas atau fail lain."
+        "couldNotReadDocument": "Kami tidak dapat membaca fail ini. Cuba foto yang lebih jelas atau fail lain.",
+        "aiSkippedManualEntry": "Pengekstrakan AI dilumpuhkan pada penggunaan ini. Masukkan butiran di bawah dan JagaOS akan menyimpan dokumen anda."
       },
       "fieldLabel": {
         "vendor": "Vendor",

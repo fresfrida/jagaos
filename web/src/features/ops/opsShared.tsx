@@ -111,6 +111,10 @@ const REASON_LABEL_KEY: Record<string, string> = {
   // found" — actively misleading). New code, no percentage/confidence
   // param, unlike the old one this replaces.
   could_not_read_document: 'ops.review.reasons.couldNotReadDocument',
+  // 2026-09-28 (DECISIONS #147): the Vercel deployment's manual-entry path (app/graph/verify.py, state["skip_ai"]) — its own
+  // reason instead of falling through to could_not_read_document, which would say "we couldn't read this file" about a document
+  // nobody ever tried to read.
+  ai_skipped_manual_entry: 'ops.review.reasons.aiSkippedManualEntry',
 }
 
 /** review_item.question is now JSON-encoded ReviewReason[], not a
@@ -153,7 +157,7 @@ const COVERED_BY: Record<string, string> = {
 // fragment meant to follow "Please confirm:" (same reasoning as file_missing
 // and injection_suspected_blocked above) — shown bare when they are the
 // only reason.
-const STANDALONE_WHEN_ALONE = new Set(['could_not_read_document'])
+const STANDALONE_WHEN_ALONE = new Set(['could_not_read_document', 'ai_skipped_manual_entry'])
 
 export function dedupeReasons(reasons: ReviewReason[]): ReviewReason[] {
   const present = new Set(reasons.map((r) => r.code))

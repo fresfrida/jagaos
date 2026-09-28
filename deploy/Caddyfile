@@ -29,11 +29,15 @@ jagaos.13-251-52-222.nip.io, 13-251-52-222.nip.io {
 
 	# Submission media (2026-09-28): the demo video and the two PDFs (and, later, the narration track) at a
 	# STABLE path — file_server serves byte-range requests and sets Content-Type from the extension on its
-	# own, so this needs no special config for either. The files underneath get swapped in place (same path,
-	# same URL) as newer cuts arrive; nothing here changes when they do. Directory listing is off on purpose
-	# (browse), so a file that has not arrived yet (the narration track) answers 404, not a listing.
+	# own, so this needs no special config for either. `root` is the PARENT of the actual media/ folder, the
+	# same pattern /assets/* uses one block up (root the parent, so the request's own /media/* prefix walks
+	# into the media/ folder that sits under it) — root * /var/www/jaga/media here would double the segment
+	# and look for .../jaga/media/media/<file>, a 404 caught live on first deploy. The files underneath get
+	# swapped in place (same path, same URL) as newer cuts arrive; nothing here changes when they do.
+	# Directory listing is off on purpose (browse), so a file that has not arrived yet (the narration track)
+	# answers 404, not a listing.
 	handle /media/* {
-		root * /var/www/jaga/media
+		root * /var/www/jaga
 		file_server
 	}
 

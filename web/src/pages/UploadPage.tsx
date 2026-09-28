@@ -71,6 +71,11 @@ function UploadReviewContent() {
       if (result.status !== 'duplicate') clearHint() // the hint was for this one upload
       if (result.status === 'duplicate') showToast(t('ops.upload.toast.duplicate'), 'warning')
       else if (result.status === 'quarantined') showToast(t('ops.upload.toast.quarantined'), 'warning')
+      // 2026-09-28 (DECISIONS #147): the Vercel deployment's manual-entry path — checked before 'clean' (this reason is never
+      // 'clean', but keeps the branch order matching how the other special cases above read). The document IS filed exactly
+      // the same as any other upload once the reviewer accepts it below; only the wording here differs, so a judge testing an
+      // upload sees why the fields are blank instead of a message implying something went wrong.
+      else if (result.review?.reason === 'ai_skipped_manual_entry') showToast(t('ops.upload.toast.aiSkipped'), 'warning')
       else if (result.review?.reason === 'clean') showToast(t('ops.upload.toast.clean'), 'success')
       else showToast(t('ops.upload.toast.needsReview'), 'success')
     },

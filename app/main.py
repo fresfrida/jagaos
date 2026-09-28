@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from langgraph.errors import InvalidUpdateError
@@ -132,6 +132,20 @@ CORS_ALLOWED_ORIGINS = (
     [origin.strip() for origin in _cors_origins_env.split(",") if origin.strip()]
     if _cors_origins_env
     else _DEFAULT_CORS_ORIGINS
+)
+
+# 2026-09-28 (DECISIONS #147): the ONE shared backend serves two frontends with deliberately different upload behaviour while the
+# kill switch is armed and a file has no replay fixture — the AWS box refuses outright (a shared demo, nobody's real data should
+# collect there); this Vercel deployment lets the upload through with AI skipped entirely, so a judge can still see a document get
+# filed. There is no second backend process to set this on independently (Vercel is a static build, see web/vercel.json) and no
+# LLM_CALLS_DISABLED-per-deployment to set — the browser's own Origin header is the only signal available, checked in
+# _process_upload below. Not a security boundary (any client can send an arbitrary Origin), only a UX branch: neither side of it
+# exposes anything the other does not already. Same override pattern as CORS_ALLOWED_ORIGINS above, for a different frontend host.
+_manual_entry_origins_env = os.environ.get("MANUAL_ENTRY_ORIGINS")
+MANUAL_ENTRY_ORIGINS = (
+    {origin.strip() for origin in _manual_entry_origins_env.split(",") if origin.strip()}
+    if _manual_entry_origins_env
+    else {"https://jagaos.vercel.app"}
 )
 # Round 20 (item 6, DECISIONS #99): a request body over the upload endpoints' bound is a 413 before it is read.
 # Added BEFORE CORS so CORS is the outer layer: the 413 then carries CORS headers, and a browser page can read it.
@@ -530,7 +544,7 @@ def _process_upload(
     membership: CurrentMembership, background_tasks: BackgroundTasks, tmp_path: str, filename: str,
     source_channel: str, is_picture: bool, language: str, visibility: str,
     doc_type_hint: str | None = None, name: str = "", caption: str | None = None, from_photos: bool = False,
-    taken_on: str | None = None,
+    taken_on: str | None = None, origin: str | None = None,
 ) -> dict:
     """Run one already-written temp file through ingest and the pipeline and
     build the upload response. A PERSONAL file (visibility other than 'company') does not take the pipeline at all: it is
@@ -546,8 +560,17 @@ def _process_upload(
     # Round 7, S2 (DECISIONS #134): unless the file has a recorded replay answer. With replay on, the file's run_id (the first 12 hex of its
     # sha256, which is what ingest() will use) names the fixtures, so a recorded file is let through even with the switch armed, and every
     # other file is still refused.
+    #
+    # 2026-09-28 (DECISIONS #147): "refused" now depends on which frontend the request came from (MANUAL_ENTRY_ORIGINS above). The
+    # AWS box's own origins keep the old behaviour exactly (refuse, now with a friendlier message); the Vercel deployment instead
+    # lets the upload through with AI skipped entirely (classify.py's skip_ai branch, set on ingest_state below) — nothing is
+    # returned here for that case, it just falls through to ingest() same as any normal upload.
+    manual_entry = False
     if visibility == "company" and not is_picture and calls_disabled() and not replay_available(hashlib.sha256(Path(tmp_path).read_bytes()).hexdigest()[:12]):
-        raise _ai_unavailable()
+        if origin in MANUAL_ENTRY_ORIGINS:
+            manual_entry = True
+        else:
+            raise _uploads_disabled_here()
 
     ingest_state = ingest(
         company_id=membership.company_id, source_path=tmp_path, filename=filename,
@@ -587,6 +610,9 @@ def _process_upload(
     ingest_state["is_picture"] = is_picture
     ingest_state["language"] = language
     ingest_state["visibility"] = visibility
+    # 2026-09-28 (DECISIONS #147): read by classify.py, same pattern as is_picture above — a deterministic, no-gateway-call branch,
+    # not a special case threaded through ingest() itself.
+    ingest_state["skip_ai"] = manual_entry
     # Round 16 (DECISIONS #90): only a real checklist slug is carried; anything
     # else is dropped here, so the pipeline never holds client-chosen text.
     if doc_type_hint in LABEL_BY_DOC_TYPE:
@@ -670,6 +696,16 @@ def _ai_unavailable() -> HTTPException:
     _clean_personal_details, which the web client already reads (apiClient.ts ApiError, uploadErrorMessage.ts), instead of a bare 500."""
     return HTTPException(503, detail={
         "code": "ai_unavailable", "message": "AI is temporarily unavailable. Please try again shortly.",
+    })
+
+
+def _uploads_disabled_here() -> HTTPException:
+    """2026-09-28 (DECISIONS #147): the friendly, judge-facing answer for the ONE deployment where an unrecorded upload is refused
+    outright — the AWS box's preflight (calls_disabled() and no replay fixture for this exact file, _process_upload below). Distinct
+    from _ai_unavailable(), which is a genuine mid-pipeline gateway failure and stays generic ("try again shortly" would be actively
+    wrong advice here: retrying the same unrecorded file always answers the same way, on purpose)."""
+    return HTTPException(503, detail={
+        "code": "uploads_disabled_demo_box", "message": "Uploads are disabled on this shared demo box.",
     })
 
 
@@ -761,6 +797,7 @@ def _read_within_the_file_limit(data: bytes) -> bytes:
 async def upload_document(
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
     background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile, source_channel: str = "web", is_picture: bool = False,
     # 2026-09-24 (item 5): the uploader's currently-selected UI language
     # (web/src/i18n.ts) — same shape as is_picture above, a plain query
@@ -810,6 +847,7 @@ async def upload_document(
         return _process_upload(
             membership, background_tasks, tmp_path, file.filename, source_channel, is_picture, language,
             visibility, doc_type_hint, personal_name, personal_caption, taken_on=taken_on,
+            origin=request.headers.get("origin"),
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -819,6 +857,7 @@ async def upload_document(
 async def upload_document_pages(
     membership: Annotated[CurrentMembership, Depends(require_role("user"))],
     background_tasks: BackgroundTasks,
+    request: Request,
     files: list[UploadFile], language: str = "en", visibility: Visibility = "company",
     doc_type_hint: str | None = None, name: str | None = None, caption: str | None = None,
 ) -> dict:
@@ -861,6 +900,7 @@ async def upload_document_pages(
         return _process_upload(
             membership, background_tasks, merged.name, f"{stem}-{len(files)}-pages.pdf", "web", False, language,
             visibility, doc_type_hint, personal_name, personal_caption, from_photos=True,
+            origin=request.headers.get("origin"),
         )
     finally:
         for path in temp_paths:
