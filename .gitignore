@@ -26,6 +26,8 @@ evals/demo_corpus/store/
 .claude/settings.local.json
 # local dry-run output of scripts/beautify_invoices.py; never commit previews
 scripts/beautify_preview/
+# scripts/purge_vercel_deployment_rows.py's own run log (DECISIONS #150) — a local/box runtime artifact, not source
+logs/
 
 # Working notes, not needed to build or judge the app (kept locally, never pushed)
 docs/screenshots/
