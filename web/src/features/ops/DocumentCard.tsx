@@ -355,10 +355,6 @@ export function DocumentCard({
         <div className="flex shrink-0 flex-col items-end gap-1">
           <StatusPill status={doc.status} />
           {doc.bucket && <Badge tone="neutral">{bucketLabel(t, doc.bucket)}</Badge>}
-          {/* 2026-09-28 (DECISIONS #148): which deployment this document's upload came through — absent from an older backend
-             (opsApi.ts's DocumentRow.deployment is optional), so a plain vercel-only check would also render nothing for an
-             'aws' row on an old backend, same as every other optional field here. */}
-          {doc.deployment && <Badge tone="neutral">{t(`ops.documents.source.${doc.deployment}`)}</Badge>}
         </div>
       </div>
 
