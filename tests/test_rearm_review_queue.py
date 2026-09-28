@@ -272,3 +272,29 @@ def test_a_count_change_after_the_removal_exits_3(armed, monkeypatch):
     with pytest.raises(SystemExit) as exit_info:
         rearm_review_queue.rearm(client, out=lambda *_: None)
     assert exit_info.value.code == 3
+
+
+def test_it_refuses_to_remove_a_vercel_row_even_though_it_is_neither_archived_nor_event_bearing(armed):
+    """2026-09-28 (DECISIONS #148): a real, hand-entered document from the manual-entry deployment must never be swept up by
+    this script just because its bytes happen to match a demo file's sha256 — checked with none of the OTHER refusal
+    conditions present (not archived, no event), so this is proven to be its own, independent guard."""
+    _upload_all_eight(armed)
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM document WHERE filename = ?", ("05_invoice_clean.pdf",)).fetchone()
+        conn.execute("UPDATE document SET deployment = 'vercel' WHERE id = ?", (row["id"],))
+        doc_id = row["id"]
+    before = _snapshot()
+    lines: list[str] = []
+    with pytest.raises(SystemExit) as exit_info:
+        rearm_review_queue.rearm(client, out=lines.append)
+    assert exit_info.value.code == 2
+    assert _snapshot() == before
+    assert any(f"document {doc_id} is a Vercel-deployment row" in l and "Nothing was changed" in l for l in lines)
+
+
+def test_dry_run_reports_a_vercel_row_as_the_blocker_too(armed):
+    _upload_all_eight(armed)
+    with get_conn() as conn:
+        conn.execute("UPDATE document SET deployment = 'vercel' WHERE filename = ?", ("06_invoice_bad_gst.pdf",))
+    summary = rearm_review_queue.rearm(client, dry_run=True, out=lambda *_: None)
+    assert any("Vercel-deployment row" in b for b in summary["blockers"])

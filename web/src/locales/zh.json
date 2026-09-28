@@ -415,6 +415,10 @@
         "deleted": "{{name}} 删除了",
         "unknownAction": "{{name}} 进行了操作",
         "nameWithTitle": "{{name}}（{{title}}）"
+      },
+      "source": {
+        "aws": "AWS",
+        "vercel": "Vercel"
       }
     },
     "dates": {

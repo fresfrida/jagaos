@@ -106,11 +106,11 @@ def test_it_never_writes_to_the_database_and_needs_a_scope(tmp_path, monkeypatch
     con = sqlite3.connect(db)
     con.executescript("CREATE TABLE company(id INTEGER PRIMARY KEY, name TEXT);"
                       "CREATE TABLE document(id INTEGER PRIMARY KEY, company_id INT, sha256 TEXT, filename TEXT, stored_path TEXT, status TEXT, doc_type TEXT, bucket TEXT, "
-                      "visibility TEXT, received_at TEXT, description TEXT, extracted_text TEXT);")
+                      "visibility TEXT, received_at TEXT, description TEXT, extracted_text TEXT, deployment TEXT DEFAULT 'aws');")
     con.execute("INSERT INTO company VALUES (1, 'Pasir Kelana Logistics Pte Ltd')")
     stored = db.parent / "docs" / f"{sha}.pdf"
     stored.write_bytes(b"%PDF-old")
-    con.execute("INSERT INTO document VALUES (7, 1, ?, 'x.pdf', ?, 'filed', 'invoice', 'Receivables', 'company', '2026-01-01', ?, ?)", (sha, str(stored), CAPTION, SEEDED))
+    con.execute("INSERT INTO document VALUES (7, 1, ?, 'x.pdf', ?, 'filed', 'invoice', 'Receivables', 'company', '2026-01-01', ?, ?, 'aws')", (sha, str(stored), CAPTION, SEEDED))
     con.commit()
     con.close()
     manifest = tmp_path / "manifest.json"
@@ -131,3 +131,34 @@ def test_it_never_writes_to_the_database_and_needs_a_scope(tmp_path, monkeypatch
     assert (tmp_path / "bk" / stored.name).read_bytes() == b"%PDF-old"  # the original was backed up first
     assert stored.read_bytes().startswith(b"%PDF") and stored.read_bytes() != b"%PDF-old"
     assert db.read_bytes() == before  # not one byte of the database changed, sha256 and bytes columns included
+
+
+def test_a_vercel_row_is_never_touched_even_when_it_would_otherwise_be_eligible(tmp_path, monkeypatch):
+    """2026-09-28 (DECISIONS #148): a real, hand-entered document from the manual-entry deployment — structurally refused
+    (bi.eligible()), not merely unlikely to match by hash coincidence."""
+    db = tmp_path / "data" / "jaga.db"
+    db.parent.mkdir()
+    (db.parent / "docs").mkdir()
+    sha = "b" * 64
+    con = sqlite3.connect(db)
+    con.executescript("CREATE TABLE company(id INTEGER PRIMARY KEY, name TEXT);"
+                      "CREATE TABLE document(id INTEGER PRIMARY KEY, company_id INT, sha256 TEXT, filename TEXT, stored_path TEXT, status TEXT, doc_type TEXT, bucket TEXT, "
+                      "visibility TEXT, received_at TEXT, description TEXT, extracted_text TEXT, deployment TEXT DEFAULT 'aws');")
+    con.execute("INSERT INTO company VALUES (1, 'Pasir Kelana Logistics Pte Ltd')")
+    stored = db.parent / "docs" / f"{sha}.pdf"
+    stored.write_bytes(b"%PDF-old")
+    con.execute("INSERT INTO document VALUES (9, 1, ?, 'x.pdf', ?, 'filed', 'invoice', 'Receivables', 'company', '2026-01-01', ?, ?, 'vercel')", (sha, str(stored), CAPTION, SEEDED))
+    con.commit()
+    con.close()
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"documents": [{"sha256": sha}]}))
+
+    monkeypatch.setattr(sys, "argv", ["b", "--db", str(db), "--manifest", str(manifest), "--top-per-bucket", "10", "--preview-dir", str(tmp_path / "prev")])
+    bi.main()
+    assert not (tmp_path / "prev" / "preview_9.pdf").exists()  # --all/--top-per-bucket: silently excluded, not even offered
+
+    monkeypatch.setattr(sys, "argv", ["b", "--db", str(db), "--manifest", str(manifest), "--ids", "9", "--apply", "--backup-dir", str(tmp_path / "bk")])
+    with pytest.raises(SystemExit) as exit_info:
+        bi.main()
+    assert "vercel" in str(exit_info.value).lower()  # --ids: named directly, still refused, loudly
+    assert stored.read_bytes() == b"%PDF-old"

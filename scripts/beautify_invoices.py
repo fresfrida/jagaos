@@ -501,12 +501,17 @@ def main() -> None:
     con.row_factory = sqlite3.Row
     rows = con.execute(
         "SELECT d.id, d.company_id, co.name AS company, d.sha256, d.filename, d.stored_path, d.status, d.doc_type, d.bucket, d.visibility, d.received_at, "
-        "d.description, d.extracted_text FROM document d JOIN company co ON co.id = d.company_id ORDER BY d.id"
+        "d.description, d.extracted_text, d.deployment FROM document d JOIN company co ON co.id = d.company_id ORDER BY d.id"
     ).fetchall()
     con.close()
     by_id = {r["id"]: r for r in rows}
 
     def eligible(r) -> bool:
+        # 2026-09-28 (DECISIONS #148): a 'vercel' row is a real, hand-entered document from the manual-entry deployment —
+        # never re-rendered here, whatever its sha256/doc_type happen to be (a coincidental match is not expected, but this
+        # is a structural guarantee, not one that relies on hashes never colliding).
+        if r["deployment"] == "vercel":
+            return False
         return r["sha256"] in seeded and (r["doc_type"] or "").lower() in ("invoice", "receipt") and "quarant" not in (r["status"] or "").lower()
 
     chosen: dict[int, str] = {}
@@ -526,6 +531,8 @@ def main() -> None:
         r = by_id.get(int(tok))
         if r is None:
             sys.exit(f"--ids: no document {tok}")
+        if r["deployment"] == "vercel":
+            sys.exit(f"--ids: document {r['id']} ({r['filename']}) is a Vercel-deployment row (deployment='vercel'); this script never touches one, named or not")
         demo = r["filename"].startswith(DEMO_PREFIXES) and r["sha256"] not in seeded
         if not (eligible(r) or demo):
             sys.exit(f"--ids: document {r['id']} ({r['filename']}) is not eligible: only a seeded invoice or receipt, or a demo file starting {DEMO_PREFIXES}")

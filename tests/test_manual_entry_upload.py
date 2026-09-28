@@ -193,3 +193,39 @@ def test_manual_entry_origins_env_override(monkeypatch, replay_on, real_text):
         assert resp.status_code == 200, resp.text
     finally:
         importlib.reload(main_module)  # restore the default for every test after this one
+
+
+# ---------------------------------------------------------------- the deployment column (2026-09-28, DECISIONS #148)
+
+
+def test_a_vercel_origin_upload_is_recorded_as_deployment_vercel(replay_on, real_text):
+    resp = _upload(_token(), origin=VERCEL)
+    assert _document(resp.json()["document_id"])["deployment"] == "vercel"
+
+
+def test_an_aws_origin_or_no_origin_upload_is_recorded_as_deployment_aws(replay_on):
+    """Uses is_picture, which succeeds regardless of the kill switch — the deployment column is set for every new document,
+    not only the ones the manual-entry split ever branches on."""
+    token = _token()
+    for origin in (None, "https://jagaos.13-251-52-222.nip.io"):
+        resp = client.post(
+            "/api/documents?is_picture=true", files={"file": (f"pic-{origin}.jpg", _jpeg(), "image/jpeg")},
+            headers=_h(token, origin),
+        )
+        assert resp.status_code == 200, resp.text
+        assert _document(resp.json()["document_id"])["deployment"] == "aws"
+
+
+def test_a_duplicate_upload_never_overwrites_the_existing_rows_deployment(replay_on):
+    token = _token()
+    first = client.post(
+        "/api/documents?is_picture=true", files={"file": ("dup.jpg", (data := _jpeg()), "image/jpeg")},
+        headers=_h(token, VERCEL),
+    )
+    assert first.status_code == 200 and _document(first.json()["document_id"])["deployment"] == "vercel"
+    again = client.post(
+        "/api/documents?is_picture=true", files={"file": ("dup.jpg", data, "image/jpeg")},
+        headers=_h(token, None),  # a different origin, same bytes
+    )
+    assert again.status_code == 200 and again.json()["status"] == "duplicate"
+    assert _document(first.json()["document_id"])["deployment"] == "vercel"  # unchanged by the second request's own origin

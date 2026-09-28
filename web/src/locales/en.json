@@ -416,6 +416,10 @@
         "deleted": "Deleted by {{name}}",
         "unknownAction": "Activity by {{name}}",
         "nameWithTitle": "{{name}} ({{title}})"
+      },
+      "source": {
+        "aws": "AWS",
+        "vercel": "Vercel"
       }
     },
     "dates": {

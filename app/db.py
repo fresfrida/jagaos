@@ -122,9 +122,15 @@ CREATE TABLE IF NOT EXISTS document (
     -- app code/prompt, not a SQL CHECK — a human can always correct it in
     -- review, same as every other field).
     bucket TEXT,
-    vendor_name TEXT                -- counterparty read off the document
+    vendor_name TEXT,               -- counterparty read off the document
                                      -- (vendor/landlord/issuer); nullable —
                                      -- not every document has one
+    -- 2026-09-28 (DECISIONS #148): which DEPLOYMENT received this upload's request — 'aws' or 'vercel' (app/main.py's
+    -- MANUAL_ENTRY_ORIGINS, set once at upload time from the request's Origin header, never edited afterward). Not
+    -- source_channel above (web|telegram|email — how the document reached the app) or extraction.source (llm|human —
+    -- who supplied one extracted VALUE): this is which shared-backend frontend the upload itself came through. Read by
+    -- scripts/rearm_review_queue.py and scripts/beautify_invoices.py, which both refuse to touch a 'vercel' row.
+    deployment TEXT NOT NULL DEFAULT 'aws'
 );
 
 -- Real full-text search (ARCHITECTURE.md's original "SQLite FTS5" plan;
@@ -348,6 +354,9 @@ _MIGRATIONS = [
     # Round 6 (DECISIONS #129): the immutable identifier document_activity is keyed by. Nullable here because ALTER TABLE cannot add a
     # column with a non-constant default; `_LIFECYCLE_STATEMENTS` below fills it for every new row (a trigger) and every old one.
     "ALTER TABLE document ADD COLUMN lifecycle_id TEXT",
+    # 2026-09-28 (DECISIONS #148): a constant default, unlike lifecycle_id above — every existing row becomes 'aws' (the only
+    # deployment there was before this column existed), no separate backfill statement needed.
+    "ALTER TABLE document ADD COLUMN deployment TEXT NOT NULL DEFAULT 'aws'",
 ]
 
 # Run after the column exists, on every start, and safe to repeat. Every INSERT path gets a lifecycle_id from the trigger,

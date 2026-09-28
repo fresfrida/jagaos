@@ -140,6 +140,10 @@ export interface DocumentRow {
   // per-card fetch, so the count rides on the same list/search/personal-files response the card already has. `null`/absent (an
   // older backend, or a document with no recorded activity) both mean the same thing: nothing to count yet.
   activity_summary?: { count: number } | null
+  // 2026-09-28 (DECISIONS #148): which deployment received this upload's request — 'aws' (the shared Lightsail box's own
+  // origins) or 'vercel' (the manual-entry deployment, LLM extraction skipped by design). Set once at upload time, never
+  // edited. Optional/absent from an older backend, same reason as can_edit/visibility above.
+  deployment?: 'aws' | 'vercel'
 }
 
 /** The five things a person can do to a document that its history records (app/activity.py). Internal codes: the UI never renders

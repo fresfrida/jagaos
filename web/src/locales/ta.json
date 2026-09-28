@@ -416,6 +416,10 @@
         "deleted": "{{name}} நீக்கினார்",
         "unknownAction": "{{name}} செயல்பாடு செய்தார்",
         "nameWithTitle": "{{name}} ({{title}})"
+      },
+      "source": {
+        "aws": "AWS",
+        "vercel": "Vercel"
       }
     },
     "dates": {

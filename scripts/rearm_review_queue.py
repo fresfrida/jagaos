@@ -86,9 +86,13 @@ def _counts(conn, company_id: int) -> dict:
 
 
 def _blockers(conn, rows) -> list[str]:
-    """Why a found demo copy must NOT be removed: it is archived, or an event was derived from it."""
+    """Why a found demo copy must NOT be removed: it is archived, an event was derived from it, or (2026-09-28, DECISIONS #148)
+    it came through the Vercel deployment — a real, hand-entered document there, never a demo file this script itself put down,
+    whatever its bytes happen to match. This script never removes a 'vercel' row, full stop, no override."""
     why = []
     for row in rows:
+        if row["deployment"] == "vercel":
+            why.append(f"document {row['id']} is a Vercel-deployment row (deployment='vercel'), never touched by this script")
         if row["status"] == "archived":
             why.append(f"document {row['id']} is archived")
         n = conn.execute("SELECT COUNT(*) FROM event WHERE source_document_id = ?", (row["id"],)).fetchone()[0]
@@ -118,7 +122,7 @@ def rearm(client, *, owner_email: str = "owner_priya@try-demo.test", only: str |
                 out(f"DRY RUN: {owner_email} is not a member of any company; nothing to plan.")
                 return {"dry_run": True, "would_remove": [], "would_upload": [p.name for p in uploads], "blockers": []}
             by_sha = {hashlib.sha256(p.read_bytes()).hexdigest(): p for p in demo_pdfs()}
-            found = [r for r in conn.execute(f"SELECT id, sha256, company_id, status FROM document WHERE company_id = ? AND sha256 IN ({','.join('?' * len(by_sha))})", [company_id, *by_sha]).fetchall()]
+            found = [r for r in conn.execute(f"SELECT id, sha256, company_id, status, deployment FROM document WHERE company_id = ? AND sha256 IN ({','.join('?' * len(by_sha))})", [company_id, *by_sha]).fetchall()]
             blockers = _blockers(conn, found)
             before = _counts(conn, company_id)
         out(f"DRY RUN (nothing is changed); replay mode: {health.get('replay') is True}; company #{company_id}; database {Path(DB_PATH).resolve()}")
@@ -140,7 +144,7 @@ def rearm(client, *, owner_email: str = "owner_priya@try-demo.test", only: str |
 
     by_sha = {hashlib.sha256(p.read_bytes()).hexdigest(): p for p in demo_pdfs()}
     with get_conn(DB_PATH) as conn:
-        found = conn.execute(f"SELECT id, sha256, company_id, status FROM document WHERE sha256 IN ({','.join('?' * len(by_sha))})", list(by_sha)).fetchall()
+        found = conn.execute(f"SELECT id, sha256, company_id, status, deployment FROM document WHERE sha256 IN ({','.join('?' * len(by_sha))})", list(by_sha)).fetchall()
     with get_conn(DB_PATH) as conn:
         blockers = _blockers(conn, [r for r in found if r["company_id"] == company_id])
         before = _counts(conn, company_id)

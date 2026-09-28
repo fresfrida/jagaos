@@ -598,6 +598,17 @@ def _process_upload(
         seen = not _hidden_or_missing(membership, existing)
         return {"document_id": ingest_state["document_id"] if seen else None, "status": "duplicate"}
 
+    # 2026-09-28 (DECISIONS #148): which deployment this upload's REQUEST came through — 'vercel' when the Origin header
+    # names it, 'aws' otherwise (the column's own default, but set explicitly here rather than relying on it, so a future
+    # change to the column default can never silently change what a fresh upload records). Every genuinely NEW document
+    # gets this (company and personal alike); a duplicate returns above and never reaches here, so the EXISTING row's own
+    # original deployment is left alone.
+    with get_conn(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE document SET deployment = ? WHERE id = ?",
+            ("vercel" if origin in MANUAL_ENTRY_ORIGINS else "aws", ingest_state["document_id"]),
+        )
+
     if visibility != "company":
         return _file_personal_upload(membership, ingest_state["document_id"], filename, name, caption)
 
@@ -1223,7 +1234,7 @@ def list_documents(
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility, purge_requested_at "
+            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility, purge_requested_at, deployment "
             f"FROM document WHERE company_id = ? AND {_LIVE_OR_PURGE_REQUESTED} "
             "ORDER BY received_at DESC",
             (membership.company_id, _owner_flag(membership)),
@@ -1255,7 +1266,7 @@ def list_personal_files(
     with get_conn(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility "
+            "description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility, deployment "
             "FROM document WHERE company_id = ? AND uploaded_by_user_id = ? AND visibility != 'company' "
             "AND status != 'archived' ORDER BY received_at DESC, id DESC",
             (membership.company_id, membership.user_id),
@@ -1333,7 +1344,7 @@ def search_documents(
         # list_documents's exclusion just below it in this file.
         docs = conn.execute(
             f"SELECT id, filename, media_type, lane, doc_type, status, received_at, "
-            f"description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility, purge_requested_at FROM document "
+            f"description, bucket, vendor_name, occurred_on, uploaded_by_user_id, visibility, purge_requested_at, deployment FROM document "
             f"WHERE id IN ({placeholders}) AND {_LIVE_OR_PURGE_REQUESTED}",
             [*ordered_ids, _owner_flag(membership)],
         ).fetchall()

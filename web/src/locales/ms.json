@@ -415,6 +415,10 @@
         "deleted": "Dipadam oleh {{name}}",
         "unknownAction": "Aktiviti oleh {{name}}",
         "nameWithTitle": "{{name}} ({{title}})"
+      },
+      "source": {
+        "aws": "AWS",
+        "vercel": "Vercel"
       }
     },
     "dates": {
