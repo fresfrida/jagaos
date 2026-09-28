@@ -7,7 +7,7 @@ import i18n from '../i18n'
 const auth = vi.hoisted(() => ({ value: { status: 'signed-out' } as { status: string } }))
 vi.mock('../features/auth/AuthContext', () => ({ useAuth: () => auth.value }))
 
-import { LEGAL_ENTITY } from '../config/site'
+import { FOOTER_LINKS, LEGAL_ENTITY } from '../config/site'
 import { PHONE_BOTTOM_NAV_CLEARANCE } from './BottomNav'
 import { Footer } from './Footer'
 
@@ -27,19 +27,20 @@ describe('Footer content', () => {
     expect(screen.queryByText(/helps small teams/)).toBeNull() // the old tagline is gone
   })
 
-  it('has three placeholder links, in order, each going nowhere yet (#)', () => {
+  it('has three real links, in order, each the real destination from config/site.ts (2026-09-28: the box’s stable /media/* path)', () => {
     render(<Footer />)
     const links = within(screen.getByRole('navigation', { name: 'Footer links' })).getAllByRole('link')
     expect(links.map((a) => a.textContent)).toEqual(['Watch our intro video', 'Proposal (Business, PDF)', 'Tech Write Up (PDF)'])
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['#', '#', '#'])
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(FOOTER_LINKS.map((l) => l.href))
+    expect(FOOTER_LINKS.every((l) => l.href.startsWith('https://jagaos.13-251-52-222.nip.io/media/'))).toBe(true) // never '#', never a bare Vercel-relative path
   })
 
-  it('a placeholder link does not jump the page or leave a # in the history', () => {
+  it('a real link (no longer the old # placeholder) is not intercepted: the click reaches the browser, which opens the new tab', () => {
     render(<Footer />)
     const before = window.location.href
     const allowed = fireEvent.click(screen.getByRole('link', { name: 'Watch our intro video' }))
-    expect(allowed).toBe(false) // preventDefault was called
-    expect(window.location.href).toBe(before)
+    expect(allowed).toBe(true) // nothing called preventDefault
+    expect(window.location.href).toBe(before) // jsdom does not actually follow target="_blank"; this just confirms THIS window did not navigate
   })
 
   it('carries none of the old columns or social links', () => {

@@ -32,17 +32,20 @@ export const STACK_ROWS: StackRow[] = [
 export const LEGAL_ENTITY = 'Platform R PCIB Pte Ltd'
 export const COPYRIGHT_YEAR = 2026
 
-/** The footer's bottom row, in order. PLACEHOLDERS: `#` until the real destinations exist (they are needed before the submission,
- * KANBAN). Each id is a key under `footer.links.*`.
+/** The footer's bottom row, in order. Each id is a key under `footer.links.*`. All three open in a NEW TAB (Footer.tsx sets
+ * `target="_blank" rel="noopener noreferrer"` on every link, DECISIONS #118), so the landing page is never navigated away from.
  *
- * All three open in a NEW TAB (Footer.tsx sets `target="_blank" rel="noopener noreferrer"` on every link, DECISIONS #118), so the
- * landing page is never navigated away from; and a link that is still `#` goes nowhere at all (its click is swallowed there).
- * Shipping a destination is ONLY the `href` here, no JSX and no behaviour change:
- *   - video: the YouTube URL, an external site (for example 'https://youtu.be/...');
- *   - proposal and techWriteUp: a PDF dropped into `web/public/`, which is served from the site root exactly as the icons are
- *     (Vercel and the Caddyfile's catch-all both do), then the href is its path (for example '/jagaos-proposal.pdf'). */
-export const FOOTER_LINKS = [
-  { id: 'video', href: '#' },
-  { id: 'proposal', href: '#' },
-  { id: 'techWriteUp', href: '#' },
-] as const
+ * 2026-09-28: all three point at the Lightsail box's stable `/media/*` path (deploy/Caddyfile), never at the Vercel deployment or
+ * this build's own origin — the Vercel copy has no `/media/*` route of its own, and this way one build works from both hosts.
+ * The file underneath each URL gets swapped in place as a newer cut arrives (the video today, the two PDFs if revised); none of
+ * these hrefs changes when that happens. `video` used to be a YouTube link; it is now the same self-hosted recording, so the
+ * page never sends a visitor to YouTube (no ads, no "up next" sidebar) and a later swap needs no new link either. */
+const MEDIA_BASE = 'https://jagaos.13-251-52-222.nip.io/media'
+// href is deliberately `string`, not the literal union `as const` would infer: Footer.tsx's `href === '#'` guard (for a link
+// shipped before its real destination exists) must stay a real, non-narrowed comparison, not one TS can prove is always false
+// just because none of today's three happens to be '#'.
+export const FOOTER_LINKS: { id: 'video' | 'proposal' | 'techWriteUp'; href: string }[] = [
+  { id: 'video', href: `${MEDIA_BASE}/demo.mp4` },
+  { id: 'proposal', href: `${MEDIA_BASE}/JagaOS-Proposal.pdf` },
+  { id: 'techWriteUp', href: `${MEDIA_BASE}/JagaOS-Technical-Writeup.pdf` },
+]

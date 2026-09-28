@@ -27,6 +27,16 @@ jagaos.13-251-52-222.nip.io, 13-251-52-222.nip.io {
 		file_server
 	}
 
+	# Submission media (2026-09-28): the demo video and the two PDFs (and, later, the narration track) at a
+	# STABLE path — file_server serves byte-range requests and sets Content-Type from the extension on its
+	# own, so this needs no special config for either. The files underneath get swapped in place (same path,
+	# same URL) as newer cuts arrive; nothing here changes when they do. Directory listing is off on purpose
+	# (browse), so a file that has not arrived yet (the narration track) answers 404, not a listing.
+	handle /media/* {
+		root * /var/www/jaga/media
+		file_server
+	}
+
 	# everything else: root files (icon-32/192/512.png, apple-touch-icon.png, manifest.webmanifest, index.html)
 	# with SPA fallback. Must stay last so /api/* and /assets/* win.
 	handle {
