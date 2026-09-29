@@ -6,7 +6,7 @@ Company memory for Singapore SMEs. A Show Me Your Agents 2026 hackathon project 
 
 ## Why we built it
 
-We joined the NUS-ISS and AWS Show Me Your Agents hackathon in the SME category, and we built for a company we know well: my own SME. It's still active, just in a quiet non-trading season. And even when a company isn't trading, its records and responsibilities don't go away. The remembering still matters.
+We joined the NUS-ISS and AWS Show Me Your Agents hackathon in the SME category, and we built for a company we know well: my own SME. It's still active, just in a quiet non-trading season (dormant). And even when a company isn't trading, its records and responsibilities don't go away. The remembering still matters.
 
 A small team keeps invoices, letters, company records and photos in many places, and that's completely normal. Later, someone needs to remember what was filed, what might be missing, and which version to trust. We wondered if an agent could help a company remember, gently, without asking its people to give up control.
 
