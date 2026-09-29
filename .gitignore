@@ -30,7 +30,17 @@ scripts/beautify_preview/
 logs/
 
 # Working notes, not needed to build or judge the app (kept locally, never pushed)
-docs/screenshots/
+# docs/screenshots/* (a glob on the CONTENTS, not docs/screenshots/ the directory) on purpose: git never descends into
+# an excluded directory to check file-level negations, so the trailing-slash directory form below it replaced would
+# have silently made the five !-exceptions under it dead weight — caught live via `git check-ignore -v` before commit.
+docs/screenshots/*
+# the README's own screenshots (2026-09-29): the only exceptions to the rule above — everything else under
+# docs/screenshots/ (the ~503 old UI-verification images) stays untracked, same as before.
+!docs/screenshots/landing.png
+!docs/screenshots/upload-review.png
+!docs/screenshots/calendar.png
+!docs/screenshots/company-files.png
+!docs/screenshots/checklist.png
 MDs/
 docs/ADVISOR-PLAYBOOK.md
 docs/ADVISOR-PLAYBOOK-JAGAOS.md

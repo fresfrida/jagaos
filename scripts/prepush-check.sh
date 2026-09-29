@@ -33,13 +33,20 @@ skipped() { # path
 
 # Paths allowed to mention Vercel, for the Vercel check ONLY (they are still scanned by every other
 # check). Whole-file on purpose, narrower than loosening the pattern: app/main.py carries the UAT
-# frontend's origin in its CORS allowlist, docs/PORTABILITY.md documents where each piece is hosted.
-VERCEL_ALLOWED=(app/main.py docs/PORTABILITY.md)
+# frontend's origin in its CORS allowlist, docs/PORTABILITY.md documents where each piece is hosted,
+# README.md (2026-09-29) is the public root README and links the live Vercel demo on purpose.
+VERCEL_ALLOWED=(app/main.py docs/PORTABILITY.md README.md)
 
 # Paths allowed to mention Supabase, for the Supabase check ONLY (DECISIONS #149): the export
 # script's whole job is naming Supabase (its docstring, --out default, and comments) — it holds no
 # credentials, no project ref, and never calls out to Supabase or the network itself.
 SUPABASE_ALLOWED=(scripts/export_to_supabase.py)
+
+# Paths allowed past the secret-looking-assignment check ONLY (still scanned by every other check):
+# README.md (2026-09-29) documents that LLM_GATEWAY_API_KEY= in .env.example stays blank — written in
+# prose as `LLM_GATEWAY_API_KEY=`, whose closing backtick is what the pattern's [^ ]+ actually matches
+# (a real value never appears). Whole-file, same narrow-allowlist style as VERCEL_ALLOWED above.
+SECRET_ALLOWED=(README.md)
 
 files=()
 while IFS= read -r -d '' f; do
@@ -122,7 +129,7 @@ done
 run_scan scan_not_localhost 'https?://[^"'"'"' `]*/api' ${webfiles[@]+"${webfiles[@]}"}
 report "no hardcoded absolute API URLs in web/ (use same-origin /api)" "$hits" "$errored"
 
-check "no secret-looking assignments"    '(API_KEY|SECRET|TOKEN|PASSWORD)[A-Z_]*=[^ ]+'
+check "no secret-looking assignments"    '(API_KEY|SECRET|TOKEN|PASSWORD)[A-Z_]*=[^ ]+' "${SECRET_ALLOWED[@]}"
 
 # A source file that .gitignore matches exists on this machine, so a local build passes, and is missing from a clean
 # checkout, so the deploy build fails (DECISIONS #103: a bare `assets/` rule ignored web/src/assets/, and round 21's landing
