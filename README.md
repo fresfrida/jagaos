@@ -2,8 +2,6 @@
 
 Company memory for Singapore SMEs. A Show Me Your Agents 2026 hackathon project by Team AdHoc.
 
-[Try JagaOS](https://jagaos.vercel.app/)
-
 ![The JagaOS landing page](docs/screenshots/landing.png)
 
 ## Why we built it
@@ -88,4 +86,4 @@ Our video and materials were submitted based on the code as of 9:00am on 28 Sept
 
 JagaOS is a hackathon prototype, built around a real SME and the everyday work of keeping its records together. I hope it makes finding a document, and knowing what happened to it, feel a little lighter.
 
-[Try the Vercel demo](https://jagaos.vercel.app/)
+[Try JagaOS](https://jagaos.vercel.app/)
