@@ -74,9 +74,9 @@ npm ci
 npm run dev
 ```
 
-Leave `web/.env.example`'s `VITE_API_BASE_URL` commented out for local dev; the app then uses `http://127.0.0.1:8000`. Open the URL Vite prints. A local demo starts empty; `scripts/seed_dev_db.py` can add sample data, but it needs a running backend and goes through the real model pipeline.
+Leave `web/.env.example`'s `VITE_API_BASE_URL` commented out for local dev; the app then uses `http://127.0.0.1:8000`. Open the URL Vite prints. A local demo starts genuinely empty: none of the "Pick a demo role" logins exist yet, so signing in needs seeding first. With `LLM_CALLS_DISABLED=1` set above, run `.venv/bin/python scripts/seed_demo_fixtures.py --db data/jaga.db --docs-dir data/docs` to fill it with no gateway call at all — it creates the exact accounts the picker expects, plus a full realistic document set. `scripts/seed_dev_db.py` does the same job through the real model pipeline instead; it refuses to run at all while `LLM_CALLS_DISABLED=1`, and spends gateway credits when that switch is off.
 
-For code checks: `.venv/bin/pytest tests/ -q` from the root; `npm run typecheck`, `npm test`, and `npm run build` from `web/`.
+For code checks: `.venv/bin/python -m pytest tests/ -q` from the root (the bare `pytest` executable fails with `ModuleNotFoundError: No module named 'app'` — there's no root-level `conftest.py`; `-m pytest` adds the repo root to `sys.path` itself); `npm run typecheck`, `npm test`, and `npm run build` from `web/`.
 
 ## A note to the organisers
 
